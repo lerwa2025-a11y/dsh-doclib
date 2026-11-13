@@ -1,0 +1,6 @@
+# Bundle patch: 资料库（单组件）。
+# 一个包、一行、一个「资料库」页面，只有笔记库一个视图。
+# 路由前缀 /dsh-notes/vault/*（便签数据路由 /dsh-notes/data 已于 2026-11-04 移除）。
+- insert:
+    - id: dsh-doclib
+      name: dsh-doclib
