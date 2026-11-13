@@ -46,6 +46,22 @@
       ]
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lerwa2025-a11y/dsh-doclib.git"
+  },
+  "homepage": "https://github.com/lerwa2025-a11y/dsh-doclib#readme",
+  "bugs": {
+    "url": "https://github.com/lerwa2025-a11y/dsh-doclib/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "notes",
+    "markdown",
+    "ebook"
+  ],
   "license": "MIT",
   "dependencies": {
     "@lingo-reader/mobi-parser": "^0.4.6"
