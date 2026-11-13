@@ -1,6 +1,6 @@
 {
   "name": "dsh-doclib",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "资料库：一个插件、一个页面——笔记库（递归文件夹读写 md/文本/图片/电子书，Obsidian 式编辑与阅读，带划线与快照）。",
   "type": "module",
   "main": "index.js",
