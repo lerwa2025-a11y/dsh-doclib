@@ -261,6 +261,30 @@ export function apply(ctx) {
                 return
               }
 
+              /*
+               * 文案台目录树（2026-11-18 新加）。
+               *
+               * 大王要求文案台左栏「完全照搬素材库」——可以新建文件/文件夹，
+               * 要有真实的目录层级，而不是现在这种按状态分组的扁平列表。
+               *
+               * 复用素材库那套 treeOf，只把扫描范围换成「文案」一个库。
+               * 返回结构与 /tree 完全一致，前端可以共用渲染逻辑。
+               */
+              if (route === '/copy-tree' && req.method === 'GET') {
+                const explicit = query.get('sortBy') || ''
+                const sortBy = explicit !== '' ? explicit : (await readSettings()).sortBy
+                sendJson(res, 200, await treeOf(root, async (absolute, name) => {
+                  const listed = await listTree(absolute, sortBy)
+                  const prefix = (nodes) => (Array.isArray(nodes) ? nodes.map((node) => ({
+                    ...node,
+                    path: name + '/' + node.path,
+                    children: node.type === 'dir' ? prefix(node.children) : node.children,
+                  })) : [])
+                  return { tree: prefix(listed.tree), truncated: listed.truncated === true }
+                }, '文案'))
+                return
+              }
+
               if (route === '/copy-list' && req.method === 'GET') {
                 const listed = await listCopyDocs(root)
                 sendJson(res, 200, { ...listed, statuses: copyStatuses() })

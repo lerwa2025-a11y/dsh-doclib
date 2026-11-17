@@ -4643,6 +4643,227 @@ window.__ModuleLoader__.load({
         )
       }
 
+      /**
+       * 公共阅读栏（2026-11-18）：文案台 / 写作台共用，观感照搬素材库 .vpb-bar。
+       *
+       * 为什么抽成组件：素材库那条 docBar 依赖十几个 state，每个板块各抄一遍就是三份重复。
+       * 阅读设置读写同一份全局 reader-settings.json，切板块后设置连续。
+       */
+      function ReaderBar(props) {
+        const t = props.t
+        const hasDoc = props.hasDoc === true
+        const infoText = typeof props.infoText === 'string' ? props.infoText : ''
+        const saveState = typeof props.saveState === 'string' ? props.saveState : 'idle'
+        const dirty = props.dirty === true
+
+        const [fontSize, setFontSize] = useState(RF_SIZE_DEFAULT)
+        const [font, setFont] = useState('')
+        const [line, setLine] = useState(RF_LINE_DEFAULT)
+        const [bg, setBg] = useState('')
+        const [ready, setReady] = useState(false)
+        const readerDirtyFlag = useRef(false)
+        const [openMenu, setOpenMenu] = useState('')
+
+        /* 首次拉全局阅读设置 */
+        useEffect(() => {
+          let alive = true
+          vaultApiGet('/settings')
+            .then((data) => {
+              if (!alive || !data || typeof data !== 'object') return
+              setFontSize(clampInt(data.fontSize, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
+              setFont(readerFontOf(data.fontFamily))
+              setLine(readerLineOf(data.lineHeight))
+              setBg(readerBgOf(data.background))
+              setReady(true)
+            })
+            .catch(() => { if (alive) setReady(true) })
+          return () => { alive = false }
+        }, [])
+
+        /* 用户动过才回写 */
+        useEffect(() => {
+          if (!ready || !readerDirtyFlag.current) return
+          void vaultApiPost('/settings', {
+            fontFamily: font,
+            fontSize,
+            lineHeight: line,
+            background: bg,
+          }).catch(() => {})
+        }, [ready, font, fontSize, line, bg])
+
+        /* 点工具栏外面收起下拉 */
+        useEffect(() => {
+          if (openMenu === '') return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.vpb-bar') !== null) return
+            setOpenMenu('')
+          }
+          document.addEventListener('mousedown', onDown)
+          return () => document.removeEventListener('mousedown', onDown)
+        }, [openMenu])
+
+        const drop = (key, label, title, items, current, onPick) =>
+          h(
+            'div',
+            { className: 'vpb-drop', key },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vpb-pill vpb-dropbtn',
+                'data-open': openMenu === key ? 'true' : 'false',
+                title,
+                'aria-haspopup': 'listbox',
+                'aria-expanded': openMenu === key ? 'true' : 'false',
+                onClick: () => setOpenMenu((open) => (open === key ? '' : key)),
+              },
+              h('span', { className: 'vpb-droplabel' }, label),
+              h('span', { className: 'vpb-caret' }, '▾'),
+            ),
+            openMenu === key
+              ? h(
+                'div',
+                { className: 'vpb-menu', role: 'listbox' },
+                items.map((item) => h(
+                  'button',
+                  {
+                    key: item.id === '' ? '__auto__' : item.id,
+                    type: 'button',
+                    className: 'vpb-menu-item',
+                    role: 'option',
+                    'data-on': item.id === current ? 'true' : 'false',
+                    'aria-selected': item.id === current ? 'true' : 'false',
+                    onClick: () => { setOpenMenu(''); onPick(item.id) },
+                  },
+                  h('span', { className: 'vpb-menu-t' }, item.label),
+                  h(
+                    'span',
+                    { className: 'vpb-menu-check' },
+                    item.id === current ? h(BoardIcon, { name: 'check', className: 'wb-ic-xs' }) : '',
+                  ),
+                )),
+              )
+              : null,
+          )
+
+        const fontItems = READER_FONTS.map((item) => ({ id: item.id, label: t(item.labelKey) }))
+        const lineItems = ['1.5', '1.75', '1.85', '2', '2.2'].map((value) => ({ id: value, label: value }))
+        const bgItems = READER_BACKGROUNDS.map((item) => ({ id: item.id, label: t(item.labelKey) }))
+        const labelOf = (items, id) => {
+          const hit = items.find((item) => item.id === id)
+          return hit === undefined ? String(id) : hit.label
+        }
+
+        return h(
+          'div',
+          { className: 'vpb-bar', 'data-menu': openMenu === '' ? 'false' : 'true' },
+          h(
+            'span',
+            { className: hasDoc ? 'vpb-info' : 'vpb-info vpb-info-empty', title: infoText },
+            hasDoc ? infoText : t('vaultSelectFirst'),
+          ),
+          h('i', { className: 'vpb-sep' }),
+          h(
+            'div',
+            { className: 'vpb-grp' },
+            h(
+              'div',
+              { className: 'vpb-zoom' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'vpb-zoom-btn',
+                  disabled: fontSize <= RF_SIZE_MIN,
+                  title: t('readerZoomOut'),
+                  onClick: () => {
+                    readerDirtyFlag.current = true
+                    setFontSize((value) => clampInt(value - 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
+                  },
+                },
+                'A-',
+              ),
+              h('span', { className: 'vpb-zoom-val', title: t('readerZoom') }, fontSize + 'px'),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'vpb-zoom-btn',
+                  disabled: fontSize >= RF_SIZE_MAX,
+                  title: t('readerZoomIn'),
+                  onClick: () => {
+                    readerDirtyFlag.current = true
+                    setFontSize((value) => clampInt(value + 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
+                  },
+                },
+                'A+',
+              ),
+            ),
+            drop('font', labelOf(fontItems, font), t('readerFont'), fontItems, font, (id) => {
+              readerDirtyFlag.current = true
+              setFont(readerFontOf(id))
+            }),
+            drop('line', labelOf(lineItems, String(line)), t('readerLine'), lineItems, String(line), (id) => {
+              readerDirtyFlag.current = true
+              setLine(readerLineOf(id))
+            }),
+            drop('bg', labelOf(bgItems, bg), t('readerBg'), bgItems, bg, (id) => {
+              readerDirtyFlag.current = true
+              setBg(readerBgOf(id))
+            }),
+          ),
+          h('i', { className: 'vpb-sep' }),
+          h(
+            'div',
+            { className: 'vpb-grp' },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vpb-pill vpb-ib vpb-ib-icon',
+                disabled: !hasDoc,
+                title: t('docFind'),
+                'aria-label': t('docFind'),
+                onClick: () => props.onFind(),
+              },
+              h(BoardIcon, { name: 'search', className: 'wb-ic' }),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vpb-pill vpb-ib vpb-ib-icon',
+                disabled: !hasDoc,
+                title: t('vaultCopyAll'),
+                'aria-label': t('vaultCopyAll'),
+                onClick: () => props.onCopy(),
+              },
+              h(BoardIcon, { name: 'copy', className: 'wb-ic' }),
+            ),
+          ),
+          h('i', { className: 'vpb-sep' }),
+          saveState === 'saving'
+            ? h('span', { className: 'vpb-state', 'data-state': 'saving' }, t('vaultSaving'))
+            : saveState === 'error'
+              ? h('span', { className: 'vpb-state', 'data-state': 'error' }, t('vaultSaveFailed'))
+              : hasDoc
+                ? h('span', { className: 'vpb-state', 'data-state': 'saved' }, t('vaultSaved'))
+                : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vpb-pill vpb-ib',
+              disabled: !hasDoc || !dirty,
+              title: t('vaultSaveNow'),
+              'aria-label': t('vaultSaveNow'),
+              onClick: () => props.onSave(),
+            },
+            h(BoardIcon, { name: 'save', className: 'wb-ic' }),
+          ),
+        )
+      }
       function WorkbenchPage(props) {
         const t = props.t
         const ctx = props.ctx
@@ -5636,42 +5857,7 @@ window.__ModuleLoader__.load({
           fmt('quote', t('copyQuote'), 'quote'),
           fmt('image', t('copyImage'), 'image'),
           h('i', { className: 'cb-tb-sep' }),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'cb-tb',
-              title: t('copyTbRewrite'),
-              disabled: disabled || aiBusy,
-              onClick: () => onAssist('rewrite'),
-            },
-            h(CbIcon, { name: 'sparkle', small: true }),
-            t('copyTbRewrite'),
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'cb-tb',
-              title: t('copyTbCompress'),
-              disabled: disabled || aiBusy,
-              onClick: () => onAssist('compress'),
-            },
-            t('copyTbCompress'),
-          ),
-          aiBusy ? h('span', { className: 'cb-ai-busy' }, t('copyAiWorking')) : null,
-          h('i', { className: 'cb-tb-sep' }),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'cb-tb',
-              title: t('copyTbCopyMp'),
-              disabled: disabled,
-              onClick: onCopyMp,
-            },
-            t('copyTbCopyMp'),
-          ),
+          /* AI 按钮（改写/压缩/复制公众号）已删：2026-11-18 大王要求完全照搬素材库 */
         )
       }
 
@@ -5763,6 +5949,20 @@ window.__ModuleLoader__.load({
               onCopyMp: props.onCopyMp,
             }),
           ),
+          /*
+           * ── 阅读栏（2026-11-18 照搬素材库 .vpb-bar）──────────────────
+           *   [字数] ‖ [A- 14px A+ | 字体▾ | 行距▾ | 底色▾] ‖ [查找 复制] ‖ [已保存 💾]
+           */
+          h(ReaderBar, {
+            t,
+            hasDoc: true,
+            infoText: words + ' ' + t('copyWordUnit'),
+            dirty: props.dirty === true,
+            saveState: props.saveState,
+            onFind: () => props.onFind(),
+            onCopy: () => props.onCopyAll(),
+            onSave: () => props.onSaveNow(),
+          }),
           mode === 'edit'
             ? h('div', { className: 'cb-edit-wrap' }, props.editor)
             : h(
@@ -5918,6 +6118,25 @@ window.__ModuleLoader__.load({
             setError(t('copySaveFailed') + messageOf(err))
           }
         }
+
+        /* 复制全文（ReaderBar 用）：复用素材库那套 writeClipboard，失败静默 */
+        const copyAll = async () => {
+          if (!doc) return
+          const ok = await writeClipboard(draft !== '' ? draft : (doc.text || ''))
+          if (ok) flash(t('copied'))
+        }
+
+        /*
+         * 打开查找（ReaderBar 用）。
+         * 文案台正文是 contenteditable / 渲染块，没有素材库那套查找高亮设施，
+         * 所以这里用浏览器原生查找面板，行为等价（Ctrl+F 同一个东西）。
+         */
+        const openFind = () => {
+          if (typeof window !== 'undefined' && typeof window.find === 'function') {
+            window.find('', false, false, true, false, false, false)
+          }
+        }
+
 
         // 有改动就等 1.2 秒自动存（与素材库同一节奏）
         useEffect(() => {
@@ -6233,6 +6452,10 @@ window.__ModuleLoader__.load({
             aiBusy,
             onCopyMp: () => void copyMp(),
             onCreate: () => void createDraft(),
+            /* ReaderBar 的三个回调（2026-11-18） */
+            onCopyAll: () => void copyAll(),
+            onFind: openFind,
+            onSaveNow: () => void save(false),
             editor: h('div', {
               key: 'cb-edit-surface',
               ref: (node) => {
@@ -6576,13 +6799,7 @@ window.__ModuleLoader__.load({
           btn('h2', 'H2', null, () => props.onFormat('h2'), { needEdit: true }),
           btn('quote', t('writeTbQuote'), 'quote', () => props.onFormat('quote'), { needEdit: true }),
           h('i', { className: 'wbg-tb-sep' }),
-          // 助手组：任何状态都能用
-          btn('continue', t('writeTbContinue'), 'star', () => props.onAssist('continue'), { disabled: aiBusy }),
-          btn('dialog', t('writeTbDialog'), null, () => props.onAssist('dialog'), { disabled: aiBusy }),
-          aiBusy ? h('span', { className: 'wbg-ai-busy' }, t('writeAiWorking')) : null,
-          h('i', { className: 'wbg-tb-sep' }),
-          btn('outline', t('writeTbOutline'), 'grid', () => props.onAssist('outline')),
-          btn('timeline', t('writeTbTimeline'), 'clock', () => props.onTimeline()),
+          /* AI 按钮（续写/对白润色/大纲表/时间线）已删：2026-11-18 大王要求完全照搬素材库 */
         )
       }
 
@@ -6661,6 +6878,17 @@ window.__ModuleLoader__.load({
               onTimeline: props.onTimeline,
             }),
           ),
+          /* 阅读栏（2026-11-18 照搬素材库 .vpb-bar）：与文案台、素材库三条工具条同构 */
+          h(ReaderBar, {
+            t,
+            hasDoc: true,
+            infoText: words + ' ' + t('writeWordUnit'),
+            dirty: props.dirty === true,
+            saveState: props.saveState,
+            onFind: () => props.onFind(),
+            onCopy: () => props.onCopyAll(),
+            onSave: () => props.onSaveNow(),
+          }),
           props.mode === 'edit'
             ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
             : h(
@@ -6920,6 +7148,21 @@ window.__ModuleLoader__.load({
             setError(t('writeSaveFailed') + messageOf(err))
           }
         }
+
+        /* 复制全文（ReaderBar 用） */
+        const copyAll = async () => {
+          if (!file) return
+          const ok = await writeClipboard(draft !== '' ? draft : (file.text || ''))
+          if (ok) flash(t('copied'))
+        }
+
+        /* 打开查找（ReaderBar 用）：用浏览器原生查找面板 */
+        const openFind = () => {
+          if (typeof window !== 'undefined' && typeof window.find === 'function') {
+            window.find('', false, false, true, false, false, false)
+          }
+        }
+
 
         useEffect(() => {
           if (!file || file.text === draft) return undefined
@@ -7238,6 +7481,10 @@ window.__ModuleLoader__.load({
             onFormat: applyFormat,
             onAssist: (how) => void sendToAssist(how),
             onTimeline: () => setOutlineOpen((open) => !open),
+            /* ReaderBar 的三个回调（2026-11-18） */
+            onCopyAll: () => void copyAll(),
+            onFind: openFind,
+            onSaveNow: () => void save(false),
             editor: h('div', {
               key: 'wbg-edit-surface',
               ref: (node) => {
