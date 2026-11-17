@@ -1407,6 +1407,10 @@ window.__ModuleLoader__.load({
       const [outlineCollapsed, setOutlineCollapsed] = useState(true)
       /** 树面板「新建」下拉是否打开。 */
       const [newMenuOpen, setNewMenuOpen] = useState(false)
+      /** 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算）。 */
+      const [newMenuPos, setNewMenuPos] = useState(null)
+      /** 加号按钮的 ref —— 算菜单位置要用它的 getBoundingClientRect。 */
+      const newBtnRef = useRef(null)
       /**
        * 点下拉以外任何地方 / 按 Esc → 收起「新建」下拉。
        *
@@ -1435,9 +1439,10 @@ window.__ModuleLoader__.load({
           /* 加号容器叫 .vp-newfloat（原 .vp-newmenu），两个都认，挪位置不会再踩 */
           if (target && typeof target.closest === 'function' && target.closest('.vp-newinline, .vp-newfloat, .vp-newmenu') !== null) return
           setNewMenuOpen(false)
+          setNewMenuPos(null)
         }
         const onKey = (event) => {
-          if (event && event.key === 'Escape') setNewMenuOpen(false)
+          if (event && event.key === 'Escape') setNewMenuOpen(false); setNewMenuPos(null)
         }
         document.addEventListener('mousedown', onDocDown)
         document.addEventListener('keydown', onKey)
@@ -3786,17 +3791,29 @@ window.__ModuleLoader__.load({
                 {
                   type: 'button',
                   className: 'vp-newbtn-round',
+                  ref: newBtnRef,
                   'data-open': newMenuOpen ? 'true' : 'false',
-                  onClick: () => setNewMenuOpen((open) => !open),
+                  onClick: () => {
+                    /* 2026-11-18：fixed 定位，打开时用加号的 rect 算坐标并夹在视口内 */
+                    if (newMenuOpen) { setNewMenuOpen(false); setNewMenuPos(null); return }
+                    const pos = dropPositionOf(newBtnRef.current, DROP_W)
+                    if (pos === null) return
+                    setNewMenuPos(pos)
+                    setNewMenuOpen(true)
+                  },
                   title: t('vaultNew'),
                   'aria-label': t('vaultNew'),
                 },
                 '＋',
               ),
-              newMenuOpen
+              newMenuOpen && newMenuPos
                 ? h(
                   'div',
-                  { className: 'vp-newdrop' },
+                  {
+                    className: 'vp-newdrop',
+                    /* fixed 坐标由 dropPositionOf 算好（右对齐加号、夹在视口内） */
+                    style: { left: newMenuPos.left + 'px', top: newMenuPos.top + 'px', width: DROP_W + 'px' },
+                  },
                   h(
                     'button',
                     {
@@ -3806,7 +3823,6 @@ window.__ModuleLoader__.load({
                     },
                     h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
                     h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
-                    h('span', { className: 'vp-newdrop-k' }, 'Ctrl N'),
                   ),
                   h(
                     'button',
@@ -3817,7 +3833,6 @@ window.__ModuleLoader__.load({
                     },
                     h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
                     h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
-                    h('span', { className: 'vp-newdrop-k' }, 'Ctrl ⇧ N'),
                   ),
                 )
                 : null,
@@ -5045,6 +5060,28 @@ window.__ModuleLoader__.load({
           ),
         )
       }
+      /**
+       * 下拉菜单宽度（2026-11-18 大王要求去掉快捷键后收窄）。
+       * 去掉了「Ctrl N / Ctrl ⇧ N」那一列，137px 够放「新建 md 文件」。
+       */
+      const DROP_W = 137
+
+      /**
+       * 算下拉菜单的 fixed 坐标：右对齐锚点按钮，自动夹在视口内。
+       *
+       * 为什么用 fixed：absolute 会被祖先的 overflow 裁掉、被祖先的层叠上下文困住
+       * （素材库的下拉原来就被树面板和标题行困住，右侧阅读栏一挡就看不见）。
+       * fixed 只受视口约束，再夹一下左右边界就绝不会被遮。
+       */
+      function dropPositionOf(btn, width) {
+        if (!btn || typeof btn.getBoundingClientRect !== 'function') return null
+        const rect = btn.getBoundingClientRect()
+        let left = rect.right - width
+        const margin = 8
+        if (left < margin) left = margin
+        if (left + width > window.innerWidth - margin) left = window.innerWidth - margin - width
+        return { left: Math.round(left), top: Math.round(rect.bottom + 4) }
+      }
       function WorkbenchPage(props) {
         const t = props.t
         const ctx = props.ctx
@@ -5902,6 +5939,10 @@ window.__ModuleLoader__.load({
         const sortBy = props.sortBy
         /* 加号下拉：新建分组 / 新建文案 */
         const [newOpen, setNewOpen] = useState(false)
+        /* 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算） */
+        const [newMenuPos, setNewMenuPos] = useState(null)
+        /* 加号按钮 ref —— 算菜单位置要用它的 getBoundingClientRect */
+        const newBtnRef = useRef(null)
         /* 排序下拉开合（2026-11-18 修黑屏：以前漏定义，读 sortOpen 直接崩） */
         const [sortOpen, setSortOpen] = useState(false)
 
@@ -5912,6 +5953,7 @@ window.__ModuleLoader__.load({
             const node = event.target
             if (node && typeof node.closest === 'function' && node.closest('.vp-newinline') !== null) return
             setNewOpen(false)
+            setNewMenuPos(null)
           }
           document.addEventListener('mousedown', onDown)
           return () => document.removeEventListener('mousedown', onDown)
@@ -5943,13 +5985,27 @@ window.__ModuleLoader__.load({
               h('button', {
                 type: 'button',
                 className: 'vp-newbtn-round',
+                  ref: newBtnRef,
                 'data-open': newOpen ? 'true' : 'false',
                 title: t('vaultNew'),
                 'aria-label': t('vaultNew'),
-                onClick: () => setNewOpen((open) => !open),
+                  onClick: () => {
+                    /* fixed 定位：打开时用加号 rect 算坐标并夹在视口内 */
+                    if (newOpen) { setNewOpen(false); setNewMenuPos(null); return }
+                    const pos = dropPositionOf(newBtnRef.current, DROP_W)
+                    if (pos === null) return
+                    setNewMenuPos(pos)
+                    setNewOpen(true)
+                  },
               }, '＋'),
-              newOpen
-                ? h('div', { className: 'vp-newdrop' },
+              newOpen && newMenuPos
+                ? h(
+                  'div',
+                  {
+                    className: 'vp-newdrop',
+                    /* fixed 坐标由 dropPositionOf 算好（右对齐加号、夹在视口内） */
+                    style: { left: newMenuPos.left + 'px', top: newMenuPos.top + 'px', width: DROP_W + 'px' },
+                  },
                   h('button', {
                     type: 'button',
                     className: 'vp-newdrop-item',
@@ -8680,10 +8736,18 @@ mark.df-hit[data-active="true"] {
 }
 .vp-newbtn-round:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .vp-newbtn-round[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+/*
+ * 新建下拉菜单（2026-11-18 改 fixed）：
+ *
+ * 原来用 absolute，会被祖先的 overflow 裁掉、被祖先的层叠上下文困住 ——
+ * 素材库的下拉就被树面板裁、被阅读栏挡（大王截图指出两次）。
+ * 改 fixed 后只受视口约束，坐标由 dropPositionOf() 算并夹在视口内，
+ * z-index 200 与右键菜单同级，任何面板都盖不住它。
+ * 位置用 inline style 给，这里不管 left/top。
+ */
 .vp-newdrop {
-  position: absolute; top: calc(100% + 4px); left: auto; right: 0; z-index: 60;
-  min-width: 176px; padding: 4px; border-radius: 8px;
-  /* 菜单背景用实色面板（2026-11-18）：overlay 在部分主题下偏透，密排文字会透底 */
+  position: fixed; z-index: 200;
+  padding: 4px; border-radius: 8px;
   background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-overlay));
   border: 1px solid var(--dsw-alias-border-l2);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
@@ -8692,7 +8756,7 @@ mark.df-hit[data-active="true"] {
 .vp-newdrop-up { top: auto; bottom: calc(100% + 6px); }
 
 .vp-newdrop-item {
-  display: flex; align-items: center; gap: 8px; width: 100%;
+  display: flex; align-items: center; gap: 7px; width: 100%;
   padding: 6px 9px; border: 0; border-radius: 4px;
   background: none; color: inherit; font: inherit; font-size: 12.5px;
   cursor: pointer; text-align: left;
@@ -8700,7 +8764,6 @@ mark.df-hit[data-active="true"] {
 .vp-newdrop-item:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-newdrop-ic { width: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; opacity: .75; }
 .vp-newdrop-t { flex: 1; }
-.vp-newdrop-k { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); font-family: 'Consolas', monospace; }
 .vp-opbtn {
   height: 24px; padding: 0 7px; border: 0; border-radius: 4px;
   background: none; color: var(--dsw-alias-label-secondary);
