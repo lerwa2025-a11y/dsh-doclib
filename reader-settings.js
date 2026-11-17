@@ -40,6 +40,8 @@ const DEFAULTS = {
   background: '', // '' = 跟随主题；其余是配色 id，颜色只存在于 CSS 里
   // ── v0.3 布局 ──
   tocCollapsed: true, // 大纲轨是否收起（右侧 204px ↔ 40px 窄条）。默认收起：阅读时正文优先，需要时点右侧窄条展开
+  /** 文件树排序方式：name = 名称升序 / date = 修改时间倒序 / size = 体积倒序。 */
+  sortBy: 'name',
   /**
    * 最近打开的文件，时间倒序。空状态用它替代原来那句「在左边选一个文件」。
    * 每项 { path, name, at }：path 是库内相对路径（不是绝对路径 —— 库根可以换，
@@ -140,6 +142,12 @@ function recentOf(value) {
   return out
 }
 
+/** 排序方式白名单：只认这三个，其余回落 'name'。 */
+const SORT_MODES = new Set(['name', 'date', 'size'])
+function sortModeOf(value) {
+  return typeof value === 'string' && SORT_MODES.has(value) ? value : 'name'
+}
+
 /** 把任意输入洗成一份完全合法的设置；坏值回落默认，绝不抛。 */
 export function sanitizeSettings(value) {
   const src = value !== null && typeof value === 'object' && !Array.isArray(value) ? value : {}
@@ -149,6 +157,7 @@ export function sanitizeSettings(value) {
     lineHeight: decOf(src.lineHeight, 1.4, 2.4, DEFAULTS.lineHeight, 2),
     background: idOf(src.background, BG_IDS),
     tocCollapsed: boolOf(src.tocCollapsed, DEFAULTS.tocCollapsed),
+    sortBy: sortModeOf(src.sortBy),
     recent: recentOf(src.recent),
   }
 }

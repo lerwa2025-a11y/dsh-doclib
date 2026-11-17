@@ -18,6 +18,11 @@
   "files": [
     "index.js",
     "store.js",
+    "studio-binding.js",
+    "copy-desk.js",
+    "write-desk.js",
+    "ai-edit.js",
+    "libraries.js",
     "vault.js",
     "reader-settings.js",
     "annotations.js",

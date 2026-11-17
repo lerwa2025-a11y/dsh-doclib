@@ -113,6 +113,39 @@ function relOf(root, absolute) {
 
 const ORDER_NAME = 'order.json'
 
+/** 合法的排序方式。names = 名称升序；date = 修改时间倒序；size = 体积倒序。 */
+export const SORT_MODES = ['name', 'date', 'size']
+
+/** 非法值一律回落 name —— 排序方式来自客户端，不能让它把树打乱成未知状态。 */
+export function sortModeOf(value) {
+  return SORT_MODES.includes(value) ? value : 'name'
+}
+
+/**
+ * 目录/文件混排的比较器。
+ *
+ * 三条规则，顺序不能换：
+ *   1. 目录永远在文件前面（无论哪种排序方式）—— 工具型列表混排会让人找不到文件夹
+ *   2. 手工排过序的（rank 有效）永远在未排过的前面，且彼此保持 rank 升序
+ *   3. 都没手排过，才按 sortBy 比
+ */
+function compareEntries(left, right, sortBy, rank) {
+  if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
+  const leftRank = rank(left.name)
+  const rightRank = rank(right.name)
+  if (leftRank !== rightRank) return leftRank - rightRank
+  if (sortBy === 'date') {
+    const a = typeof left.mtimeMs === 'number' ? left.mtimeMs : -1
+    const b = typeof right.mtimeMs === 'number' ? right.mtimeMs : -1
+    if (a !== b) return b - a
+  } else if (sortBy === 'size') {
+    const a = typeof left.size === 'number' ? left.size : -1
+    const b = typeof right.size === 'number' ? right.size : -1
+    if (a !== b) return b - a
+  }
+  return left.name.localeCompare(right.name, 'zh')
+}
+
 async function readOrderMap() {
   try {
     const text = await readFile(join(dataDir(), ORDER_NAME), 'utf8')
@@ -145,8 +178,9 @@ export async function clearOrder(parentRel) {
  * 递归列目录。返回 [{ type:'dir'|'file', name, path, children?, size?, mtime?, image? }]
  * 跳过点开头条目；总条目超过 TREE_MAX_ENTRIES 时截断并标 truncated。
  */
-export async function listTree(root) {
+export async function listTree(root, sortByInput) {
   let budget = TREE_MAX_ENTRIES
+  const sortBy = sortModeOf(sortByInput)
   const orderMap = await readOrderMap()
   const walk = async (absolute, depth) => {
     const entries = []
@@ -161,13 +195,25 @@ export async function listTree(root) {
     const customOrder = Array.isArray(orderMap[orderKey]) ? orderMap[orderKey] : []
     const indexOf = new Map(customOrder.map((name, index) => [name, index]))
     const rank = (name) => (indexOf.has(name) ? indexOf.get(name) : Number.MAX_SAFE_INTEGER)
-    items.sort((left, right) => {
-      if (left.isDirectory() !== right.isDirectory()) return left.isDirectory() ? -1 : 1
-      const leftRank = rank(left.name)
-      const rightRank = rank(right.name)
-      if (leftRank !== rightRank) return leftRank - rightRank
-      return left.name.localeCompare(right.name, 'zh')
-    })
+    /*
+     * 按日期/体积排序要先拿到元信息，所以这里不能直接排 Dirent ——
+     * 先并发 stat 一轮，把 mtime/size 挂到 Dirent 上（同一个对象，后面照用）。
+     * 只在 date/size 模式下做；name 模式不多付这次 stat 的钱。
+     */
+    if (sortBy === 'date' || sortBy === 'size') {
+      await Promise.all(items.map(async (item) => {
+        if (item.name.startsWith('.')) return
+        try {
+          const info = await stat(join(absolute, item.name))
+          item.mtimeMs = info.mtimeMs
+          item.size = info.size
+        } catch {
+          item.mtimeMs = undefined
+          item.size = undefined
+        }
+      }))
+    }
+    items.sort((left, right) => compareEntries(left, right, sortBy, rank))
     for (const item of items) {
       if (item.name.startsWith('.')) continue
       if (budget <= 0) return entries
@@ -176,7 +222,17 @@ export async function listTree(root) {
       const rel = relOf(root, childAbsolute)
       if (item.isDirectory()) {
         const children = depth >= TREE_MAX_DEPTH ? [] : await walk(childAbsolute, depth + 1)
-        entries.push({ type: 'dir', name: item.name, path: rel, children })
+        /*
+         * 目录也带 mtime：按日期排序时目录要参与比较，
+         * 否则它们只能靠名字排，跟文件的先后关系看着像随机。
+         */
+        let dirMtime
+        try {
+          dirMtime = (await stat(childAbsolute)).mtimeMs
+        } catch {
+          dirMtime = undefined
+        }
+        entries.push({ type: 'dir', name: item.name, path: rel, mtime: dirMtime, children })
       } else if (item.isFile()) {
         let size
         let mtime

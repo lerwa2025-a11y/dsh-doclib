@@ -16,6 +16,11 @@ import {
   writeAnnotations,
 } from './annotations.js'
 import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook.js'
+import { clearBinding, getBinding, setBinding } from './studio-binding.js'
+import { copyStatuses, listCopyDocs } from './copy-desk.js'
+import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
+import { readTail, waitReply } from './ai-edit.js'
+import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
 import {
   clearOrder,
   deleteToTrash,
@@ -68,6 +73,30 @@ function sameOrigin(req) {
   } catch {
     return false
   }
+}
+
+/**
+ * 「插件只读写三个库」这条规矩的唯一执行点。
+ *
+ * 所有涉及库内具体路径的读写都先过这一道。拒绝：
+ *   · 空串（库根本身，是聚合视图，不是可读写的目标）
+ *   · 库根下的 agents.md / 日记 / 散落文件
+ *   · .trash / .snapshots / .agents 插件状态目录
+ *   · 任何含 .. 的路径（防穿越 —— 这条实测漏过，已修）
+ *
+ * 抛出的错误由路由的 catch 转成 400，客户端能看到原因。
+ */
+function assertInLibrary(rel, what) {
+  const normalized = requireInside(rel, what)
+  if (normalized === '') throw new Error((what || '路径') + '不能是库根本身')
+  return normalized
+}
+
+/** 移动的目标目录：允许落在某个库的根（如「素材」），但不允许是库根。 */
+function assertTargetDir(rel, what) {
+  const normalized = requireInside(rel, what)
+  if (normalized === '') throw new Error((what || '目标') + '不能是库根本身')
+  return normalized
 }
 
 async function readBody(req, limitBytes) {
@@ -137,9 +166,24 @@ export function apply(ctx) {
               const route = url.pathname.replace(/^\/dsh-notes\/vault/, '')
               const query = url.searchParams
               const root = await getRoot()
+              /*
+               * 三个固定库（素材\ 文案\ 写作\）是这套数据模型的地基：
+               * 插件只读写这三个库里面，库根下的其他东西一律不碰。
+               * 每次请求顺手 ensure 一次（三次 stat，开销可忽略），
+               * 这样任何入口都不会遇到「库还不存在」的分支。
+               */
+              if (typeof root === 'string' && root !== '') {
+                try { await ensureLibraries(root) } catch { /* 库建不出来不该让整个请求挂掉 */ }
+              }
 
               // 库根目录的读取与设置（不要求已设置）
-              if (route === '' || route === '/') {
+              /*
+               * /root 是 /（返回 {root}）的别名。
+               * 客户端（工作台选择器、回收站板块）一直调 /root，但这里是前缀路由，
+               * 只认 '' 和 '/' —— 于是那两处拿到 404、库根变成空串，
+               * 拿空 cwd 去建会话就是 `mkdir ''` 那个报错。两边都认最省事。
+               */
+              if (route === '' || route === '/' || route === '/root') {
                 if (req.method === 'GET') {
                   sendJson(res, 200, { root })
                   return
@@ -151,33 +195,169 @@ export function apply(ctx) {
                 }
               }
 
+              /*
+               * 工作台用的预设 id。
+               *
+               * 为什么需要它：会话不认预设时，DSH 打开它是空白页、还要求先选工作区和模式。
+               * 工作台会话理应「已经属于资料库工作区 + 已经定了模式」，所以建会话时把预设带上。
+               * 优先用配置里显式给的；没有就取注册表里排第一的那个（与「默认」同序）。
+               */
+              if (route === '/studio-preset' && req.method === 'GET') {
+                let preset = ''
+                let presets = []
+                try {
+                  const registry = typeof webCtx.get === 'function' ? webCtx.get('agentPresets') : undefined
+                  if (registry && typeof registry.list === 'function') {
+                    const rows = await registry.list()
+                    presets = (Array.isArray(rows) ? rows : [])
+                      .filter((row) => row && typeof row.id === 'string' && row.id !== '')
+                      .map((row) => ({ id: row.id, name: typeof row.name === 'string' ? row.name : row.id }))
+                    if (presets.length > 0) preset = presets[0].id
+                  }
+                } catch {
+                  /* 拿不到预设不影响发消息，客户端会退化成不带预设 */
+                }
+                sendJson(res, 200, { preset, presets })
+                return
+              }
+
+              /*
+               * 工作台 ↔ 会话绑定。
+               *
+               * 放在库根守卫之前：绑定不依赖笔记库本身能不能读，
+               * 库根只是它存的一个键，坏了也不该连绑定都读不出来。
+               */
+              if (route === '/studio-binding') {
+                if (req.method === 'GET') {
+                  sendJson(res, 200, await getBinding(query.get('root') || ''))
+                  return
+                }
+                if (req.method === 'POST') {
+                  const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                  if (body && body.sessionId === '') {
+                    sendJson(res, 200, { ok: true, ...(await clearBinding(body.root)) })
+                    return
+                  }
+                  sendJson(res, 200, { ok: true, ...(await setBinding(body && body.root, body && body.sessionId)) })
+                  return
+                }
+              }
+
               if (root === null) {
                 sendJson(res, 409, { error: '还没有设置笔记库文件夹' })
                 return
               }
 
-              // 目录树
+              /*
+               * 文案台：文案\ 下的稿件清单。
+               *
+               * 比走 /tree 好在：只回 md、只回第一层、每条带 状态/字数/修改时间，
+               * 左栏直接用，不必在客户端再爬一遍树再自己算字数。
+               * 状态只读 front-matter，没有就兜底「草稿」，绝不回写文件（需求 §3.5）。
+               */
+              /* 三个固定库的清单（左栏顶部用）。不依赖库根已设置。 */
+              if (route === '/libraries' && req.method === 'GET') {
+                sendJson(res, 200, await listLibraries(root))
+                return
+              }
+
+              if (route === '/copy-list' && req.method === 'GET') {
+                const listed = await listCopyDocs(root)
+                sendJson(res, 200, { ...listed, statuses: copyStatuses() })
+                return
+              }
+              /*
+               * 写作台：项目清单 / 单项目结构 / 新建项目。
+               *
+               * 存法照抄需求定案 §3.4：写作\项目名\ 下 项目.md 只放卷章结构与 order，
+               * 正文独立在 正文\，设定在 人物\ 地点\ 情节线\。结构与正文分开，
+               * 手改结构不碰正文、正文坏了不影响结构。
+               *
+               * 结构解析不出来时（没 项目.md、或格式不认识）退回「一个正文文件 = 一章」，
+               * 界面永远有东西看，不假装项目是空的。
+               */
+              if (route === '/write-list' && req.method === 'GET') {
+                sendJson(res, 200, await listWriteProjects(root))
+                return
+              }
+              if (route === '/write-project' && req.method === 'GET') {
+                sendJson(res, 200, await readWriteProject(root, query.get('path') || ''))
+                return
+              }
+              if (route === '/write-new' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, { ok: true, ...(await createWriteProject(root, body && body.name)) })
+                return
+              }
+              /*
+               * AI 改写/扩写/压缩/续写的结果取回。
+               *
+               * 客户端点按钮时，光调 conversation.send() 只是把内容塞进会话 ——
+               * 回复留在会话历史里，插件拿不到，界面上什么都不会变。
+               * 这两条路由补上后半截：先拿分界 seq，发完再来等这一轮的回复正文。
+               *
+               * 走 /ai-tail + /ai-await 两步而不是一步，是因为「发」必须在客户端做
+               * （只有它有会话作用域），「读」只有 Host 能做（sessionQuery）。
+               */
+              if (route === '/ai-tail' && req.method === 'GET') {
+                sendJson(res, 200, await readTail(webCtx, query.get('session') || ''))
+                return
+              }
+              if (route === '/ai-await' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await waitReply(webCtx, {
+                  sessionId: body && body.sessionId,
+                  sinceSeq: body && typeof body.sinceSeq === 'number' ? body.sinceSeq : -1,
+                  timeoutMs: body && typeof body.timeoutMs === 'number' ? body.timeoutMs : 120000,
+                }))
+                return
+              }
+
+              // 目录树。sortBy 优先取 query（客户端刚点完排序会显式带），
+              // 没带则用设置里存的那份 —— 刷新页面/换设备后仍然是上次选的排序。
+              /*
+               * 目录树：素材库**只扫「素材」这一个库**。
+               *
+               * 演进过程：
+               *   ① 最初 listTree(root) 扫整个库根 —— .trash/agents.md 都混进来了
+               *   ② 三库改造后 treeOf 扫三个库 —— 但文案/写作两库和那两个板块重复，
+               *      同一个文件有了两条编辑路径（大王指出重叠）
+               *   ③ 现在 treeOf(root, walk, '素材') 只扫素材库 —— 三个板块各管各的目录
+               *
+               * 需要全部三库的树时（比如以后做全局搜索视图），把第三个参数去掉即可。
+               */
               if (route === '/tree' && req.method === 'GET') {
-                sendJson(res, 200, await listTree(root))
+                const explicit = query.get('sortBy') || ''
+                const sortBy = explicit !== '' ? explicit : (await readSettings()).sortBy
+                sendJson(res, 200, await treeOf(root, async (absolute, name) => {
+                  /* walk 回调：把一个库目录扫成一棵树，子节点路径前缀是该库名 */
+                  const listed = await listTree(absolute, sortBy)
+                  const prefix = (nodes) => (Array.isArray(nodes) ? nodes.map((node) => ({
+                    ...node,
+                    path: name + '/' + node.path,
+                    children: node.type === 'dir' ? prefix(node.children) : node.children,
+                  })) : [])
+                  return { tree: prefix(listed.tree), truncated: listed.truncated === true }
+                }, '素材'))
                 return
               }
 
               // 读文本
               if (route === '/file' && req.method === 'GET') {
-                sendJson(res, 200, await readText(root, query.get('path') || ''))
+                sendJson(res, 200, await readText(root, assertInLibrary(query.get('path') || '', '读取路径')))
                 return
               }
 
               // 写文本
               if (route === '/file' && (req.method === 'PUT' || req.method === 'POST')) {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, { ok: true, ...(await writeText(root, body.path, body.content, body.expectedMtime)) })
+                sendJson(res, 200, { ok: true, ...(await writeText(root, assertInLibrary(body.path, '写入路径'), body.content, body.expectedMtime)) })
                 return
               }
 
               // 读图片等二进制
               if (route === '/raw' && req.method === 'GET') {
-                const data = await readBinary(root, query.get('path') || '')
+                const data = await readBinary(root, assertInLibrary(query.get('path') || '', '读取路径'))
                 res.writeHead(200, {
                   'content-type': mimeOf(query.get('path') || ''),
                   'content-length': data.length,
@@ -190,7 +370,7 @@ export function apply(ctx) {
               // 写二进制（粘贴保存图片等）
               if (route === '/raw' && (req.method === 'PUT' || req.method === 'POST')) {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, { ok: true, ...(await writeBinary(root, body.path, body.dataBase64)) })
+                sendJson(res, 200, { ok: true, ...(await writeBinary(root, assertInLibrary(body.path, '写入路径'), body.dataBase64)) })
                 return
               }
 
@@ -198,10 +378,11 @@ export function apply(ctx) {
               if ((route === '/mkdir' || route === '/newfile' || route === '/delete' || route === '/rename') && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 let result
-                if (route === '/mkdir') result = await makeDir(root, body.path)
-                else if (route === '/newfile') result = await newFile(root, body.path)
-                else if (route === '/delete') result = await deleteToTrash(root, body.path)
-                else result = await renameEntry(root, body.path, body.name)
+                const safePath = assertInLibrary(body.path, '路径')
+                if (route === '/mkdir') result = await makeDir(root, safePath)
+                else if (route === '/newfile') result = await newFile(root, safePath)
+                else if (route === '/delete') result = await deleteToTrash(root, safePath)
+                else result = await renameEntry(root, safePath, body.name)
                 sendJson(res, 200, { ok: true, ...(result || {}) })
                 return
               }
@@ -236,11 +417,15 @@ export function apply(ctx) {
               // 移动 / 搜索 / 回收站
               if (route === '/move' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, { ok: true, ...(await moveEntry(root, body.path, body.targetDir)) })
+                sendJson(res, 200, { ok: true, ...(await moveEntry(root, assertInLibrary(body.path, '源路径'), assertTargetDir(body.targetDir, '目标目录'))) })
                 return
               }
               if (route === '/search' && req.method === 'GET') {
-                sendJson(res, 200, await searchTree(root, query.get('q') || ''))
+                /* 搜索同样只搜三个库：结果过滤掉库根下的其他内容 */
+                const hits = await searchTree(root, query.get('q') || '')
+                const rows = Array.isArray(hits && hits.results) ? hits.results : (Array.isArray(hits) ? hits : [])
+                const kept = rows.filter((row) => row && insideLibraries(row.path))
+                sendJson(res, 200, Array.isArray(hits) ? kept : { ...hits, results: kept })
                 return
               }
               if (route === '/trash-list' && req.method === 'GET') {

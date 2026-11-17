@@ -1,5 +1,5 @@
 /**
- * dsh-notes 网页客户端：侧栏「资料库」图标 + 主面板笔记库。
+ * dsh-notes 网页客户端：侧栏「工作台」图标 + 主面板（素材库 / 文案 / 写作 三板块）。
  *
  * 布局：左边文件树，右边编辑 / 阅读区。
  *   - 左：库根目录的递归树（可拖动改宽）、搜索、新建 / 重命名 / 移动 / 回收站
@@ -23,7 +23,23 @@ window.__ModuleLoader__.load({
 
     const DICT = {
       zh: {
-        panel: '资料库',
+        panel: '工作台',
+        // ── [工作台三板块] ──
+        tabVault: '素材库',
+        wsLabel: '工作台区域',
+        wsShared: '四板块共用',
+        wsPickTitle: '选择工作台区域（四个板块共用同一个工作区）',
+        asideChapter: '章节',
+        asideAssistant: '工作台助手',
+        asidePreset: '工作台预设',
+        assistantHint: '让助手读这篇，或说改哪里…',
+        tabCopy: '文案台',
+        tabWrite: '写作台',
+        tabVaultDesc: '笔记、资料、电子书',
+        tabCopyDesc: '公众号、专栏、产品文案',
+        tabWriteDesc: '短篇与长篇小说',
+        tabTrash: '回收站',
+        tabTrashDesc: '删除的文件，可恢复',
         vaultNew: '新建',
         tocEmpty: '这个文件没有标题',
         tocEmptyNoDoc: '选一个文件后，这里会显示它的章节结构。',
@@ -33,14 +49,13 @@ window.__ModuleLoader__.load({
         vaultPickHint: '粘贴一个文件夹的完整路径作为笔记库根目录，例如 S:\\笔记库。之后这个文件夹（含子文件夹）里的 md 和图片都能在这里读写。',
         vaultPickPlaceholder: '文件夹完整路径',
         vaultPickConfirm: '使用这个文件夹',
-        vaultSwitchDir: '切换目录',
-        vaultSwitchHint: '换一个笔记库根目录（当前内容不受影响，只是改指向哪个文件夹）：',
         vaultSwitchConfirm: '切换到这个目录',
         vaultSwitchEmpty: '请填写文件夹路径',
         vaultTreeTitle: '文件',
         vaultExpandAll: '全部展开',
         vaultCollapseAll: '全部收起',
         vaultOpenFolder: '打开文件夹',
+        vaultOpenFolderRoot: '库根',
         vaultHistory: '历史版本',
         vaultHistoryEmpty: '还没有快照；点「拍快照」留一份',
         vaultSnapshotTaken: '已拍快照',
@@ -59,12 +74,23 @@ window.__ModuleLoader__.load({
         vaultTrashEmpty: '回收站是空的',
         vaultTrashRestore: '恢复',
         vaultTrashClear: '清空回收站',
+        // ── [回收站板块 · 工作台第四板块] ──
+        trashHint: '工作台里删掉的文件都收在这里，可以单条恢复到库根目录。',
+        trashRootLabel: '库根',
+        trashRootGroup: '库根目录',
+        trashDeletedAt: '删除于',
+        trashClearConfirm: '确认清空',
         vaultMoveTo: '移动到…',
-        vaultMoveRoot: '库根目录',
+        vaultMoveRoot: '素材库根',
         vaultMoveHere: '（当前位置）',
-        vaultSortUp: '上移（同类型内）',
-        vaultSortDown: '下移（同类型内）',
-        vaultSortReset: '重置为名称排序',
+
+        // ── [文件树排序切换] ──
+        vaultSort: '排序',
+        vaultSortName: '按名称',
+        vaultSortDate: '按修改时间',
+        vaultSortSize: '按体积',
+        vaultSortClear: '清除手动排序',
+        vaultSortTitle: '切换文件树的排序方式',
         vaultFolderHint: '这是文件夹。点标题（或旁边的 ✎）可以改名；在左侧文件列表里点文件查看内容。',
         vaultMoved: '已移动',
         vaultDeleteDirWarn: '文件夹里的所有内容会一起移入回收站',
@@ -112,10 +138,33 @@ window.__ModuleLoader__.load({
         vaultDelete: '删除',
         vaultSaving: '保存中…',
         vaultSaveFailed: '保存失败',
+        vaultSaved: '已保存',
+        // ── [工作台 ↔ 会话] ──
+        assistStatus: '会话',
+        assistUnbound: '未绑定',
+        assistIdle: '空闲',
+        assistRunning: '运行中',
+        assistOpen: '打开会话',
+        assistNew: '换一个新会话',
+        assistSend: '发送',
+        assistNoService: '当前环境没有会话服务，发不出去',
+        assistSendFailed: '发送失败：',
+        assistNeedWorkspace: '先点顶栏的「工作台区域」选一个文件夹，这个工作台才会有会话',
+        assistModel: '模型',
+        assistModelPick: '选择模型',
+        assistModelLoading: '模型加载中…',
+        assistModelEmpty: '没有可用模型',
+        assistModelFailed: '模型切换失败：',
+        assistBlankHint: '这是这个工作台的会话，发第一条消息后就能在会话页看到完整对话',
+        wsPickManual: '选择文件夹…',
         vaultConflict: '文件已被外部程序修改，已重读最新内容',
         vaultUnsupported: '这个文件不支持在页面里编辑',
         vaultEmptyDir: '这个文件夹是空的',
         vaultSelectFirst: '在左边选一个文件',
+        ok: '确定',
+        vaultEmptySub: '左边是按目录排的整库文件；点开一个 md 就能在这里阅读或编辑。',
+        vaultLibEmpty: '这个库还是空的',
+        vaultLibFixed: '素材 / 文案 / 写作 是固定库，不能删除或改名',
         vaultNamePlaceholder: '名称',
         vaultConfirmDelete: '确认删除',
         modeEdit: '编辑',
@@ -136,9 +185,170 @@ window.__ModuleLoader__.load({
         copy: '复制',
         copied: '已复制',
         todo: '待办',
+        // ── [文案台 · 排版占位版] ──
+        copySearch: '搜索稿件',
+        copyStatusPrefix: '状态：',
+        copyWordUnit: '字',
+        copyMinutesPrefix: '约 ',
+        copyMinutesUnit: ' 分钟',
+        copyTbRewrite: '改写',
+        copyTbCompress: '压缩',
+        copyTbCopyMp: '复制公众号格式',
+        copyParaUnit: '段落',
+        copyReadTime: '预计阅读',
+        copySavedAt: '自动保存于 ',
+        copyAssistant: '写作助手',
+        copyAssistantInput: '让助手接着写，或说改哪里…',
+        // ── [文案台 · 接真实数据] ──
+        copyEmptyDir: '库里还没有「文案」文件夹',
+        copyEmptyDirSub: '新建一篇稿件，或在库根建一个「文案」文件夹放 .md 稿件',
+        copyEmptyList: '没有找到稿件',
+        copyNoMatch: '没有匹配的稿件',
+        copyAll: '全部',
+        copyUntitled: '未命名稿件',
+        copyWordUnitShort: '字',
+        copyNewDraft: '新建稿件',
+        copyNewDraftName: '新稿件',
+        copyLoadFailed: '稿件读取失败：',
+        copyNoMetaHint: '这篇没有元数据，状态按「草稿」显示',
+        copyStatusDraft: '草稿',
+        copyStatusDoing: '进行中',
+        copyStatusReady: '待发布',
+        copyStatusDone: '已发布',
+        copyStatusArchived: '归档',
+        copyDirty: '有改动',
+        copySaved: '已保存',
+        copySaving: '保存中…',
+        copySaveFailed: '保存失败：',
+        copyRead: '阅读',
+        copyEdit: '编辑',
+        copyBold: '加粗',
+        copyH2: '二级标题',
+        copyList: '列表',
+        copyQuote: '引用',
+        copyImage: '插入图片',
+        copyNoSelection: '先选中一段文字',
+        copySendToAssist: '已发送到助手',
+        copyNeedSession: '先在右栏发一句话，助手会话才会建立',
+        copyCopiedMp: '已按公众号格式复制',
+        copyCopyFailed: '复制失败',
+        copyRewritePrompt: '请改写下面这段文字，保持原意，让它更顺畅（只回改好的文字）：',
+        copyCompressPrompt: '请压缩下面这段文字，去掉冗余但不能丢信息（只回压缩后的文字）：',
+        copyRestore: '撤销',
+        // ── [AI 改写接回正文] ──
+        copyAiWorking: '等助手回复…',
+        copyAiDone: '已替换正文',
+        copyAiEmpty: '助手这轮没写出文字，正文没动',
+        copyAiTimeout: '等太久了（2 分钟），结果可能还在会话里，去右栏看看',
+        copyAiFailed: 'AI 请求失败：',
+        copyConfirmWhole: '没选中文字，会把整篇（{n} 字）都发出去，确定吗？',
+        wsPickHint: '粘贴一个文件夹的完整路径作为工作台区域（四个板块共用）：',        // ── [素材库三栏] ──
+        vaultFootWords: '字',
+        vaultFootPara: '段落',
+        // ── [写作台 · 排版占位版] ──
+        writeSearch: '搜索章节、人物、设定…',
+        // ── [写作台 · 接真实数据] ──
+        writeLoading: '读取项目…',
+        writeNoDir: '库里还没有「写作」文件夹',
+        writeNoDirSub: '新建一个项目，会自动建好 项目.md 与 正文、人物、地点、情节线 四个目录',
+        writeNoProject: '还没有项目',
+        writeNewProject: '新建项目',
+        writeNewProjectPrompt: '新项目名：',
+        writeNewProjectDefault: '未命名项目',
+        writeProjectCreated: '项目已建好',
+        writeProjects: '项目',
+        writeLoadFailed: '读取失败：',
+        writeSaveFailed: '保存失败：',
+        writeLoadingProject: '打开项目…',
+        writeUntitledVolume: '未命名卷',
+        writeUntitledChapter: '未命名章',
+        writeNoBodyYet: '这章还没正文，去「正文」目录里建一个文件',
+        writePickChapter: '从左边选一章',
+        writePickProject: '从左边选一个项目',
+        writePickChapterSub: '选中章节后这里显示正文，可阅读可编辑',
+        writeRead: '阅读',
+        writeEdit: '编辑',
+        writeDirty: '有改动',
+        writeSaving: '保存中…',
+        writeNoStructure: '项目.md 里还没写卷章结构',
+        writeClose: '关闭',
+        writeNoBody: '这章还没有正文，先写一点再让助手帮忙',
+        writeSentToAssist: '已发送到助手',
+        writePromptContinue: '请顺着下面这段文字续写，保持语感与人物口吻（只回续写的部分）：',
+        writePromptDialog: '请润色下面这段的对白，让每个人说话更像自己（只回改好的文字）：',
+        writePromptOutline: '这是我的卷章结构，请帮我看节奏与伏笔分布，指出哪里可能拖或断（不用改写正文）：',
+        writeAiWorking: '等助手回复…',
+        writeAiDone: '已写回正文',
+        writeAiEmpty: '助手这轮没写出文字，正文没动',
+        writeAiTimeout: '等太久了（2 分钟），结果可能还在会话里，去右栏看看',
+        writeAiFailed: 'AI 请求失败：',
+        writeConfirmWhole: '没选中文字，会把整篇（{n} 字）都发出去，确定吗？',
+        writeVol1: '第一卷 · 涨潮',
+        writeVol1Count: '8 章',
+        writeVol2: '第二卷 · 退潮',
+        writeVol2Count: '待排',
+        writeCh1: '涨潮之前',
+        writeCh2: '那封信的落款',
+        writeCh3: '旧码头的那场雨',
+        writeCh4: '（待稿）',
+        writeSettings: '设定',
+        writeSettingCount: '4',
+        writeSetChars: '人物小传',
+        writeSetCharsSub: '7 个角色 · 更新时间 3 天前',
+        writeSetMap: '雾港地图与年表',
+        writeSetMapSub: '修订于 3 天前',
+        writeSetHooks: '伏笔清单',
+        writeSetHooksSub: '未回收 5 条',
+        writeDocTitle: '第三章 · 旧码头的那场雨',
+        writePillBook: '长篇 · 第一卷',
+        writePillPov: 'POV：林砚',
+        writePillWords: '1,940 / 2,500 字',
+        writePillStatus: '草稿',
+        writeTbBody: '正文',
+        writeTbQuote: '引用段落',
+        writeTbContinue: '续写',
+        writeTbDialog: '对白润色',
+        writeTbOutline: '大纲表',
+        writeTbTimeline: '时间线',
+        writeP1: '雨是从傍晚开始下的。林砚站在旧码头的棚子底下，看着水面被砸出一层细密的白点。',
+        writeP2: '他把手插进外套口袋，指尖碰到那封信的边角——已经被他摸得起了毛。',
+        writeP3: '「你还是来了。」',
+        writeP4: '声音从背后传来。他没有回头，因为他早就知道那是谁。',
+        writeP5: '灯塔的光每七秒扫过一次水面，把两个人的影子拉长，又收回去。',
+        writeP6: '沈叙走到他旁边，也把手插进口袋。两个人就这么站着，谁都没有先说话。',
+        writeP7: '「船早就沉了。」林砚说。',
+        writeP8: '「人没沉。」',
+        writeP9: '雨忽然大起来，棚顶被敲得响，像有人在上面撒石子。',
+        writeP10: '他想起十七岁那年，也是这样的雨。那时候他以为只要跑得够快，就不会被任何东西追上。',
+        writeP11: '「我娘走之前，」他终于开口，「一直在念一个名字。不是我的。」',
+        writeP12: '沈叙没有说话，只是伸手去摸火柴。风太大了，划了三根才点着。',
+        writeWordUnit: '字',
+        writeFootParas: '段落',
+        writeSaved: '已保存',
+        writeAssistant: '写作助手',
+        writeTask1: '按情绪曲线改写开头雨景',
+        writeTask2: '正在续写对白…',
+        writeTask3: '核对灯塔位置是否矛盾',
+        writeInput: '让助手续写，或说改哪里…',
       },
       en: {
-        panel: 'Library',
+        panel: 'Workbench',
+        // ── [Workbench tabs] ──
+        tabVault: 'Library',
+        wsLabel: 'Workspace',
+        wsShared: 'Shared',
+        wsPickTitle: 'Choose the workspace (all four boards share one)',
+        asideChapter: 'Chapters',
+        asideAssistant: 'Workbench assistant',
+        asidePreset: 'Preset',
+        assistantHint: 'Ask the assistant to read this, or say what to change…',
+        tabCopy: 'Copy',
+        tabWrite: 'Writing',
+        tabVaultDesc: 'Notes, material, ebooks',
+        tabCopyDesc: 'Articles, columns, product copy',
+        tabWriteDesc: 'Short stories and novels',
+        tabTrash: 'Trash',
+        tabTrashDesc: 'Deleted files you can restore',
         vaultNew: 'New',
         tocEmpty: 'No headings in this file',
         tocEmptyNoDoc: 'Pick a file and its outline shows up here.',
@@ -148,14 +358,13 @@ window.__ModuleLoader__.load({
         vaultPickHint: 'Paste the full path of a folder to use as the vault root, e.g. S:\\Notes. Files inside become readable and editable here.',
         vaultPickPlaceholder: 'Full folder path',
         vaultPickConfirm: 'Use this folder',
-        vaultSwitchDir: 'Switch folder',
-        vaultSwitchHint: 'Point the vault at another root folder (existing files are untouched; only the target folder changes):',
         vaultSwitchConfirm: 'Switch to this folder',
         vaultSwitchEmpty: 'Enter a folder path',
         vaultTreeTitle: 'Files',
         vaultExpandAll: 'Expand all',
         vaultCollapseAll: 'Collapse all',
         vaultOpenFolder: 'Open folder',
+        vaultOpenFolderRoot: 'library root',
         vaultHistory: 'History',
         vaultHistoryEmpty: 'No snapshots yet — click “Snapshot” to keep one',
         vaultSnapshotTaken: 'Snapshot taken',
@@ -174,12 +383,23 @@ window.__ModuleLoader__.load({
         vaultTrashEmpty: 'Trash is empty',
         vaultTrashRestore: 'Restore',
         vaultTrashClear: 'Empty trash',
+        // ── [Trash board · fourth workbench board] ──
+        trashHint: 'Everything deleted in the workbench is kept here and can be restored one by one to the vault root.',
+        trashRootLabel: 'Vault root',
+        trashRootGroup: 'Vault root',
+        trashDeletedAt: 'Deleted',
+        trashClearConfirm: 'Empty now',
         vaultMoveTo: 'Move to…',
-        vaultMoveRoot: 'Vault root',
+        vaultMoveRoot: '素材 library root',
         vaultMoveHere: '(current location)',
-        vaultSortUp: 'Move up (same kind)',
-        vaultSortDown: 'Move down (same kind)',
-        vaultSortReset: 'Reset to name order',
+
+        // ── [Tree sorting] ──
+        vaultSort: 'Sort',
+        vaultSortName: 'By name',
+        vaultSortDate: 'By modified',
+        vaultSortSize: 'By size',
+        vaultSortClear: 'Clear manual order',
+        vaultSortTitle: 'Change how the file tree is sorted',
         vaultFolderHint: 'This is a folder. Click the title (or the ✎ next to it) to rename; pick a file in the list on the left to read it.',
         vaultMoved: 'Moved',
         vaultDeleteDirWarn: 'everything inside will be moved to trash too',
@@ -227,10 +447,33 @@ window.__ModuleLoader__.load({
         vaultDelete: 'Delete',
         vaultSaving: 'Saving…',
         vaultSaveFailed: 'Save failed',
+        vaultSaved: 'Saved',
+        // ── [Workbench ↔ Session] ──
+        assistStatus: 'Session',
+        assistUnbound: 'Not bound',
+        assistIdle: 'Idle',
+        assistRunning: 'Running',
+        assistOpen: 'Open session',
+        assistNew: 'Start another session',
+        assistSend: 'Send',
+        assistNoService: 'No session service here; cannot send',
+        assistSendFailed: 'Send failed: ',
+        assistNeedWorkspace: 'Pick a workspace folder from the top bar first; this workbench needs one to hold a session',
+        assistModel: 'Model',
+        assistModelPick: 'Select model',
+        assistModelLoading: 'Loading models…',
+        assistModelEmpty: 'No models available',
+        assistModelFailed: 'Model switch failed: ',
+        assistBlankHint: 'This is the workbench session; after the first message the full conversation shows in the session page',
+        wsPickManual: 'Choose folder…',
         vaultConflict: 'File changed outside; reloaded latest',
         vaultUnsupported: 'This file type is not editable here',
         vaultEmptyDir: 'This folder is empty',
         vaultSelectFirst: 'Pick a file on the left',
+        ok: 'OK',
+        vaultEmptySub: 'The left column lists every file in the library. Open a .md to read or edit it here.',
+        vaultLibEmpty: 'This library is empty',
+        vaultLibFixed: '素材 / 文案 / 写作 are fixed libraries and cannot be removed or renamed',
         vaultNamePlaceholder: 'Name',
         vaultConfirmDelete: 'Confirm delete',
         modeEdit: 'Edit',
@@ -251,6 +494,148 @@ window.__ModuleLoader__.load({
         copy: 'Copy',
         copied: 'Copied',
         todo: 'To-do',
+        // ── [Copy desk · layout placeholder] ──
+        copySearch: 'Search drafts',
+        copyStatusPrefix: 'Status: ',
+        copyWordUnit: 'chars',
+        copyMinutesPrefix: '~',
+        copyMinutesUnit: ' min',
+        copyTbRewrite: 'Rewrite',
+        copyTbCompress: 'Tighten',
+        copyTbCopyMp: 'Copy WeChat format',
+        copyParaUnit: 'paragraphs',
+        copyReadTime: 'Reading time',
+        copySavedAt: 'Autosaved at ',
+        copyAssistant: 'Writing assistant',
+        copyAssistantInput: 'Ask the assistant to keep writing, or what to change…',
+        copyEmptyDir: 'No "文案" folder in this library yet',
+        copyEmptyDirSub: 'Create a draft, or add a "文案" folder with .md files to the library root',
+        copyEmptyList: 'No drafts found',
+        copyNoMatch: 'No matching drafts',
+        copyAll: 'All',
+        copyUntitled: 'Untitled draft',
+        copyWordUnitShort: 'chars',
+        copyNewDraft: 'New draft',
+        copyNewDraftName: 'New draft',
+        copyLoadFailed: 'Failed to load draft: ',
+        copyNoMetaHint: 'This draft has no metadata; status shows as Draft',
+        copyStatusDraft: 'Draft',
+        copyStatusDoing: 'In progress',
+        copyStatusReady: 'Ready',
+        copyStatusDone: 'Published',
+        copyStatusArchived: 'Archived',
+        copyDirty: 'Unsaved',
+        copySaved: 'Saved',
+        copySaving: 'Saving…',
+        copySaveFailed: 'Save failed: ',
+        copyRead: 'Read',
+        copyEdit: 'Edit',
+        copyBold: 'Bold',
+        copyH2: 'Heading 2',
+        copyList: 'List',
+        copyQuote: 'Quote',
+        copyImage: 'Insert image',
+        copyNoSelection: 'Select some text first',
+        copySendToAssist: 'Sent to assistant',
+        copyNeedSession: 'Send one message in the assistant panel first',
+        copyCopiedMp: 'Copied in WeChat format',
+        copyCopyFailed: 'Copy failed',
+        copyRewritePrompt: 'Rewrite the passage below, keeping the meaning, make it flow better (reply with the rewritten text only):',
+        copyCompressPrompt: 'Tighten the passage below, remove redundancy without losing meaning (reply with the result only):',
+        copyRestore: 'Undo',
+        copyAiWorking: 'Waiting for assistant…',
+        copyAiDone: 'Text replaced',
+        copyAiEmpty: 'The assistant produced no text; nothing changed',
+        copyAiTimeout: 'Timed out after 2 minutes — the reply may still be in the session',
+        copyAiFailed: 'AI request failed: ',
+        copyConfirmWhole: 'Nothing is selected, so the whole draft ({n} chars) will be sent. Continue?',
+        wsPickHint: 'Paste a folder path to use as the workbench area (shared by all four boards):',        // ── [Library three columns] ──
+        vaultFootWords: 'chars',
+        vaultFootPara: 'paragraphs',
+        // ── [Writing desk · layout placeholder] ──
+        writeSearch: 'Search chapters, characters, settings…',
+        writeLoading: 'Loading projects…',
+        writeNoDir: 'No "写作" folder in this library yet',
+        writeNoDirSub: 'Create a project — it sets up 项目.md plus the 正文 / 人物 / 地点 / 情节线 folders',
+        writeNoProject: 'No projects yet',
+        writeNewProject: 'New project',
+        writeNewProjectPrompt: 'Project name:',
+        writeNewProjectDefault: 'Untitled project',
+        writeProjectCreated: 'Project created',
+        writeProjects: 'Projects',
+        writeLoadFailed: 'Load failed: ',
+        writeSaveFailed: 'Save failed: ',
+        writeLoadingProject: 'Opening project…',
+        writeUntitledVolume: 'Untitled volume',
+        writeUntitledChapter: 'Untitled chapter',
+        writeNoBodyYet: 'No body text yet — add a file under the 正文 folder',
+        writePickChapter: 'Pick a chapter on the left',
+        writePickProject: 'Pick a project on the left',
+        writePickChapterSub: 'Select a chapter to read or edit its text here',
+        writeRead: 'Read',
+        writeEdit: 'Edit',
+        writeDirty: 'Unsaved',
+        writeSaving: 'Saving…',
+        writeNoStructure: 'No volume/chapter structure in 项目.md yet',
+        writeClose: 'Close',
+        writeNoBody: 'This chapter has no text yet — write a little first',
+        writeSentToAssist: 'Sent to assistant',
+        writePromptContinue: 'Continue the passage below, keeping the voice and the characters (reply with only the continuation):',
+        writePromptDialog: 'Polish the dialogue below so each character sounds like themselves (reply with the text only):',
+        writePromptOutline: 'Here is my volume/chapter structure. Review the pacing and where foreshadowing lands (no rewriting):',
+        writeAiWorking: 'Waiting for assistant…',
+        writeAiDone: 'Written back to the draft',
+        writeAiEmpty: 'The assistant produced no text; nothing changed',
+        writeAiTimeout: 'Timed out after 2 minutes — the reply may still be in the session',
+        writeAiFailed: 'AI request failed: ',
+        writeConfirmWhole: 'Nothing is selected, so the whole text ({n} chars) will be sent. Continue?',
+        writeVol1: 'Vol. I · Rising Tide',
+        writeVol1Count: '8 ch.',
+        writeVol2: 'Vol. II · Ebb Tide',
+        writeVol2Count: 'Unscheduled',
+        writeCh1: 'Before the tide',
+        writeCh2: 'The letter’s sign-off',
+        writeCh3: 'That rain on the old pier',
+        writeCh4: '(to be drafted)',
+        writeSettings: 'Setting',
+        writeSettingCount: '4',
+        writeSetChars: 'Character sheets',
+        writeSetCharsSub: '7 characters · updated 3 days ago',
+        writeSetMap: 'Fog Harbour map & timeline',
+        writeSetMapSub: 'revised 3 days ago',
+        writeSetHooks: 'Foreshadowing list',
+        writeSetHooksSub: '5 unresolved',
+        writeDocTitle: 'Chapter 3 · That rain on the old pier',
+        writePillBook: 'Novel · Vol. I',
+        writePillPov: 'POV: Lin Yan',
+        writePillWords: '1,940 / 2,500 chars',
+        writePillStatus: 'Draft',
+        writeTbBody: 'Body',
+        writeTbQuote: 'Quote block',
+        writeTbContinue: 'Continue',
+        writeTbDialog: 'Polish dialogue',
+        writeTbOutline: 'Outline grid',
+        writeTbTimeline: 'Timeline',
+        writeP1: 'The rain had started at dusk. Lin Yan stood under the shed on the old pier, watching the water break into a fine skin of white points.',
+        writeP2: 'He pushed his hands into his coat pockets; his fingertips found the corner of the letter — worn soft from being touched.',
+        writeP3: '“So you came.”',
+        writeP4: 'The voice came from behind him. He did not turn, because he had known all along who it was.',
+        writeP5: 'Every seven seconds the lighthouse beam swept the water, stretching their two shadows and taking them back.',
+        writeP6: 'Shen Xu walked over and pushed his hands into his pockets too. They just stood there, neither speaking first.',
+        writeP7: '“The boat sank long ago,” Lin Yan said.',
+        writeP8: '“The people didn’t.”',
+        writeP9: 'The rain suddenly got heavier, drumming on the shed roof like gravel thrown from above.',
+        writeP10: 'He thought of the year he was seventeen, and rain like this. Back then he believed that if he ran fast enough, nothing would ever catch him.',
+        writeP11: '“Before my mother went,” he finally began, “she kept saying a name. Not mine.”',
+        writeP12: 'Shen Xu said nothing; he only reached for his matches. The wind was too strong — three tries before one caught.',
+        writeWordUnit: 'chars',
+        writeFootParas: 'Paragraphs',
+        writeSaved: 'Saved',
+        writeAssistant: 'Writing assistant',
+        writeTask1: 'Rewrite the opening rain scene along the emotional curve',
+        writeTask2: 'Continuing dialogue…',
+        writeTask3: 'Check whether the lighthouse position contradicts itself',
+        writeInput: 'Ask the assistant to keep writing, or what to change…',
       },
     }
 
@@ -322,20 +707,6 @@ window.__ModuleLoader__.load({
       const dot = name.lastIndexOf('.')
       return dot > 0 ? name.slice(0, dot) : name
     }
-    /**
-     * 统计目录树里的文件总数（文件夹不算）。
-     * 顶层栏用「· N 个文件」显示库的规模。
-     */
-    function countFiles(nodes) {
-      if (!Array.isArray(nodes)) return 0
-      let total = 0
-      for (const node of nodes) {
-        if (node.type === 'dir') total += countFiles(node.children || [])
-        else total += 1
-      }
-      return total
-    }
-
     /** 把目录树摊平成「路径集合」，用于校验最近打开里的条目是否还存在。 */
     function collectPaths(nodes, out) {
       const set = out || new Set()
@@ -898,13 +1269,23 @@ window.__ModuleLoader__.load({
     function VaultPage(props) {      const t = props.t
       const ctx = props.ctx
       const embedded = props.embedded === true
-      const [root, setRoot] = useState(undefined)
+      const [root, setRoot] = useState(typeof props.root === 'string' ? props.root : undefined)
       const [rootDraft, setRootDraft] = useState('')
       const [rootError, setRootError] = useState('')
-      const [switching, setSwitching] = useState(false)
-      const [switchDraft, setSwitchDraft] = useState('')
-      const [switchError, setSwitchError] = useState('')
+
       const [tree, setTree] = useState([])
+      /** 文件树排序方式：name / date / size。初值 name，设置读回来后再对齐。 */
+      /*
+       * 三个固定库（2026-11-18 定案）。
+       * 它们是「元文件夹」：固定存在、不可删除、不可改名，
+       * 插件只读写这三个库里面，库根下的其他东西一律不碰。
+       * 服务端 libraries.js 里有同一份名单，两边必须一致。
+       */
+      const FIXED_LIBS = ['素材', '文案', '写作']
+      const isFixedLib = (path) => typeof path === 'string' && FIXED_LIBS.includes(path)
+      const [sortBy, setSortBy] = useState('name')
+      /** 排序下拉是否展开。 */
+      const [sortOpen, setSortOpen] = useState(false)
       const [expanded, setExpanded] = useState({})
       const [selected, setSelected] = useState(null)
       const [doc, setDoc] = useState(null) // { path, title, text, mtime, dirty }
@@ -926,9 +1307,6 @@ window.__ModuleLoader__.load({
       const [searching, setSearching] = useState(false)
       const [results, setResults] = useState([])
       const [searchError, setSearchError] = useState('')
-      const [trashOpen, setTrashOpen] = useState(false)
-      const [trashItems, setTrashItems] = useState([])
-      const [trashError, setTrashError] = useState('')
       const [treeWidth, setTreeWidth] = useState(() => {
         try {
           const saved = window.localStorage.getItem('dsh-notes:treeWidth')
@@ -996,10 +1374,60 @@ window.__ModuleLoader__.load({
       const [outlineCollapsed, setOutlineCollapsed] = useState(true)
       /** 树面板「新建」下拉是否打开。 */
       const [newMenuOpen, setNewMenuOpen] = useState(false)
+      /**
+       * 点下拉以外任何地方 / 按 Esc → 收起「新建」下拉。
+       *
+       * 之前它只能靠再点一次按钮收起，点别处都留在那儿；而它是绝对定位浮在文件树上，
+       * 挡着列表很碍事。写法和下面 openMenu 那套一致（监听挂 document、卸载摘掉），
+       * 判断「在不在下拉里」用 closest('.vp-newmenu') —— 按钮和弹出的菜单都在这个容器内。
+       */
+      /**
+       * 把当前选中的路径报给顶栏，让「打开文件夹」能开对地方。
+       *
+       * 用 effect 监听 selected，而不是在 6 个 setSelected 调用点各加一次回调 ——
+       * 那样漏一处就会出现「明明选了文件、按钮还开旧目录」的怪现象。
+       * 没选中时上报空串，交给顶栏退到板块目录。
+       */
+      useEffect(() => {
+        if (typeof props.onFocusPath !== 'function') return
+        props.onFocusPath(selected && typeof selected.path === 'string' ? selected.path : '')
+      }, [selected, props.onFocusPath])
+
+      useEffect(() => {
+        if (!newMenuOpen) return undefined
+        const onDocDown = (event) => {
+          const target = event && event.target
+          if (target && typeof target.closest === 'function' && target.closest('.vp-newmenu') !== null) return
+          setNewMenuOpen(false)
+        }
+        const onKey = (event) => {
+          if (event && event.key === 'Escape') setNewMenuOpen(false)
+        }
+        document.addEventListener('mousedown', onDocDown)
+        document.addEventListener('keydown', onKey)
+        return () => {
+          document.removeEventListener('mousedown', onDocDown)
+          document.removeEventListener('keydown', onKey)
+        }
+      }, [newMenuOpen])
+      /** 文档工具条自绘下拉的互斥开关：'' = 全收起；否则是当前打开的那个（font / line / bg）。
+       *  docBar 是常量 JSX（不是组件），不能在里面调 hook，所以展开状态必须提到这里。 */
+      const [openMenu, setOpenMenu] = useState('')
       /** 容器宽度够不够平铺阅读设置（由容器查询算出来写进 data 属性）。 */
       const doccolRef = useRef(null)
       /** 最近打开列表（来自 reader-settings.recent，时间倒序）。 */
       const [recent, setRecent] = useState([])
+      /** 点工具条以外任何地方 → 收起自绘下拉；监听挂在 document 上，卸载时返回的清理函数摘掉。 */
+      useEffect(() => {
+        if (openMenu === '') return undefined
+        const onDocDown = (event) => {
+          const target = event && event.target
+          if (target && typeof target.closest === 'function' && target.closest('.vpb-bar') !== null) return
+          setOpenMenu('')
+        }
+        document.addEventListener('mousedown', onDocDown)
+        return () => document.removeEventListener('mousedown', onDocDown)
+      }, [openMenu])
       /**
        * 最近打开列表的同步镜像。
        *
@@ -1015,8 +1443,6 @@ window.__ModuleLoader__.load({
         const i = outline.findIndex((node) => node.id === tocActive)
         return i < 0 ? 0 : i
       }, [outline, tocActive])
-      /** 全库文件总数（顶层栏用）。 */
-      const fileCount = useMemo(() => countFiles(tree), [tree])
 
       useEffect(() => {
         vaultApiGet('')
@@ -1050,9 +1476,14 @@ window.__ModuleLoader__.load({
         }, 1600)
       }
 
-      const reloadTree = async () => {
+      const reloadTree = async (mode) => {
         try {
-          const data = await vaultApiGet('/tree')
+          /*
+           * sortBy 显式带给服务端：刚点完排序时 state 可能还没提交，
+           * 用参数传最稳；不传就用当前 state。
+           */
+          const use = sortModeOf(typeof mode === 'string' ? mode : sortBy)
+          const data = await vaultApiGet('/tree?sortBy=' + encodeURIComponent(use))
           const next = Array.isArray(data.tree) ? data.tree : []
           setTree(next)
           // 树刷新后顺手清掉「最近打开」里已经不存在的条目
@@ -1066,6 +1497,65 @@ window.__ModuleLoader__.load({
         if (typeof root === 'string') void reloadTree()
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [root])
+
+      /*
+       * 库根改成由顶栏选择器（WorkbenchPage）统一持有后，这里要跟随它。
+       * 换根时要清掉选中与草稿 —— 旧路径在新库里不存在，留着会报错。
+       */
+      const seenRootProp = useRef(typeof props.root === 'string' ? props.root : '')
+      useEffect(() => {
+        const next = typeof props.root === 'string' ? props.root : ''
+        if (next === '' || next === seenRootProp.current) return
+        seenRootProp.current = next
+        setRoot(next)
+        setRootDraft(next)
+        setSelected(null)
+        setDoc(null)
+        setDraft('')
+        setExpanded({})
+        setTree([])
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [props.root])
+
+      /*
+       * 排序方式：设置里存了就用它，没有就用 name。
+       *
+       * 读设置的那几条 effect 都在读同一个 /settings，这里不再多开一条请求 ——
+       * 直接复用下面已有的一次 GET，在里面顺手取 sortBy。
+       * 读失败静默用 name：排序不该挡住看文件。
+       */
+      const sortDirty = useRef(false)
+      useEffect(() => {
+        let alive = true
+        vaultApiGet('/settings')
+          .then((data) => {
+            if (!alive) return
+            if (data && typeof data.sortBy === 'string' && !sortDirty.current) {
+              const next = sortModeOf(data.sortBy)
+              setSortBy((prev) => (prev === next ? prev : next))
+            }
+          })
+          .catch(() => {
+            /* 读不到就用默认 name */
+          })
+        return () => {
+          alive = false
+        }
+      }, [])
+
+      /*
+       * 顶栏 ⟳：refreshTick 由 WorkbenchPage 递增，作用对象是「当前板块」。
+       * 首次挂载不重复拉树（上面那条 root effect 已经拉过），只响应增量。
+       */
+      const seenRefreshTick = useRef(props.refreshTick === undefined ? 0 : props.refreshTick)
+      useEffect(() => {
+        const tick = props.refreshTick === undefined ? 0 : props.refreshTick
+        if (tick === seenRefreshTick.current) return
+        seenRefreshTick.current = tick
+        if (typeof root !== 'string') return
+        void reloadTree()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [props.refreshTick])
 
       // 树宽变化后记住（下次进来还是这个宽度）
       useEffect(() => {
@@ -1583,29 +2073,6 @@ window.__ModuleLoader__.load({
         }
       }
 
-      /** 切换库目录：换根后清空选中与文档，并强制重建树（路径没变也要重载，否则会空着）。 */
-      const switchRoot = async () => {
-        setSwitchError('')
-        const next = switchDraft.trim()
-        if (next === '') {
-          setSwitchError(t('vaultSwitchEmpty'))
-          return
-        }
-        try {
-          const saved = await vaultApiPost('', { root: next })
-          setSwitching(false)
-          setSelected(null)
-          setDoc(null)
-          setDraft('')
-          setExpanded({})
-          setTree([])
-          setRootDraft(saved.root)
-          setRoot(saved.root)
-          await reloadTree()
-        } catch (err) {
-          setSwitchError(messageOf(err))
-        }
-      }
 
       /** 全部展开 / 全部收起：收集树里所有文件夹路径。 */
       const collectDirs = (nodes, out) => {
@@ -1823,15 +2290,25 @@ window.__ModuleLoader__.load({
       /** 阅读区最终渲染的内容：电子书用分章节点，其余用整篇 blocks。 */
       const readNodes = chapterNodes || blocks
 
+      /**
+       * 素材库在库内的根目录名。
+       *
+       * 素材库现在只显示「素材」这一个库（文案台/写作台各管自己的目录），
+       * 所以「没选中任何东西」时的落点就是 素材\，不能再是库根本身 ——
+       * 库根不在三库内，服务端守卫会拒。
+       */
+      const MATERIAL_ROOT = '素材'
+
       const askCreate = (kind) => {
-        // 选中的是文件夹 → 建在它里面；选中的是文件 → 建在它所在目录；没选 → 库根。
+        // 选中的是文件夹 → 建在它里面；选中的是文件 → 建在它所在目录；
+        // 没选 → 建在素材库根（不能是库根，库根不在三库内会被守卫拒）。
         const dir = selected
           ? selected.type === 'dir'
             ? selected.path
             : selected.path.includes('/')
               ? selected.path.slice(0, selected.path.lastIndexOf('/'))
-              : ''
-          : ''
+              : MATERIAL_ROOT
+          : MATERIAL_ROOT
         setCreating({ kind, dir, name: '' })
       }
 
@@ -1855,6 +2332,8 @@ window.__ModuleLoader__.load({
       }
 
       const deleteSelected = async () => {
+        /* 三个固定库不可删除 */
+        if (selected && isFixedLib(selected.path)) { setConfirmDelete(false); setError(t('vaultLibFixed')); return }
         if (!selected) return
         try {
           await vaultApiPost('/delete', { path: selected.path })
@@ -1886,6 +2365,8 @@ window.__ModuleLoader__.load({
       }
 
       const commitRename = async () => {
+        /* 三个固定库不可改名 —— 它们的位置被整套数据模型依赖 */
+        if (selected && isFixedLib(selected.path)) { setRenaming(false); return }
         if (!selected) return
         if (renameGuard.current.done) return
         renameGuard.current.done = true
@@ -1953,37 +2434,6 @@ window.__ModuleLoader__.load({
           setResults(Array.isArray(data.items) ? data.items : [])
         } catch (err) {
           setSearchError(messageOf(err))
-        }
-      }
-
-      // ── 回收站 ─────────────────────────────────────────────────────────────
-      const loadTrash = async () => {
-        setTrashError('')
-        try {
-          const data = await vaultApiGet('/trash-list')
-          setTrashItems(Array.isArray(data.items) ? data.items : [])
-        } catch (err) {
-          setTrashError(messageOf(err))
-        }
-      }
-
-      const restoreTrash = async (name) => {
-        try {
-          await vaultApiPost('/trash-restore', { name })
-          await loadTrash()
-          await reloadTree()
-          flashMessage(t('vaultTrashRestore'))
-        } catch (err) {
-          setTrashError(messageOf(err))
-        }
-      }
-
-      const clearTrash = async () => {
-        try {
-          await vaultApiPost('/trash-empty', {})
-          await loadTrash()
-        } catch (err) {
-          setTrashError(messageOf(err))
         }
       }
 
@@ -2184,10 +2634,17 @@ window.__ModuleLoader__.load({
         if (ok) flashMessage(t('vaultPathCopied'))
       }
 
-      /** 打开「移动到…」选择器：按树形层级列出全库文件夹（含库根）。 */
+      /**
+       * 打开「移动到…」选择器：列出**素材库内**的可选目录。
+       *
+       * 首项从「库根目录」改成「素材库根」：
+       *   · 素材库现在只显示 素材\ 这一个库，库根不是它的合法落点
+       *   · 服务端 assertTargetDir 会拒空串（库根不在三库内）
+       * 所以首项的 path 必须是 素材，而不是空串。
+       */
       const openMovePicker = () => {
         if (!selected) return
-        const dirs = [{ path: '', name: t('vaultMoveRoot'), depth: 0 }]
+        const dirs = [{ path: MATERIAL_ROOT, name: t('vaultMoveRoot'), depth: 0 }]
         const walk = (nodes, depth) => {
           for (const node of nodes) {
             if (node.type !== 'dir') continue
@@ -2199,7 +2656,7 @@ window.__ModuleLoader__.load({
         // 排除自己（不能移到自己里）和自己的子目录
         const blocked = (target) => target === selected.path || target.startsWith(`${selected.path}/`)
         // 当前位置（父目录）：标出来，别让人误点
-        const parentOf = (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '')
+        const parentOf = (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : MATERIAL_ROOT)
         const currentDir = parentOf(selected.path)
         setMoveTargets(
           dirs.filter((dir) => !blocked(dir.path)).map((dir) => ({ ...dir, current: dir.path === currentDir })),
@@ -2216,39 +2673,54 @@ window.__ModuleLoader__.load({
         setDraft('')
       }
 
-      /** 找到某个条目所在的那一层（同级列表 + 父目录路径）。 */
-      const findSiblings = (nodes, targetPath, parentPath) => {
-        for (const node of nodes) {
-          if (node.path === targetPath) return { parent: parentPath, list: nodes }
-          if (node.type === 'dir' && Array.isArray(node.children)) {
-            const found = findSiblings(node.children, targetPath, node.path)
-            if (found) return found
-          }
-        }
-        return null
-      }
+      /*
+       * findSiblings() 与 reorder() 都已删：
+       * （原来这里有一条 JSDoc 是 findSiblings 的说明，一并清掉了）
+       * 它们只服务原来的 ↑ ↓「同类型内上移/下移」按钮，按钮已按大王要求移除。
+       * 排序改用「排序下拉」（名称 / 日期 / 体积），那个还在。
+       * 服务端 /order 与 /order-reset 路由保留，拖拽排序之类以后用得上。
+       */
+      /*
+       * reorder() 已删：它只服务 ↑ ↓ 那两个按钮，按钮移除了就没有调用方。
+       * 自定义顺序的服务端路由（/order）保留 —— 拖拽排序之类以后要用得上。
+       */
 
-      /** 上移 / 下移：只在同类型（文件夹之间、文件之间）内部换位，顺序存插件数据。 */
-      const reorder = async (direction) => {
-        if (!selected) return
-        const found = findSiblings(tree, selected.path, '')
-        if (!found) return
-        const sameType = found.list.filter((node) => node.type === selected.type)
-        const at = sameType.findIndex((node) => node.path === selected.path)
-        const target = direction === 'up' ? at - 1 : at + 1
-        if (at < 0 || target < 0 || target >= sameType.length) return
-        const names = found.list.map((node) => node.name)
-        const first = names.indexOf(sameType[at].name)
-        const second = names.indexOf(sameType[target].name)
-        if (first < 0 || second < 0) return
-        names[first] = sameType[target].name
-        names[second] = sameType[at].name
-        try {
-          await vaultApiPost('/order', { parent: found.parent, names })
-          await reloadTree()
-        } catch (err) {
-          setError(messageOf(err))
+      /**
+       * 排序下拉点外面收起。
+       *
+       * 用 mousedown 而不是 click：click 会在按钮自己的 onClick 之后才触发，
+       * 点一下按钮「开了又立刻被这里关掉」，看着像没反应。
+       */
+      useEffect(() => {
+        if (!sortOpen) return undefined
+        const onDown = (event) => {
+          const node = event.target
+          if (node && typeof node.closest === 'function' && node.closest('.vp-sortwrap')) return
+          setSortOpen(false)
         }
+        document.addEventListener('mousedown', onDown)
+        return () => {
+          document.removeEventListener('mousedown', onDown)
+        }
+      }, [sortOpen])
+
+      /**
+       * 切换排序：改 state → 记到设置 → 立刻用新方式重拉树。
+       *
+       * 顺序不能反：先 await 设置再用新值拉树，否则网络慢时会出现
+       * 「列表已是新顺序、下次刷新又跳回去」。
+       */
+      const changeSort = async (mode) => {
+        const next = sortModeOf(mode)
+        sortDirty.current = true
+        setSortBy(next)
+        setSortOpen(false)
+        try {
+          await vaultApiPost('/settings', { sortBy: next })
+        } catch {
+          /* 存不进去只在本次生效，不打扰用户 */
+        }
+        await reloadTree(next)
       }
 
       /** 清掉自定义顺序，回到「文件夹在前 + 名称升序」。 */
@@ -2265,6 +2737,9 @@ window.__ModuleLoader__.load({
         if (node.type === 'dir') {
           const isOpen = expanded[node.path] === true
           const dirActive = selected !== null && selected.path === node.path
+          /* 三个固定库：图标换成库别、样式加粗、不可删（见下方工具栏的禁用逻辑） */
+          const fixedLib = isFixedLib(node.path)
+          const libIcon = node.path === '素材' ? '🗄' : node.path === '文案' ? '✎' : node.path === '写作' ? '📖' : '📁'
           return h(
             'div',
             { key: node.path, className: 'vp-tree-dir' },
@@ -2287,12 +2762,15 @@ window.__ModuleLoader__.load({
                 title: node.path,
               },
               h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸'),
-              h('span', { className: 'vp-tree-icon vp-tree-icon-dir' }, '📁'),
+              /* 库节点用库别图标，一眼能分清是素材库还是文案库/写作库 */
+              fixedLib
+                ? h('span', { className: 'vp-tree-icon vp-tree-icon-lib' }, libIcon)
+                : h('span', { className: 'vp-tree-icon vp-tree-icon-dir' }, '📁'),
               h('span', { className: 'vp-tree-name' }, node.name),
             ),
             isOpen
               ? node.children.length === 0
-                ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, t('vaultEmptyDir'))
+                ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, fixedLib ? t('vaultLibEmpty') : t('vaultEmptyDir'))
                 : node.children.map((child) => treeNode(child, depth + 1))
               : null,
           )
@@ -2349,54 +2827,185 @@ window.__ModuleLoader__.load({
       /**
        * 阅读设置四件套：字号 / 字体 / 行距 / 底色。
        *
-       * 只在文档工具条里平铺一份。宽度不够时由 flex-wrap 换行、
-       * 由 @container 依次省略文字，所以**不需要**第二套窄屏布局 ——
-       * 之前那套弹层分支已经删掉了。
+       * ⚠️ 这里不再出现任何 <select>：原生下拉在 DSH 这种自绘界面里太突兀，
+       *    文案台那边一个原生控件都没有。三个下拉全部换成自绘小面板（.vpb-menu）。
+       *    展开状态统一由 VaultPage 的 openMenu 管（同一时刻只开一个）。
+       *    注意：本函数是渲染期调用的普通函数、不是组件，里面不许出现任何 hook。
        */
-      const renderReaderControls = () => {
-        const sizeGroup = h(
+      const renderDrop = (key, label, title, items, current, onPick) =>
+        h(
           'div',
-          { className: 'vp-rset', key: 'size' },
-          h('button', {
-            type: 'button', className: 'vp-rsetbtn', disabled: readerFontSize <= RF_SIZE_MIN, title: t('readerZoomOut'),
-            onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v - 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
-          }, 'A-'),
-          h('span', { className: 'vp-rsetval', title: t('readerZoom') }, readerFontSize + 'px'),
-          h('button', {
-            type: 'button', className: 'vp-rsetbtn', disabled: readerFontSize >= RF_SIZE_MAX, title: t('readerZoomIn'),
-            onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v + 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
-          }, 'A+'),
-        );
-        const fontSelect = h(
-          'select',
-          {
-            key: 'font',
-            className: 'vp-rsetselect', value: readerFont, title: t('readerFont'), 'aria-label': t('readerFont'),
-            onChange: (event) => { readerFontDirty.current = true; setReaderFont(readerFontOf(event.target.value)) },
-          },
-          READER_FONTS.map((item) => h('option', { key: item.id === '' ? '__auto__' : item.id, value: item.id }, t(item.labelKey))),
-        );
-        const lineSelect = h(
-          'select',
-          {
-            key: 'line',
-            className: 'vp-rsetselect vp-rsetselect-narrow', value: String(readerLine), title: t('readerLine'), 'aria-label': t('readerLine'),
-            onChange: (event) => { readerFontDirty.current = true; setReaderLine(readerLineOf(event.target.value)) },
-          },
-          ['1.5', '1.75', '1.85', '2', '2.2'].map((value) => h('option', { key: value, value }, value)),
-        );
-        const bgSelect = h(
-          'select',
-          {
-            key: 'bg',
-            className: 'vp-rsetselect', value: readerBg, title: t('readerBg'), 'aria-label': t('readerBg'),
-            onChange: (event) => { readerDirty.current = true; setReaderBg(readerBgOf(event.target.value)) },
-          },
-          READER_BACKGROUNDS.map((item) => h('option', { key: item.id === '' ? '__auto__' : item.id, value: item.id }, t(item.labelKey))),
-        );
+          { className: 'vpb-drop', key },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vpb-pill vpb-dropbtn',
+              'data-open': openMenu === key ? 'true' : 'false',
+              title,
+              'aria-haspopup': 'listbox',
+              'aria-expanded': openMenu === key ? 'true' : 'false',
+              onClick: () => setOpenMenu((open) => (open === key ? '' : key)),
+            },
+            h('span', { className: 'vpb-droplabel' }, label),
+            h('span', { className: 'vpb-caret' }, '▾'),
+          ),
+          openMenu === key
+            ? h(
+              'div',
+              { className: 'vpb-menu', role: 'listbox' },
+              items.map((item) => h(
+                'button',
+                {
+                  key: item.id === '' ? '__auto__' : item.id,
+                  type: 'button',
+                  className: 'vpb-menu-item',
+                  role: 'option',
+                  'data-on': item.id === current ? 'true' : 'false',
+                  'aria-selected': item.id === current ? 'true' : 'false',
+                  onClick: () => { setOpenMenu(''); onPick(item.id) },
+                },
+                h('span', { className: 'vpb-menu-t' }, item.label),
+                h('span', { className: 'vpb-menu-check' }, item.id === current ? '✓' : ''),
+              )),
+            )
+            : null,
+        )
 
-        return [sizeGroup, fontSelect, lineSelect, bgSelect]
+      const renderReaderControls = () => {
+        const fontItems = READER_FONTS.map((item) => ({ id: item.id, label: t(item.labelKey) }))
+        const lineItems = ['1.5', '1.75', '1.85', '2', '2.2'].map((value) => ({ id: value, label: value }))
+        const bgItems = READER_BACKGROUNDS.map((item) => ({ id: item.id, label: t(item.labelKey) }))
+        const labelOf = (items, id) => {
+          const hit = items.find((item) => item.id === id)
+          return hit === undefined ? String(id) : hit.label
+        }
+        const lineValue = String(readerLine)
+        return [
+          h(
+            'div',
+            { className: 'vpb-zoom', key: 'size' },
+            h('button', {
+              type: 'button', className: 'vpb-zoom-btn', disabled: readerFontSize <= RF_SIZE_MIN, title: t('readerZoomOut'),
+              onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v - 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
+            }, 'A-'),
+            h('span', { className: 'vpb-zoom-val', title: t('readerZoom') }, readerFontSize + 'px'),
+            h('button', {
+              type: 'button', className: 'vpb-zoom-btn', disabled: readerFontSize >= RF_SIZE_MAX, title: t('readerZoomIn'),
+              onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v + 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
+            }, 'A+'),
+          ),
+          renderDrop('font', labelOf(fontItems, readerFont), t('readerFont'), fontItems, readerFont, (id) => {
+            readerFontDirty.current = true
+            setReaderFont(readerFontOf(id))
+          }),
+          renderDrop('line', labelOf(lineItems, lineValue), t('readerLine'), lineItems, lineValue, (id) => {
+            readerFontDirty.current = true
+            setReaderLine(readerLineOf(id))
+          }),
+          renderDrop('bg', labelOf(bgItems, readerBg), t('readerBg'), bgItems, readerBg, (id) => {
+            readerDirty.current = true
+            setReaderBg(readerBgOf(id))
+          }),
+        ]
       }
+
+      // 文档工具条：素材库改成三栏后，它从文档列里提出来挂在标题下面。
+      // 观感对齐文案台 .cb-toolbar：整条一个圆角描边容器，组与组之间竖分隔条。
+      // 分组顺序：文件信息 ‖ 阅读设置（字号 + 字体 + 行距 + 底色）‖ 标注 ‖ 保存状态 + 保存 + 删除。
+      const docBar = h(
+        'div',
+        {
+          className: 'vpb-bar',
+          // 有下拉展开时把 overflow 放开，否则绝对定位的面板会被横向滚动容器裁掉
+          'data-menu': openMenu === '' ? 'false' : 'true',
+        },
+        doc
+          ? h(
+            'span',
+            {
+              className: 'vpb-info',
+              /* 工具条加了文字按钮之后这一项会被挤到省略号，补个 title 让人能看到完整值 */
+              title: Math.max(1, Math.round((doc.size || 0) / 1024)) + ' KB · 约 ' + Math.max(1, Math.round((doc.text || '').length / 1000)) + ' 千字',
+            },
+            Math.max(1, Math.round((doc.size || 0) / 1024)) + ' KB · 约 ' + Math.max(1, Math.round((doc.text || '').length / 1000)) + ' 千字',
+          )
+          : h('span', { className: 'vpb-info vpb-info-empty' }, t('vaultSelectFirst')),
+        h('i', { className: 'vpb-sep' }),
+        h('div', { className: 'vpb-grp' }, renderReaderControls()),
+        h('i', { className: 'vpb-sep' }),
+        /*
+         * 文档动作：查找 / 复制全文 —— 只留两个图标按钮（🔍 / 📋）。
+         * 图形靠 title + aria-label 兜底，窄列也不会把工具条撑到横向滚动。
+         * 「复制路径」按大王要求挪到标题行的「阅读 / 编辑」那一栏；
+         * 「发送到对话」大王说不要了，按钮去掉（sendToChat 函数留着备用）。
+         */
+        h(
+          'div',
+          { className: 'vpb-grp' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vpb-pill vpb-ib vpb-ib-icon',
+              'data-on': docFindOpen ? 'true' : 'false',
+              disabled: !doc,
+              title: t('docFind'),
+              'aria-label': t('docFind'),
+              'aria-pressed': docFindOpen ? 'true' : 'false',
+              onClick: () => {
+                if (docFindOpen) {
+                  closeFind()
+                } else {
+                  setDocFindOpen(true)
+                  requestAnimationFrame(() => {
+                    if (docFindInputRef.current) docFindInputRef.current.focus()
+                  })
+                }
+              },
+            },
+            '🔍',
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'vpb-pill vpb-ib vpb-ib-icon',
+              disabled: !doc,
+              title: t('vaultCopyAll'),
+              'aria-label': t('vaultCopyAll'),
+              onClick: () => void copyDoc(),
+            },
+            '📋',
+          ),
+        ),
+        h('i', { className: 'vpb-sep' }),
+        h(
+          'button',
+          {
+            type: 'button', className: 'vpb-pill', 'data-on': markPanelOpen ? 'true' : 'false',
+            onClick: () => setMarkPanelOpen((open) => !open), disabled: !doc, title: t('markPanel'),
+            'aria-pressed': markPanelOpen ? 'true' : 'false',
+          },
+          '✎ ' + marks.length,
+        ),
+        h('i', { className: 'vpb-sep' }),
+        saveState === 'saving'
+          ? h('span', { className: 'vpb-state', 'data-state': 'saving' }, t('vaultSaving'))
+          : saveState === 'error'
+            ? h('span', { className: 'vpb-state', 'data-state': 'error' }, t('vaultSaveFailed'))
+            : doc
+              ? h('span', { className: 'vpb-state', 'data-state': 'saved' }, t('vaultSaved'))
+              : null,
+        h('button', {
+          type: 'button', className: 'vpb-pill vpb-ib', onClick: () => void saveDoc(), disabled: !doc || !doc.dirty,
+          title: t('vaultSaveNow'), 'aria-label': t('vaultSaveNow'),
+        }, '💾'),
+        h('button', {
+          type: 'button', className: 'vpb-pill vpb-ib vpb-ib-danger', onClick: () => setConfirmDelete(true), disabled: !selected || isFixedLib(selected && selected.path),
+          title: t('vaultDelete'), 'aria-label': t('vaultDelete'),
+        }, '🗑'),
+      )
 
       const editorContent = (() => {
         /*
@@ -2427,22 +3036,10 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'vp-qcard-ic' }, '📁'),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewDir')),
               ),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'vp-qcard',
-                  onClick: () => { setTrashOpen(true); void loadTrash() },
-                },
-                h('span', { className: 'vp-qcard-ic' }, '🗑'),
-                h('span', { className: 'vp-qcard-t' }, t('vaultTrashPanel')),
-              ),
-              h(
-                'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => void openInExplorer() },
-                h('span', { className: 'vp-qcard-ic' }, '📂'),
-                h('span', { className: 'vp-qcard-t' }, t('vaultOpenFolder')),
-              ),
+              /*
+               * 这里原来还有「回收站」和「打开文件夹」两张卡片，已按大王要求移除。
+               * 两个入口顶栏都有（🗑 / 📂），空状态再摆一遍是重复。
+               */
             ),
             recent.length > 0
               ? h(
@@ -2470,14 +3067,11 @@ window.__ModuleLoader__.load({
                 )),
               )
               : null,
-            typeof root === 'string' && root !== ''
-              ? h(
-                'div',
-                { className: 'vp-empty-root' },
-                h('span', { className: 'vp-empty-root-k' }, t('vaultTreeTitle')),
-                h('span', null, root),
-              )
-              : null,
+            /*
+             * 空状态底部原来也印一行库根路径。同样去掉 —— 
+             * 顶栏工作区选择器已经显示，且空状态本身有「最近打开」和快捷入口，
+             * 再占一行路径只是噪音。
+             */
           )
         }
         // 选中文件夹：只显示标题（可就地改名）+ 一句提示
@@ -2516,11 +3110,12 @@ window.__ModuleLoader__.load({
                 ? null
                 : h(
                     'button',
-                    { type: 'button', className: 'vp-iconbtn vp-icon-rename', title: t('vaultRenameHint'), onClick: startRename },
+                    { type: 'button', className: 'vp-iconbtn vp-icon-rename' + (isFixedLib(selected && selected.path) ? ' vp-iconbtn-off' : ''), title: t('vaultRenameHint'), onClick: startRename },
                     '✎',
                   ),
               h('span', { className: 'dn-spacer' }),
             ),
+            docBar,
             h('div', { className: 'vp-pad vp-hint' }, t('vaultFolderHint')),
           )
         }
@@ -2570,57 +3165,25 @@ window.__ModuleLoader__.load({
                   'button',
                   {
                     type: 'button',
-                    className: 'vp-iconbtn vp-icon-rename',
+                    className: 'vp-iconbtn vp-icon-rename' + (isFixedLib(selected && selected.path) ? ' vp-iconbtn-off' : ''),
                     title: t('vaultRenameHint'),
                     onClick: startRename,
                   },
                   '✎',
                 ),
             h('span', { className: 'dn-spacer' }),
-            // ── [全文搜索] 正文栏内的查找按钮（用户要求放在正文栏）
+
+            /* 复制路径：从阅读工具条挪到「阅读 / 编辑」这一栏（2026-11-17） */
             h(
               'button',
               {
                 type: 'button',
-                className: 'vp-iconbtn vp-icon-find',
-                'data-on': docFindOpen ? 'true' : 'false',
-                onClick: () => {
-                  if (docFindOpen) {
-                    closeFind()
-                  } else {
-                    setDocFindOpen(true)
-                    // 打开后自动聚焦输入框（下一帧，等元素挂载）
-                    requestAnimationFrame(() => {
-                      if (docFindInputRef.current) docFindInputRef.current.focus()
-                    })
-                  }
-                },
+                className: 'vp-pathbtn',
                 disabled: !doc,
-                title: t('docFind'),
-                'aria-label': t('docFind'),
+                title: t('vaultCopyPath'),
+                onClick: () => void copyPath(),
               },
-              '🔍',
-            ),
-            h(
-              'button',
-              { type: 'button', className: 'vp-iconbtn vp-icon-copy', onClick: () => void copyDoc(), title: t('vaultCopyAll') },
-              '⧉',
-            ),
-            h(
-              'button',
-              { type: 'button', className: 'vp-iconbtn vp-icon-path', onClick: () => void copyPath(), title: t('vaultCopyPath') },
-              '⌖',
-            ),
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'vp-iconbtn vp-icon-send',
-                onClick: sendToChat,
-                disabled: doc.text.trim() === '',
-                title: t('vaultSendChatNew'),
-              },
-              '↗',
+              t('vaultCopyPath'),
             ),
             h(
               'div',
@@ -2644,6 +3207,7 @@ window.__ModuleLoader__.load({
               ),
             ),
           ),
+          docBar,
           // ── [全文搜索] 正文栏内的查找条：只在阅读模式显示，关闭即清理高亮
           docFindOpen && mode === 'read'
             ? h(
@@ -2925,83 +3489,9 @@ window.__ModuleLoader__.load({
          *   文档工具条 = 当前文件（模式、信息、阅读设置、标注、保存、删除）
          *   树面板     = 文件操作（新建、移动、排序、展开）
          */
-        h(
-          'div',
-          { className: 'vp-topbar' },
-          h('span', { className: 'vp-brandmark' }, '库'),
-          h('span', { className: 'vp-brandname' }, t('panel')),
-          h('span', { className: 'vp-tbsep' }),
-          h(
-            'span',
-            { className: 'vp-crumbs', title: typeof root === 'string' ? root : '' },
-            h('span', { className: 'vp-crumbroot' }, typeof root === 'string' ? root : ''),
-            selected !== null
-              ? h('span', { className: 'vp-crumbpath' }, ' / ' + selected.path)
-              : h('span', { className: 'vp-crumbhint' }, ' · ' + fileCount + ' 个文件'),
-          ),
-          h('span', { className: 'dn-spacer' }),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'vp-iconbtn',
-              onClick: () => {
-                setTrashOpen((open) => !open)
-                setSwitching(false)
-                if (!trashOpen) void loadTrash()
-              },
-              title: t('vaultTrashPanel'),
-            },
-            '🗑',
-          ),
-          h('button', { type: 'button', className: 'vp-iconbtn', onClick: () => void openInExplorer(), title: t('vaultOpenFolder') }, '📂'),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'vp-iconbtn',
-              onClick: () => {
-                setSwitchDraft(typeof root === 'string' ? root : '')
-                setSwitchError('')
-                setSwitching(true)
-              },
-              title: t('vaultSwitchDir'),
-            },
-            '⇄',
-          ),
-          h('button', { type: 'button', className: 'vp-iconbtn', onClick: () => void reloadTree(), title: t('vaultReload') }, '⟳'),
-        ),
         error !== '' ? h('div', { className: 'vp-error vp-error-bar' }, error) : null,
         message !== '' ? h('div', { className: 'vp-message' }, message) : null,
-        switching
-          ? h(
-              'div',
-              { className: 'vp-deletebar' },
-              h('span', { className: 'vp-hint' }, t('vaultSwitchHint')),
-              h('input', {
-                className: 'vp-name-input',
-                autoFocus: true,
-                value: switchDraft,
-                placeholder: t('vaultPickPlaceholder'),
-                onChange: (event) => setSwitchDraft(event.target.value),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void switchRoot()
-                  } else if (event.key === 'Escape') {
-                    setSwitching(false)
-                  }
-                },
-              }),
-              h(
-                'span',
-                { className: 'dn-confirm' },
-                h('button', { type: 'button', className: 'dn-btn dn-btn-primary', onClick: () => void switchRoot() }, t('vaultSwitchConfirm')),
-                h('button', { type: 'button', className: 'dn-btn', onClick: () => setSwitching(false) }, t('cancel')),
-              ),
-              switchError !== '' ? h('span', { className: 'vp-error' }, switchError) : null,
-            )
-          : null,
+
         confirmDelete && selected
           ? h(
               'div',
@@ -3044,7 +3534,7 @@ window.__ModuleLoader__.load({
               h(
                 'span',
                 { className: 'vp-hint' },
-                `${creating.kind === 'dir' ? t('vaultNewDir') : t('vaultNewFile')} → ${creating.dir === '' ? '（库根目录）' : creating.dir}/`,
+                `${creating.kind === 'dir' ? t('vaultNewDir') : t('vaultNewFile')} → ${creating.dir || MATERIAL_ROOT}/`,
               ),
             )
           : null,
@@ -3071,10 +3561,10 @@ window.__ModuleLoader__.load({
                       style: { paddingLeft: `${8 + target.depth * 16}px` },
                       onClick: () => void doMove(target.path),
                       disabled: target.current === true,
-                      title: target.path === '' ? t('vaultMoveRoot') : target.path,
+                      title: target.path,
                     },
                     h('span', { className: 'vp-moveicon' }, target.path === '' ? '🏠' : '📁'),
-                    h('span', { className: 'vp-movename' }, target.path === '' ? t('vaultMoveRoot') : target.name),
+                    h('span', { className: 'vp-movename' }, target.path === MATERIAL_ROOT ? t('vaultMoveRoot') : target.name),
                     target.current === true ? h('span', { className: 'vp-movecurrent' }, t('vaultMoveHere')) : null,
                   ),
                 ),
@@ -3092,6 +3582,12 @@ window.__ModuleLoader__.load({
               className: 'vp-tree',
               style: { width: `${treeWidth}px` },
             },
+            /*
+             * 这里原来有一条「库 / 工作台」标题行（.vp-libhead），标题下面还挂着库根路径。
+             * 大王要的是「和其他工作台一样，直接就是搜索框」——
+             * 文案台 (.cb-list) 和写作台 (.wbg-list) 左栏都是搜索框打头，
+             * 所以这一栏整个删掉，搜索框直接成为左栏顶部。
+             */
             h('input', {
               className: 'vp-search',
               type: 'search',
@@ -3158,15 +3654,16 @@ window.__ModuleLoader__.load({
                   : null,
               ),
               h('button', { type: 'button', className: 'vp-opbtn', onClick: openMovePicker, disabled: !selected, title: t('vaultMoveTo') }, t('vaultMoveTo')),
-              h('span', { className: 'dn-spacer' }),
-              h('button', { type: 'button', className: 'vp-opbtn vp-opbtn-icon', onClick: () => void reorder('up'), disabled: !selected, title: t('vaultSortUp') }, '↑'),
-              h('button', { type: 'button', className: 'vp-opbtn vp-opbtn-icon', onClick: () => void reorder('down'), disabled: !selected, title: t('vaultSortDown') }, '↓'),
-              h('button', { type: 'button', className: 'vp-opbtn', onClick: allExpanded ? collapseAll : expandAll, title: allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll') }, allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll')),
+              /*
+               * 这里原来是 ↑ ↓ 两个「同类型内上移/下移」按钮，已按大王要求移除。
+               * 连 dn-spacer 一起删了 —— 它当初只是为了把这两个按钮推到右端。
+               * 排序改用「排序下拉」（名称/日期/体积），那个还在。
+               */
             ),
             h(
               'div',
               { className: 'vp-treehead' },
-              h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : trashOpen ? t('vaultTrashPanel') : t('vaultTreeTitle')),
+              h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
               h(
                 'button',
                 {
@@ -3177,32 +3674,65 @@ window.__ModuleLoader__.load({
                 },
                 allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll'),
               ),
+              /*
+               * 排序切换。原来这里只有一个「重置为名称排序」——只能回退，不能选。
+               * 现在点开是三种方式 + 一条「清除手动排序」，两件事分开：
+               *   · 三种方式决定「没手排过的条目」怎么排（存设置，下次还生效）
+               *   · 清除手动排序只清 order.json，不动当前排序方式
+               */
               h(
-                'button',
-                { type: 'button', className: 'vp-treehead-btn', onClick: () => void resetOrder(), title: t('vaultSortReset') },
-                '⇅',
+                'div',
+                { className: 'vp-sortwrap' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-treehead-btn vp-sortbtn',
+                    'data-open': sortOpen ? 'true' : 'false',
+                    title: t('vaultSortTitle'),
+                    'aria-haspopup': 'true',
+                    'aria-expanded': sortOpen ? 'true' : 'false',
+                    onClick: () => setSortOpen((open) => !open),
+                  },
+                  h('span', { className: 'vp-sortbtn-txt' }, t('vaultSort')),
+                  h('span', { className: 'vp-sortbtn-caret' }, '▾'),
+                ),
+                sortOpen
+                  ? h(
+                    'div',
+                    { className: 'vp-sortdrop' },
+                    SORT_OPTIONS.map((item) =>
+                      h(
+                        'button',
+                        {
+                          key: item.id,
+                          type: 'button',
+                          className: 'vp-sortdrop-item',
+                          'data-active': sortBy === item.id,
+                          onClick: () => void changeSort(item.id),
+                        },
+                        h('span', { className: 'vp-sortdrop-t' }, t(item.labelKey)),
+                        sortBy === item.id ? h('span', { className: 'vp-sortdrop-ok' }, '✓') : null,
+                      ),
+                    ),
+                    h('div', { className: 'vp-sortdrop-sep' }),
+                    h(
+                      'button',
+                      {
+                        type: 'button',
+                        className: 'vp-sortdrop-item vp-sortdrop-clear',
+                        onClick: () => { setSortOpen(false); void resetOrder() },
+                      },
+                      h('span', { className: 'vp-sortdrop-t' }, t('vaultSortClear')),
+                    ),
+                  )
+                  : null,
               ),
             ),
-            trashOpen
-              ? h(
-                  'div',
-                  { className: 'vp-trashlist' },
-                  trashError !== '' ? h('div', { className: 'vp-error vp-pad' }, trashError) : null,
-                  trashItems.length === 0
-                    ? h('div', { className: 'vp-tree-empty vp-pad' }, t('vaultTrashEmpty'))
-                    : trashItems.map((item) =>
-                        h(
-                          'div',
-                          { className: 'vp-trashrow', key: item.name },
-                          h('span', { className: 'vp-tree-name', title: item.name }, item.name),
-                          h('button', { type: 'button', className: 'vp-treehead-btn', onClick: () => void restoreTrash(item.name) }, t('vaultTrashRestore')),
-                        ),
-                      ),
-                  trashItems.length > 0
-                    ? h('button', { type: 'button', className: 'vp-treehead-btn vp-trashclear', onClick: () => void clearTrash() }, t('vaultTrashClear'))
-                    : null,
-                )
-              : searching
+            h(
+              'div',
+              { className: 'vp-treelist' },
+              searching
                 ? h(
                     'div',
                     { className: 'vp-resultlist' },
@@ -3229,7 +3759,9 @@ window.__ModuleLoader__.load({
                 : tree.length === 0
                   ? h('div', { className: 'vp-tree-empty vp-pad' }, t('vaultEmptyDir'))
                   : tree.map((node) => treeNode(node, 0)),
+            ),
           ),
+
           h('div', {
             className: 'vp-splitter',
             title: '拖动调整宽度',
@@ -3274,44 +3806,22 @@ window.__ModuleLoader__.load({
            *   现在：宽屏(≥720px)仍平铺；窄屏把四件套收进 .vp-aa 弹层，
            *   工具条固定部分降到约 360px，600px 窗口也装得下。
            */
-          h(
-            'div',
-            { className: 'vp-docbar' },
-            doc
-              ? h(
-                'span',
-                { className: 'vp-fileinfo vp-shrink' },
-                Math.max(1, Math.round((doc.size || 0) / 1024)) + ' KB · 约 ' + Math.max(1, Math.round((doc.text || '').length / 1000)) + ' 千字',
-              )
-              : h('span', { className: 'vp-fileinfo vp-fileinfo-empty vp-shrink' }, t('vaultSelectFirst')),
-            h('span', { className: 'dn-spacer' }),
-            /*
-             * 阅读设置四件套：字号 / 字体 / 行距 / 底色。
-             *
-             * 直接平铺，不放弹层。宽度不够时由 flex-wrap 自动换行，
-             * 由 @container 依次省略文字 —— 保证永不越界、永不重叠。
-             */
-            renderReaderControls(),
-            h(
-              'button',
-              {
-                type: 'button', className: 'vp-docbtn vp-keep', 'data-on': markPanelOpen ? 'true' : 'false',
-                onClick: () => setMarkPanelOpen((open) => !open), disabled: !doc, title: t('markPanel'),
-                'aria-pressed': markPanelOpen ? 'true' : 'false',
-              },
-              '✎ ' + marks.length,
-            ),
-            saveState === 'saving'
-              ? h('span', { className: 'vp-savestate vp-keep', 'data-state': 'saving' }, t('vaultSaving'))
-              : saveState === 'error'
-                ? h('span', { className: 'vp-savestate vp-keep', 'data-state': 'error' }, t('vaultSaveFailed'))
-                : doc
-                  ? h('span', { className: 'vp-savestate vp-keep', 'data-state': 'saved' }, t('vaultSaved'))
-                  : null,
-            h('button', { type: 'button', className: 'vp-iconbtn vp-docbtn vp-keep', onClick: () => void saveDoc(), disabled: !doc || !doc.dirty, title: t('vaultSaveNow') }, '💾'),
-            h('button', { type: 'button', className: 'vp-iconbtn vp-docbtn vp-icon-danger vp-keep', onClick: () => setConfirmDelete(true), disabled: !selected, title: t('vaultDelete') }, '🗑'),
-          ),
             h('div', { className: 'vp-editor' }, editorContent),
+            h(
+              'div',
+              { className: 'vp-docfoot' },
+              h('span', null, h('b', null, String(doc && doc.text ? doc.text.length : 0)), ' ' + t('vaultFootWords')),
+              h('span', null, t('vaultFootPara') + ' ', h('b', null, String(doc && doc.text ? doc.text.split(/\n\s*\n/).filter((part) => part.trim() !== '').length : 0))),
+              doc && doc.path ? h('span', { className: 'vp-docfoot-path', title: doc.path }, doc.path) : null,
+              h('span', { className: 'dn-spacer' }),
+              saveState === 'saving'
+                ? h('span', { className: 'vp-savestate', 'data-state': 'saving' }, t('vaultSaving'))
+                : saveState === 'error'
+                  ? h('span', { className: 'vp-savestate', 'data-state': 'error' }, t('vaultSaveFailed'))
+                  : doc
+                    ? h('span', { className: 'vp-savestate', 'data-state': 'saved' }, t('vaultSaved'))
+                    : null,
+            ),
           ),
           /*
            * ── 大纲轨（v0.3 改造）────────────────────────────────────────────
@@ -3374,29 +3884,3196 @@ window.__ModuleLoader__.load({
       )
     }
 
-    // ── 资料库页：一个主页，两个分页（笔记库 / 便签） ─────────────────────────
+    // ── 回收站板块（工作台第四板块，三个板块共用）────────────────────────
+    //
+    // 回收站不再寄生在素材库左栏：它读同一个库根（/dsh-notes/vault），
+    // 但完全不依赖 VaultPage 的内部状态，所以素材库没打开也能用。
+    //
+    // .trash 里是平铺的「<时间戳>-<原名>」，按原名里带的目录分组显示；
+    // 时间戳前缀还原成「2026-11-16 12:34」给人看。
 
-      function LibraryPage(props) {
+      /** 时间戳前缀：2026-11-16T12-34-56-789Z-（Host 遇到重名还会插一段「-1-」序号）。 */
+      const TB_STAMP_PREFIX = /^\d{4}-\d{2}-\d{2}T[\d-]+Z-(?:\d+-)?/
+      /** 同一个前缀里抠出日期与时分，给条目行显示用。 */
+      const TB_STAMP_PARTS = /^(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})/
+
+      /** 把 .trash 里的一个文件名拆成 { name, stamp, dir, file }。 */
+      function trashEntryOf(item) {
+        const raw = item && typeof item.name === 'string' ? item.name : ''
+        const parts = TB_STAMP_PARTS.exec(raw)
+        const stamp = parts ? parts[1] + '-' + parts[2] + '-' + parts[3] + ' ' + parts[4] + ':' + parts[5] : ''
+        const rest = raw.replace(TB_STAMP_PREFIX, '')
+        const cleaned = rest === '' ? raw : rest
+        const slash = cleaned.lastIndexOf('/')
+        return {
+          name: raw,
+          stamp,
+          dir: slash >= 0 ? cleaned.slice(0, slash) : '',
+          file: slash >= 0 ? cleaned.slice(slash + 1) : cleaned,
+        }
+      }
+
+      /**
+       * 按原目录分组：组名 = 原名里的目录部分；没有目录的归到「库根目录」一组。
+       * 组内按文件名排序；库根目录永远排最前，其余按组名字面升序。
+       */
+      function groupTrash(items, rootLabel) {
+        const buckets = new Map()
+        for (const item of Array.isArray(items) ? items : []) {
+          const entry = trashEntryOf(item)
+          const key = entry.dir === '' ? rootLabel : entry.dir
+          if (!buckets.has(key)) buckets.set(key, [])
+          buckets.get(key).push(entry)
+        }
+        const groups = []
+        buckets.forEach((list, key) => {
+          list.sort((a, b) => a.file.localeCompare(b.file, 'zh'))
+          groups.push({ key, label: key, entries: list })
+        })
+        groups.sort((a, b) => {
+          if (a.key === rootLabel) return -1
+          if (b.key === rootLabel) return 1
+          return a.key.localeCompare(b.key, 'zh')
+        })
+        return groups
+      }
+
+      function TrashBoard(props) {
         const t = props.t
-        const ctx = props.ctx
-        /*
-         * 便签分页已移除（2026-11-04）——现在只有笔记库一个页面，
-         * 不再需要 tab 状态、也不再需要便签的保存提示。
-         * 保留这个包装层而不是直接注册 VaultPage：
-         *   · 侧栏入口与主面板都指向同一个 key（PANEL_ID），
-         *   · 页头标题（t('panel')）由这里统一给，
-         *   · VaultPage 的 embedded 模式本来就不画自己的页头。
-         */
+        const refreshTick = props.refreshTick === undefined ? 0 : props.refreshTick
+        const [root, setRoot] = useState(typeof props.root === 'string' ? props.root : '')
+        const [items, setItems] = useState([])
+        const [error, setError] = useState('')
+        /** 初值 true：挂载即拉列表，首帧不该先闪一下「回收站是空的」。 */
+        const [loading, setLoading] = useState(true)
+        const [confirmClear, setConfirmClear] = useState(false)
+        /** 挂载时先拉一次，之后只在 refreshTick 真的变了才重拉。 */
+        const seenTick = useRef(null)
+
+        const loadTrash = async () => {
+          setLoading(true)
+          setError('')
+          try {
+            const data = await vaultApiGet('/trash-list')
+            setItems(Array.isArray(data.items) ? data.items : [])
+          } catch (err) {
+            setError(messageOf(err))
+          } finally {
+            setLoading(false)
+          }
+        }
+
+        const restoreOne = async (name) => {
+          setError('')
+          try {
+            await vaultApiPost('/trash-restore', { name })
+            await loadTrash()
+          } catch (err) {
+            setError(messageOf(err))
+          }
+        }
+
+        const clearAll = async () => {
+          setError('')
+          try {
+            await vaultApiPost('/trash-empty', {})
+            setConfirmClear(false)
+            await loadTrash()
+          } catch (err) {
+            setError(messageOf(err))
+          }
+        }
+
+        // 库根：与另外三个板块同一个值（素材库也走这条通道），这里自己读一份
+        useEffect(() => {
+          let alive = true
+          vaultApiGet('/root')
+            .then((data) => {
+              if (alive && data && typeof data.root === 'string') setRoot(data.root)
+            })
+            .catch(() => {
+              // 读不到库根不影响列表，路径位退化成 —
+            })
+          return () => {
+            alive = false
+          }
+        }, [])
+
+        // 顶栏 ⟳ 与板块内 ⟳ 共用这个计数：变了就重拉一次列表
+        useEffect(() => {
+          if (seenTick.current === refreshTick) return
+          seenTick.current = refreshTick
+          void loadTrash()
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [refreshTick])
+
+        const groups = useMemo(
+          () => groupTrash(items, t('trashRootGroup')),
+          [items, t],
+        )
+        const total = items.length
+
         return h(
           'div',
-          { className: 'dn-root' },
+          { className: 'tb-root' },
+          h(
+            'div',
+            { className: 'tb-head' },
+            h(
+              'div',
+              { className: 'tb-head-main' },
+              h('span', { className: 'tb-title' }, t('tabTrash')),
+              h('p', { className: 'tb-hint' }, t('trashHint')),
+              h(
+                'div',
+                { className: 'tb-rootline' },
+                h('span', { className: 'tb-root-k' }, t('trashRootLabel')),
+                h('span', { className: 'tb-root-path', title: root || '' }, root || '—'),
+              ),
+            ),
+            h(
+              'div',
+              { className: 'tb-actions' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'tb-btn',
+                  title: t('vaultReload'),
+                  'aria-label': t('vaultReload'),
+                  onClick: () => void loadTrash(),
+                },
+                '⟳ ',
+                t('vaultReload'),
+              ),
+              confirmClear
+                ? h(
+                  'span',
+                  { className: 'tb-confirm' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'tb-btn tb-btn-danger',
+                      onClick: () => void clearAll(),
+                    },
+                    t('trashClearConfirm'),
+                  ),
+                  h(
+                    'button',
+                    { type: 'button', className: 'tb-btn', onClick: () => setConfirmClear(false) },
+                    t('cancel'),
+                  ),
+                )
+                : h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'tb-btn tb-btn-danger',
+                    disabled: total === 0,
+                    onClick: () => setConfirmClear(true),
+                  },
+                  t('vaultTrashClear'),
+                ),
+            ),
+          ),
+          error !== '' ? h('div', { className: 'tb-error' }, error) : null,
+          h(
+            'div',
+            { className: 'tb-scroll' },
+            total === 0 && loading ? h('div', { className: 'tb-empty' }, t('loading')) : null,
+            total === 0 && !loading ? h('div', { className: 'tb-empty' }, t('vaultTrashEmpty')) : null,
+            groups.map((group) =>
+              h(
+                'div',
+                { className: 'tb-group', key: group.key },
+                h(
+                  'div',
+                  { className: 'tb-group-h' },
+                  h('span', { className: 'tb-group-t' }, group.label),
+                  h('span', { className: 'tb-group-n' }, String(group.entries.length)),
+                ),
+                group.entries.map((entry) =>
+                  h(
+                    'div',
+                    { className: 'tb-row', key: entry.name },
+                    h(
+                      'svg',
+                      {
+                        className: 'tb-row-ic',
+                        viewBox: '0 0 24 24',
+                        'aria-hidden': 'true',
+                        focusable: false,
+                      },
+                      h('path', { d: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z' }),
+                      h('path', { d: 'M14 3v5h5' }),
+                    ),
+                    h(
+                      'div',
+                      { className: 'tb-row-t' },
+                      h('span', { className: 'tb-row-name', title: entry.name }, entry.file),
+                      entry.stamp !== ''
+                        ? h('span', { className: 'tb-row-time' }, t('trashDeletedAt') + ' ' + entry.stamp)
+                        : null,
+                    ),
+                    h(
+                      'button',
+                      { type: 'button', className: 'tb-restore', onClick: () => void restoreOne(entry.name) },
+                      t('vaultTrashRestore'),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+      }
+
+    // ── 工作台页：四个板块（素材库 / 文案台 / 写作台 / 回收站）────────────
+//
+// 左上角四个圆形按钮切换板块，顺序固定：素材库 → 文案台 → 写作台 → 回收站。
+// 不再显示「工作台」标题文字——入口名已经在侧边栏上。
+// 素材库 = 原来的笔记库（VaultPage 原样复用）；
+// 素材库切走后不卸载只隐藏，避免未保存的草稿和当前选中的文件丢掉。
+// 回收站 = TrashBoard，读同一个库根但完全不依赖 VaultPage 内部状态。
+// 顶栏 ⟳ 是「当前板块」的刷新：refreshTick 递增，各板块自己监听。
+
+      /**
+       * 文件树排序方式。id 必须与 Host 侧 vault.js 的 SORT_MODES 一致。
+       *
+       * 这里存 id 不存文案：文案走 t()，换语言不用动数据。
+       */
+      const SORT_OPTIONS = [
+        { id: 'name', labelKey: 'vaultSortName' },
+        { id: 'date', labelKey: 'vaultSortDate' },
+        { id: 'size', labelKey: 'vaultSortSize' },
+      ]
+
+      /** 排序 id 白名单归一化：非法值回落 name，与 Host 侧同规则。 */
+      function sortModeOf(value) {
+        return SORT_OPTIONS.some((item) => item.id === value) ? value : 'name'
+      }
+
+      const WORKBENCH_TABS = [
+        { id: 'vault', labelKey: 'tabVault', descKey: 'tabVaultDesc', icon: 'vault' },
+        { id: 'copy', labelKey: 'tabCopy', descKey: 'tabCopyDesc', icon: 'pen' },
+        { id: 'write', labelKey: 'tabWrite', descKey: 'tabWriteDesc', icon: 'book' },
+      ]
+
+      // 圆形按钮里的图标：纯 SVG path，不依赖图标字体或外部资源
+      const BOARD_ICONS = {
+        vault: [
+          'M4 5.5A1.5 1.5 0 0 1 5.5 4H9l1.6 2H18a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z',
+          'M4 10h16',
+        ],
+        pen: [
+          'M12 20h9',
+          'M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z',
+        ],
+        book: [
+          'M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z',
+          'M4 17h15',
+        ],
+        // 垃圾桶轮廓：盖沿 → 提手 → 桶身，与另外三个同一套 stroke 画法
+        trash: [
+          'M4 7h16',
+          'M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7',
+          'M6.6 7l.9 11.3a2 2 0 0 0 2 1.7h5a2 2 0 0 0 2-1.7L17.4 7',
+        ],
+      }
+
+      /**
+       * 板块 → 它在库里对应的那层目录（相对库根，空串 = 库根本身）。
+       *
+       * 大王说「对应资源管理器中的文件位置」，所以这个按钮要跟着当前板块走：
+       *   素材库 → 库根（原料仓就是整个库）
+       *   文案台 → 文案\
+       *   写作台 → 写作\
+       *   回收站 → .trash\（删掉的东西都在这儿）
+       *
+       * 「打开文件夹」以前固定开库根（提到顶栏时当整库级操作处理）。
+       * 但文案台点开只落到库根，还得自己再点进「文案」，跟直觉不符，所以改成跟随。
+       */
+      const BOARD_FOLDER = {
+        vault: '',
+        copy: '文案',
+        write: '写作',
+        trash: '.trash',
+      }
+
+      /**
+       * 在系统资源管理器里打开「当前选中项所在的目录」。
+       *
+       * 优先级（大王要求「根据我目前选择的文件来」）：
+       *   ① 有选中的文件 → 打开它所在的目录（在资源管理器里正好选中它旁边）
+       *   ② 选中的是文件夹 → 直接打开那个文件夹
+       *   ③ 什么都没选 → 退到当前板块对应的库目录（BOARD_FOLDER）
+       *   ④ 连库目录都没有（老库还没建） → 退到库根
+       *
+       * Host 侧 /open 收到的是「库内相对路径」，它是文件还是目录都行 ——
+       * openInExplorer 内部会 stat，文件就开它所在目录。所以这里可以原样传。
+       */
+      /** 路径的父目录（素材/报告/a.md → 素材/报告）。没有斜杠就返回空串。 */
+      const parentDirOf = (path) => {
+        const normalized = String(path || '').replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+        if (normalized === '') return ''
+        return normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : normalized
+      }
+
+      /**
+       * 「打开文件夹」按钮的悬停提示：显示它实际会打开哪个目录。
+       *
+       * 选了文件 → 显示该文件所在目录；选了目录 → 显示该目录；没选 → 显示板块目录。
+       * 用户能一眼看出「点下去会去哪」，不用猜。
+       */
+      /*
+       * 注意：这几个函数在**模块作用域**，不是 WorkbenchPage 内部。
+       * 所以不能用 t() —— t 是各组件从 props 拿的，这里没有。
+       * 需要文案时由调用方传进来（下面 translate 参数就是这么用的）。
+       * 2026-11-18：漏了这一点导致工作台白屏，已修。
+       */
+      const openFolderHint = (board, focusPath, translate) => {
+        const picked = typeof focusPath === 'string' ? focusPath.trim().replaceAll('\\', '/') : ''
+        const boardDir = typeof BOARD_FOLDER[board] === 'string' ? BOARD_FOLDER[board] : ''
+        if (picked !== '') {
+          /* 有选中：显示它的父目录（文件）或它自己（目录）—— 这里分不清类型，
+             但两种情况下 Host 打开的目录都是父目录或它本身，提示用父目录最稳 */
+          const parent = parentDirOf(picked)
+          return parent !== '' ? parent + '\\' : picked
+        }
+        if (boardDir !== '') return boardDir + '\\'
+        /* 兜底文案由调用方给（模块作用域没有 t） */
+        return typeof translate === 'function' ? translate('vaultOpenFolderRoot') : 'root'
+      }
+
+      const vaultOpenBoardFolder = async (board, focusPath) => {
+        const picked = typeof focusPath === 'string' ? focusPath.trim().replaceAll('\\', '/') : ''
+        const rel = typeof BOARD_FOLDER[board] === 'string' ? BOARD_FOLDER[board] : ''
+        /* ① ② 有选中就开选中项（可能是文件也可能是目录，Host 会自己判断） */
+        const candidates = picked !== '' ? [picked, rel, ''] : [rel, '']
+        for (const candidate of candidates) {
+          if (typeof candidate !== 'string') continue
+          try {
+            await vaultApiPost("/open", { path: candidate })
+            return
+          } catch {
+            /* 这一级不存在，试下一级 */
+          }
+        }
+      }
+
+      // 工作台区域选择器：四个板块共用同一个工作区，切换板块不换区域
+      /**
+       * 顶栏的工作区选择器（真的能换库根）。
+       *
+       * 之前它只是个摆着看的胶囊：点上去没反应，真正的换目录按钮藏在素材库左栏里（⇄），
+       * 两个入口一真一假，观感和行为都打架。现在把 ⇄ 删掉，唯一入口就是这里。
+       *
+       * 库根由 WorkbenchPage 持有并向下传，换成功后四个板块一起看新库。
+       */
+      function WorkspacePicker(props) {
+        const t = props.t
+        const root = props.root
+        const open = props.open === true
+        const label = root ? root.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : t('wsPickTitle')
+        return h(
+          'div',
+          { className: 'wb-ws-wrap' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'wb-ws',
+              'data-open': open,
+              title: t('wsPickTitle'),
+              'aria-label': t('wsPickTitle'),
+              'aria-expanded': open ? 'true' : 'false',
+              onClick: () => props.onToggle(),
+            },
+            h('svg', { className: 'wb-ws-icon', viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+              h('path', { d: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z' })),
+            h('span', { className: 'wb-ws-k' }, t('wsLabel')),
+            h('b', { className: 'wb-ws-name' }, label || '—'),
+            root ? h('span', { className: 'wb-ws-path' }, root) : null,
+            h('span', { className: 'wb-ws-tag' }, t('wsShared')),
+            h('svg', { className: 'wb-ws-caret', viewBox: '0 0 24 24', 'aria-hidden': 'true' },
+              h('path', { d: 'm6 9 6 6 6-6' })),
+          ),
+          open
+            ? h(
+              'div',
+              { className: 'wb-ws-pop' },
+              h('div', { className: 'wb-ws-pop-h' }, t('wsPickHint')),
+              h('input', {
+                className: 'wb-ws-input',
+                autoFocus: true,
+                value: props.draft,
+                placeholder: t('vaultPickPlaceholder'),
+                onChange: (event) => props.onDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    props.onApply()
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    props.onToggle()
+                  }
+                },
+              }),
+              props.error !== '' ? h('div', { className: 'wb-ws-err' }, props.error) : null,
+              h(
+                'div',
+                { className: 'wb-ws-actions' },
+                h('button', { type: 'button', className: 'wb-ws-btn', onClick: () => props.onPick() }, t('wsPickManual')),
+                h('button', { type: 'button', className: 'wb-ws-btn wb-ws-btn-primary', onClick: () => props.onApply() }, t('vaultSwitchConfirm')),
+                h('button', { type: 'button', className: 'wb-ws-btn', onClick: () => props.onToggle() }, t('cancel')),
+              ),
+            )
+            : null,
+        )
+      }
+
+      // 右栏第一个面板：章节。各板块共用同一套骨架，只是数据来源不同。
+      function ChapterPanel(props) {
+        const t = props.t
+        const items = props.items || []
+        return h(
+          'div',
+          { className: 'wb-aside-block' },
+          h(
+            'div',
+            { className: 'wb-aside-h' },
+            h('span', { className: 'wb-aside-t' }, t('asideChapter')),
+            h('span', { className: 'wb-aside-n' }, String(items.length)),
+          ),
+          h('div', { className: 'wb-outline' },
+            items.map((item, index) =>
+              h(
+                'div',
+                {
+                  key: index,
+                  className: 'wb-outline-row',
+                  'data-active': item.active === true,
+                  'data-indent': item.indent ? '1' : '0',
+                },
+                h('i', { className: 'wb-outline-dot' }),
+                h('span', { className: 'wb-outline-t' }, item.label),
+              ),
+            ),
+          ),
+        )
+      }
+
+      // 右栏第二个面板：工作台助手。工具是否可用由会话预设决定，
+      // 这里只呈现入口；没有工具时点击会提示去切预设。
+      function AssistantPanel(props) {
+        const t = props.t
+        return h(
+          'div',
+          { className: 'wb-aside-block wb-aside-grow' },
+          h(
+            'div',
+            { className: 'wb-aside-h' },
+            h('span', { className: 'wb-aside-t' }, t('asideAssistant')),
+            h('span', { className: 'wb-aside-n' }, t('asidePreset')),
+          ),
+          h('div', { className: 'wb-assistant-empty' },
+            h('span', null, t('assistantHint')),
+          ),
+        )
+      }
+
+      // 一个板块的右侧栏：章节 + 助手，顺序固定
+      function BoardAside(props) {
+        return h(
+          'aside',
+          { className: 'wb-aside' },
+          h(ChapterPanel, { t: props.t, items: props.chapters }),
+          h(AssistantPanel, { t: props.t }),
+        )
+      }
+
+      function BoardIcon(props) {
+        return h(
+          'svg',
+          {
+            className: 'wb-sw-icon',
+            viewBox: '0 0 24 24',
+            'aria-hidden': 'true',
+            focusable: false,
+          },
+          (BOARD_ICONS[props.name] || []).map((d, index) => h('path', { key: index, d })),
+        )
+      }
+
+      function WorkbenchPage(props) {
+        const t = props.t
+        const ctx = props.ctx
+        const [tab, setTab] = useState('vault')
+        /*
+         * 当前板块里用户选中的那个路径（文件或目录）。
+         *
+         * 为什么提到这里：顶栏「打开文件夹」要根据「我目前选择的文件」决定开哪个目录，
+         * 而选中状态在各板块内部（素材库 selected / 文案台 activePath / 写作台 activeFile）。
+         * 三个板块通过 onFocusPath 回调把选中路径报上来，这里收着。
+         * 切换板块时清空，避免拿上一板块的路径去开。
+         */
+        const [boardFocusPath, setBoardFocusPath] = useState('')
+        const [root, setRoot] = useState(null)
+        /** 顶栏 ⟳ 的计数器：+1 时由当前板块自己决定刷新什么。 */
+        const [refreshTick, setRefreshTick] = useState(0)
+        // ── 顶栏工作区选择器 ──
+        const [wsOpen, setWsOpen] = useState(false)
+        const [wsDraft, setWsDraft] = useState('')
+        const [wsError, setWsError] = useState('')
+        /** 换库根：写服务端成功后更新本地 root，并 ++refreshTick 让板块重拉。 */
+        const applyRootTo = async (nextInput) => {
+          setWsError('')
+          const next = typeof nextInput === 'string' ? nextInput.trim() : ''
+          if (next === '') {
+            setWsError(t('vaultSwitchEmpty'))
+            return
+          }
+          try {
+            const saved = await vaultApiPost('', { root: next })
+            const value = saved && typeof saved.root === 'string' ? saved.root : next
+            setRoot(value)
+            setWsOpen(false)
+            setRefreshTick((tick) => tick + 1)
+          } catch (err) {
+            setWsError(messageOf(err))
+          }
+        }
+
+        /** 弹层里的「切换到这个目录」：用手工填的 draft。 */
+        const applyRoot = async () => applyRootTo(wsDraft)
+
+        /**
+         * 工作台区域点一下：优先弹系统选目录（客户端 uiWorkspace 走 Host 原生对话框）。
+         *
+         * 拿不到原生选择器时（远程浏览器、headless 组合）退回手工输入弹层 ——
+         * 不假装成功，也不让这个入口变成死按钮。
+         */
+        const pickRoot = async () => {
+          let service
+          try {
+            service = typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : undefined
+          } catch {
+            service = undefined
+          }
+          if (!service || typeof service.pickDirectory !== 'function') {
+            setWsDraft(typeof root === 'string' ? root : '')
+            setWsError('')
+            setWsOpen(true)
+            return
+          }
+          let picked
+          try {
+            picked = await service.pickDirectory()
+          } catch (err) {
+            /* 选目录失败就打开手工输入，不把错误吞掉 */
+            setWsDraft(typeof root === 'string' ? root : '')
+            setWsError(messageOf(err))
+            setWsOpen(true)
+            return
+          }
+          if (typeof picked !== 'string' || picked.trim() === '') return // 用户点了取消
+          await applyRootTo(picked)
+        }
+
+        // 素材库的库根就是工作台区域：读出来给选择器显示，
+        // 四个板块共用这一个值，切换板块不重新读。
+        useEffect(() => {
+          let alive = true
+          // 复用笔记库现成的请求通道，不另拼 URL：
+          // VAULT_API 的约定、同源凭据和错误处理都在它里面。
+          vaultApiGet("/root")
+            .then((data) => {
+              if (!alive) return
+              if (data && typeof data.root === "string") setRoot(data.root)
+            })
+            .catch(() => {
+              // 读不到库根不影响界面，选择器退化成提示文案
+            })
+          return () => {
+            alive = false
+          }
+        }, [])
+
+        // 文案台自带右栏（只有写作助手），不用章节面板
+        // 写作台的章节：卷 → 章 → 场景
+        const writeChapters = []
+
+        return h(
+          'div',
+          { className: 'dn-root wb-root' },
           h(
             'header',
-            { className: 'dn-header dn-libheader' },
-            h('h1', { className: 'dn-title' }, t('panel')),
+            { className: 'dn-header wb-header' },
+            h(
+              'nav',
+              { className: 'wb-switch', role: 'tablist', 'aria-label': t('panel') },
+              WORKBENCH_TABS.map((item) =>
+                h(
+                  'button',
+                  {
+                    key: item.id,
+                    type: 'button',
+                    role: 'tab',
+                    'aria-selected': tab === item.id ? 'true' : 'false',
+                    'data-active': tab === item.id,
+                    className: 'wb-sw',
+                    title: t(item.descKey),
+                    onClick: () => {
+                      setTab(item.id)
+                      /* 切板块清空选中路径：上一板块的路径在新板块里没有意义 */
+                      setBoardFocusPath('')
+                    },
+                  },
+                  h(BoardIcon, { name: item.icon }),
+                  h('span', { className: 'wb-sw-label' }, t(item.labelKey)),
+                ),
+              ),
+            ),
             h('span', { className: 'dn-spacer' }),
+            /*
+             * 顶栏从左到右：
+             *   〔素材库 文案台 写作台〕……〔📂 打开文件夹〕〔⟳ 刷新〕〔工作区选择器〕〔🗑 回收站〕
+             *
+             * 为什么 📂 和 ⟳ 放顶栏：它们作用的对象是「整个库」，不是当前这一栏的文件树；
+             * 📂 现在跟随当前板块打开对应的那层目录（见 BOARD_FOLDER），
+             * 所以它虽然是顶栏按钮，落点却跟着板块变，语义更贴「对应资源管理器中的位置」。
+             * 塞在左栏底部既错位（大王截图指出），又跟文件树同高，看着像文件操作的一部分。
+             * 为什么 🗑 放最右、且不混进圆形按钮组：回收站是「三个板块共用」的一个去处，
+             * 不是第四个并列的内容板块；放最右当入口图标，语义才不打架。
+             * 刷新是「当前板块」的刷新，所以计数放在 WorkbenchPage：
+             * 点一次 refreshTick + 1，各板块监听这个数决定重拉什么。
+             */
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'wb-reload',
+                /* 按钮说明要跟着板块变：在文案台说「打开库根」会让人以为搞错了 */
+                /* 提示里显示真实落点：选了文件就显示它所在目录，没选显示板块目录 */
+                title: t('vaultOpenFolder') + '：' + openFolderHint(tab, boardFocusPath, t),
+                'aria-label': t('vaultOpenFolder'),
+                onClick: () => { void vaultOpenBoardFolder(tab, boardFocusPath) },
+              },
+              '📂',
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'wb-reload',
+                title: t('vaultReload'),
+                'aria-label': t('vaultReload'),
+                onClick: () => setRefreshTick((tick) => tick + 1),
+              },
+              '⟳',
+            ),
+            h(WorkspacePicker, {
+              t,
+              root,
+              open: wsOpen,
+              draft: wsDraft,
+              error: wsError,
+              /* 点一下直接弹系统选目录；拿不到原生选择器才展开手工输入弹层 */
+              onToggle: () => {
+                if (wsOpen) {
+                  setWsOpen(false)
+                  setWsError('')
+                  return
+                }
+                void pickRoot()
+              },
+              onDraft: (value) => setWsDraft(value),
+              onApply: () => void applyRoot(),
+              onPick: () => void pickRoot(),
+            }),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'wb-trash',
+                'data-active': tab === 'trash',
+                title: t('tabTrashDesc'),
+                'aria-label': t('tabTrash'),
+                onClick: () => setTab(tab === 'trash' ? 'vault' : 'trash'),
+              },
+              h(BoardIcon, { name: 'trash' }),
+            ),
           ),
-          h(VaultPage, { t, ctx, embedded: true }),
+          h(
+            'div',
+            { className: 'wb-body' },
+            h(
+              'div',
+              { className: 'wb-pane', hidden: tab !== 'vault' },
+              h(VaultPage, { t, ctx, embedded: true, root, refreshTick, onOpenTrash: () => setTab('trash'), onFocusPath: setBoardFocusPath }),
+            ),
+            tab === 'trash' ? h(TrashBoard, { t, root, refreshTick }) : null,
+            tab === 'copy' ? h(CopyBoard, { t, ctx, root, onFocusPath: setBoardFocusPath }) : null,
+            tab === 'write' ? h(WritingBoard, { t, ctx, root, onFocusPath: setBoardFocusPath }) : null,
+          ),
+        )
+      }
+
+// ── 文案台图标（纯 SVG path，不依赖图标字体或外部资源）─────────────────
+//
+
+      // 图标：纯 SVG path，不依赖图标字体或外部资源
+      const CB_ICONS = {
+        search: ['M10.5 3.5a7 7 0 1 0 .01 14.01A7 7 0 0 0 10.5 3.5Z', 'm20 20-4.2-4.2'],
+        doc: ['M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8Z', 'M14 3v5h5'],
+        bold: ['M7 5h6a4 4 0 0 1 0 8H7Z', 'M7 13h7a4 4 0 0 1 0 8H7Z'],
+        list: ['M9 6h11M9 12h11M9 18h11', 'M4 6h.01M4 12h.01M4 18h.01'],
+        quote: ['M9 7H5v5h4v5H5', 'M19 7h-4v5h4v5h-4'],
+        image: ['M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z', 'm5 18 5-5 4 4 2-2 3 3'],
+        sparkle: ['M12 3v5M12 16v5M4.5 12h5M14.5 12h5', 'm7 7 2.5 2.5M14.5 14.5 17 17M17 7l-2.5 2.5M9.5 14.5 7 17'],
+        checkCircle: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0', 'm8 12.5 2.6 2.6L16 9.5'],
+        arrowUp: ['M12 19V5M6 11l6-6 6 6'],
+      }
+
+      function CbIcon(props) {
+        let cls = props.small ? 'cb-ic cb-ic-sm' : 'cb-ic'
+        if (typeof props.className === 'string' && props.className !== '') cls += ' ' + props.className
+        return h(
+          'svg',
+          { className: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false' },
+          (CB_ICONS[props.name] || []).map((d, index) => h('path', { key: index, d })),
+        )
+      }
+
+      /**
+       * 助手区的会话接口。**不含 hook**，纯动作集合 —— 这样它能被单独测，组件只负责接线。
+       *
+       * 三条约定：
+       *   · 库根 = 工作台区域 = 会话的 cwd，所以「一个工作台 = 一个会话」
+       *   · 绑定表存在 Host 侧（/studio-binding），刷新页面不会忘
+       *   · 只在真要发消息时才建会话，光看着不点不会凭空多出一堆空会话
+       */
+      function assistantApi(ctx) {
+        const sessionsOf = () => {
+          try {
+            return typeof ctx.get === 'function' ? ctx.get('sessions') : undefined
+          } catch {
+            return undefined
+          }
+        }
+        const workspaceOf = () => {
+          try {
+            return typeof ctx.get === 'function' ? ctx.get('uiWorkspace') : undefined
+          } catch {
+            return undefined
+          }
+        }
+        /** 工作区服务：把库根注册成 DSH 工作区，会话才有归属（打开时不必再选）。 */
+        const workspacesOf = () => {
+          try {
+            return typeof ctx.get === 'function' ? ctx.get('workspaces') : undefined
+          } catch {
+            return undefined
+          }
+        }
+
+        /** 缓存「工作区 + 预设」的解析结果：同一个库根只解析一次。 */
+        const scopeCache = { root: '', workspaceId: '', preset: null }
+
+        /**
+         * 解析工作台会话该落在哪个工作区、用哪个预设。
+         *
+         * 大王的要求是「打开会话默认就是资料库那个工作区，不该再选」——
+         * 所以建会话前先把库根注册成工作区（Host 侧幂等，同目录反复调只返回同一个），
+         * 再把预设一起带上。两样都有了，DSH 打开这个会话就不会停在「选工作区 / 选模式」那页。
+         */
+        const resolveScope = async (root) => {
+          if (scopeCache.root === root) {
+            return { workspaceId: scopeCache.workspaceId, preset: scopeCache.preset }
+          }
+          let workspaceId = ''
+          let preset = null
+          const workspaces = workspacesOf()
+          if (workspaces && typeof workspaces.create === 'function') {
+            try {
+              const view = await workspaces.create({ path: root })
+              if (view && typeof view.workspaceId === 'string') workspaceId = view.workspaceId
+            } catch {
+              /* 注册失败就退回按 cwd 建会话 */
+            }
+          }
+          try {
+            const data = await vaultApiGet('/studio-preset')
+            if (data && typeof data.preset === 'string' && data.preset !== '') preset = data.preset
+          } catch {
+            /* 拿不到预设就当没有 */
+          }
+          scopeCache.root = root
+          scopeCache.workspaceId = workspaceId
+          scopeCache.preset = preset
+          return { workspaceId, preset }
+        }
+
+        /** 建一个工作台会话：优先按工作区 + 预设建，缺哪样退哪样。 */
+        const createWorkbenchSession = async (root) => {
+          const service = sessionsOf()
+          if (!service) throw new Error('no-session-service')
+          if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+          const scope = await resolveScope(root)
+          const extra = {}
+          if (scope.preset !== null) extra.agentPreset = scope.preset
+          if (scope.workspaceId !== '') {
+            try {
+              return await service.create({ workspaceId: scope.workspaceId, ...extra })
+            } catch {
+              /* 工作区建不了就退回目录方式 */
+            }
+          }
+          return await service.create({ cwd: root, ...extra })
+        }
+
+        /** 模型选择服务：与 DSH 主对话（/model 弹窗、输入框旁的模型座位）共用同一份 per-session 状态。 */
+        const modelsOf = () => {
+          try {
+            return typeof ctx.get === 'function' ? ctx.get('modelDirectories') : undefined
+          } catch {
+            return undefined
+          }
+        }
+/** 这个会话的模型目录（拿不到就返回 undefined，界面上退化成不显示模型按钮）。 */
+        const modelDirectoryFor = (sessionId) => {
+          const service = modelsOf()
+          if (!service || typeof service.directoryFor !== 'function') return undefined
+          try {
+            return service.directoryFor(sessionId)
+          } catch {
+            return undefined
+          }
+        }
+        const sessionUsable = (service, id) => {
+          if (typeof id !== 'string' || id === '') return false
+          if (typeof service.list?.getSnapshot !== 'function') return true
+          const snapshot = service.list.getSnapshot()
+          const rows = snapshot && snapshot.byId ? snapshot.byId : undefined
+          return !!rows && !!rows[id]
+        }
+        return {
+          sessions: sessionsOf,
+          modelDirectory: modelDirectoryFor,
+          hasModelService: () => !!modelsOf(),
+          hasSessionService: () => {
+            const service = sessionsOf()
+            return !!service && typeof service.create === 'function' && typeof service.scope === 'function'
+          },
+          /** 读这个库根绑到哪个会话。读不到就是空串（当作未绑定）。 */
+          loadBinding: async (root) => {
+            if (typeof root !== 'string' || root.trim() === '') return ''
+            try {
+              const data = await vaultApiGet('/studio-binding?root=' + encodeURIComponent(root))
+              return data && typeof data.sessionId === 'string' ? data.sessionId : ''
+            } catch {
+              return ''
+            }
+          },
+          /** 写绑定。失败不抛给界面 —— 绑定丢了顶多下次重建，不该挡住发消息。 */
+          saveBinding: async (root, sessionId) => {
+            try {
+              await vaultApiPost('/studio-binding', { root, sessionId })
+            } catch {
+              /* 忽略：下次会重建 */
+            }
+          },
+          /**
+           * 拿到可用会话：已有绑定且还在列表里就复用，否则按 cwd=库根 新建。
+           *
+           * 模型选择是 per-session 的，所以点模型按钮时也需要先有一个会话。
+           */
+          ensureSession: async (root) => {
+            const service = sessionsOf()
+            if (!service) throw new Error('no-session-service')
+            if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            const existing = await (async () => {
+              try {
+                const data = await vaultApiGet('/studio-binding?root=' + encodeURIComponent(root))
+                return data && typeof data.sessionId === 'string' ? data.sessionId : ''
+              } catch {
+                return ''
+              }
+            })()
+            if (sessionUsable(service, existing)) return existing
+            return await createWorkbenchSession(root)
+          },
+
+          /**
+           * 真发一条消息进那个会话。
+           *
+           * 为什么先查一遍列表：绑定可能指向已被删掉的会话，直接 send 会报错；
+           * 这里顺手校正，用户不会看到一个永远发不出去的输入框。
+           */
+          sendText: async (root, currentId, text) => {
+            const service = sessionsOf()
+            if (!service) throw new Error('no-session-service')
+            /* 空 cwd 会让 Host 去 mkdir '' —— 宁可在这里拦住，也不把一个看不懂的报错甩给用户 */
+            if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            let id = currentId
+            if (!sessionUsable(service, id)) {
+              id = await createWorkbenchSession(root)
+            }
+            const scope = service.scope(id)
+            const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
+            if (!conversation || typeof conversation.send !== 'function') throw new Error('no-conversation-service')
+            await conversation.send(text)
+            return id
+          },
+          /**
+           * 发一条消息并等这一轮的回复正文。
+           *
+           * 为什么不直接用 sendText：conversation.send 只负责「塞进会话」，
+           * 回复留在会话历史里、插件拿不到。这里补上后半截 ——
+           *   ① 先问 Host 要当前最后 seq（分界）
+           *   ② 发消息
+           *   ③ 让 Host 轮询会话日志，等 turn/end 后取这一轮的正文
+           *
+           * 返回 { id, text, empty }：text 为空表示助手这一轮没写出文字（被中断 / 只调了工具），
+           * 由调用方决定怎么提示，不编假结果。
+           */
+          askOnce: async (root, currentId, text) => {
+            const service = sessionsOf()
+            if (!service) throw new Error('no-session-service')
+            if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            let id = currentId
+            if (!sessionUsable(service, id)) {
+              id = await createWorkbenchSession(root)
+            }
+            /* ① 分界 seq：之后新增的事件才算这一轮的 */
+            let sinceSeq = -1
+            try {
+              const tail = await vaultApiGet('/ai-tail?session=' + encodeURIComponent(id))
+              if (tail && typeof tail.seq === 'number') sinceSeq = tail.seq
+            } catch {
+              /* 拿不到分界就退回 -1（整段日志都算新的），仍能取到回复 */
+            }
+            /* ② 发消息 */
+            const scope = service.scope(id)
+            const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
+            if (!conversation || typeof conversation.send !== 'function') throw new Error('no-conversation-service')
+            await conversation.send(text)
+            /* ③ 等回复（Host 侧轮询，最长 2 分钟） */
+            let reply = { text: '', empty: true }
+            try {
+              const got = await vaultApiPost('/ai-await', { sessionId: id, sinceSeq, timeoutMs: 120000 })
+              reply = { text: typeof got.text === 'string' ? got.text : '', empty: got.empty === true }
+            } catch (error) {
+              const raw = messageOf(error)
+              if (raw === 'timeout') throw new Error('ai-timeout')
+              throw error
+            }
+            return { id, text: reply.text, empty: reply.empty }
+          },
+
+          /** 跳到那个会话看完整对话（工作台里渲染不了对话流，这是唯一正路）。 */
+          /**
+           * 打开那个会话（在会话页里看完整对话）。
+           *
+           * 不再自己 retain：SessionReferenceSource 是固定联合类型，插件塞自定义值不安全；
+           * uiWorkspace.openSession 内部走的是同一套导航（replaceMain + reveal）。
+           * 「打开时不跳新手页」靠的是建会话时已经带上工作区 + 预设，不是靠这里。
+           */
+          openSession: (sessionId) => {
+            const service = workspaceOf()
+            if (!service || typeof service.openSession !== 'function') return false
+            try {
+              service.openSession(sessionId)
+              return true
+            } catch {
+              return false
+            }
+          },
+          /** 解绑：下次再发会新建一个会话。 */
+          unbind: async (root) => {
+            try {
+              await vaultApiPost('/studio-binding', { root, sessionId: '' })
+            } catch {
+              /* 忽略 */
+            }
+          },
+        }
+      }
+
+      /**
+       * 右栏助手：任务进度卡 + 会话状态 + 真输入框。
+       *
+       * 文案台与写作台共用这一个组件 —— 两个板块本来就只差文案和任务数据。
+       */
+      function BoardAssistant(props) {
+        const t = props.t
+        const ctx = props.ctx
+        const root = typeof props.root === 'string' ? props.root : ''
+        const api = useMemo(() => assistantApi(ctx), [ctx])
+        const [sessionId, setSessionId] = useState('')
+        const [title, setTitle] = useState('')
+        const [running, setRunning] = useState(false)
+        const [draft, setDraft] = useState('')
+        const [busy, setBusy] = useState(false)
+        const [error, setError] = useState('')
+        const [models, setModels] = useState([])
+        const [modelLabel, setModelLabel] = useState('')
+        const [modelBusy, setModelBusy] = useState(false)
+        const [modelOpen, setModelOpen] = useState(false)
+
+        // 换库根就重新读绑定：一个工作台一个会话
+        useEffect(() => {
+          let alive = true
+          setSessionId('')
+          setTitle('')
+          setRunning(false)
+          setError('')
+          if (root === '') return () => { alive = false }
+          void api.loadBinding(root).then((id) => {
+            if (alive) setSessionId(id)
+          })
+          return () => {
+            alive = false
+          }
+        }, [api, root])
+
+        // 订阅会话列表：拿 displayTitle 与 running（运行中/空闲）
+        useEffect(() => {
+          if (sessionId === '') return undefined
+          const service = api.sessions()
+          if (!service || typeof service.list?.getSnapshot !== 'function') return undefined
+          const read = () => {
+            const snapshot = service.list.getSnapshot()
+            const row = snapshot && snapshot.byId ? snapshot.byId[sessionId] : undefined
+            setRunning(row ? row.running === true : false)
+            setBlank(row ? row.blank === true : false)
+            setTitle(row && typeof row.displayTitle === 'string' ? row.displayTitle : '')
+          }
+          read()
+          const stop = typeof service.list.subscribe === 'function' ? service.list.subscribe(read) : undefined
+          return () => {
+            if (typeof stop === 'function') stop()
+          }
+        }, [api, sessionId])
+
+        // 会话定了之后订阅它的模型目录：分组列表 + 当前选中都从这一个 store 读
+        useEffect(() => {
+          if (sessionId === '') {
+            setModels([])
+            setModelLabel('')
+            return undefined
+          }
+          const directory = api.modelDirectory(sessionId)
+          if (!directory || !directory.store) {
+            setModels([])
+            setModelLabel('')
+            return undefined
+          }
+          const read = () => {
+            const snapshot = directory.store.getSnapshot()
+            const groups = Array.isArray(snapshot.groups) ? snapshot.groups : []
+            setModels(groups)
+            const current = snapshot.current
+            if (current && typeof current.model === 'string') {
+              const flat = groups.reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
+              const hit = flat.find((m) => m && m.id === current.model)
+              setModelLabel(hit && typeof hit.name === 'string' ? hit.name : current.model)
+            } else {
+              setModelLabel('')
+            }
+          }
+          read()
+          const stop = typeof directory.store.subscribe === 'function' ? directory.store.subscribe(read) : undefined
+          /* 目录里的目录是懒加载的，这里主动拉一次；失败静默（read 里会保持空） */
+          if (typeof directory.load === 'function') void directory.load().catch(() => {})
+          return () => {
+            if (typeof stop === 'function') stop()
+          }
+        }, [api, sessionId])
+
+        /** 没有会话时点模型：先建/拿会话，再去开菜单 —— 选择是 per-session 的，没会话无处落。 */
+        const openModels = async () => {
+          if (modelOpen) {
+            setModelOpen(false)
+            return
+          }
+          if (sessionId === '') {
+            if (root === '') {
+              setError(t('assistNeedWorkspace'))
+              return
+            }
+            try {
+              const id = await api.ensureSession(root)
+              await api.saveBinding(root, id)
+              setSessionId(id)
+            } catch (err) {
+              const raw = messageOf(err)
+              setError(raw === 'no-session-service' ? t('assistNoService') : t('assistSendFailed') + raw)
+              return
+            }
+          }
+          setModelOpen(true)
+        }
+
+        const pickModel = async (group, model) => {
+          const directory = api.modelDirectory(sessionId)
+          setModelOpen(false)
+          if (!directory || typeof directory.select !== 'function') return
+          setModelBusy(true)
+          setError('')
+          try {
+            const result = await directory.select({ provider: group.id, model: model.id })
+            if (result && result.ok === false) {
+              const message = result.error && result.error.message ? result.error.message : t('assistModelFailed')
+              setError(t('assistModelFailed') + message)
+            }
+          } catch (err) {
+            setError(t('assistModelFailed') + messageOf(err))
+          } finally {
+            setModelBusy(false)
+          }
+        }
+
+        const send = async () => {
+          const text = draft.trim()
+          if (text === '' || busy) return
+          setBusy(true)
+          setError('')
+          try {
+            if (!api.hasSessionService()) throw new Error('no-session-service')
+            const id = await api.sendText(root, sessionId, text)
+            if (id !== sessionId) {
+              setSessionId(id)
+              await api.saveBinding(root, id)
+            }
+            setDraft('')
+          } catch (err) {
+            const raw = messageOf(err)
+            setError(raw === 'no-workspace'
+              ? t('assistNeedWorkspace')
+              : raw === 'no-session-service' || raw === 'no-conversation-service'
+                ? t('assistNoService')
+                : t('assistSendFailed') + raw)
+          } finally {
+            setBusy(false)
+          }
+        }
+
+        const startFresh = async () => {
+          await api.unbind(root)
+          setSessionId('')
+          setTitle('')
+          setRunning(false)
+          setError('')
+        }
+
+        const statusText = sessionId === '' ? t('assistUnbound') : busy || running ? t('assistRunning') : t('assistIdle')
+        /** 空白会话：DSH 打开它会显示新手页，所以先提示一句，别让人以为坏了。 */
+        const [blank, setBlank] = useState(false)
+        const tasks = Array.isArray(props.tasks) ? props.tasks : []
+
+        return h('aside', { className: 'cb-aside' },
+          h('div', { className: 'cb-aside-h' },
+            h(CbIcon, { name: 'sparkle', small: true }),
+            h('span', null, t(props.titleKey)),
+            h('span', { className: 'cb-status' },
+              h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
+              statusText)),
+          tasks.length > 0
+            ? h('div', { className: 'cb-task-card' },
+              tasks.map((task, index) =>
+                h('div', { key: index, className: 'cb-task', 'data-done': task.state === 'done' },
+                  h(CbIcon, { name: 'checkCircle', small: true }),
+                  h('span', null, t(task.key)))))
+            : null,
+          sessionId !== ''
+            ? h('div', { className: 'cb-sess' },
+              h('span', { className: 'cb-sess-k' }, t('assistStatus')),
+              h('span', { className: 'cb-sess-t', title: sessionId }, title !== '' ? title : sessionId),
+              blank ? h('span', { className: 'cb-sess-hint' }, t('assistBlankHint')) : null,
+              h('div', { className: 'cb-sess-btns' },
+                h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => api.openSession(sessionId) }, t('assistOpen')),
+                h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => void startFresh() }, t('assistNew'))))
+            : null,
+          error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
+          h('div', { className: 'cb-input' },
+            h(
+              'div',
+              { className: 'cb-model' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'cb-model-btn',
+                  'data-open': modelOpen ? 'true' : 'false',
+                  title: t('assistModel'),
+                  disabled: modelBusy,
+                  onClick: () => void openModels(),
+                },
+                h('span', { className: 'cb-model-txt' }, modelLabel !== '' ? modelLabel : t('assistModelPick')),
+                h('span', { className: 'cb-model-caret' }, modelBusy ? '·' : '▾'),
+              ),
+              modelOpen
+                ? h(
+                  'div',
+                  { className: 'cb-model-menu' },
+                  models.length === 0
+                    ? h('div', { className: 'cb-model-empty' }, t('assistModelEmpty'))
+                    : models.map((group, gi) =>
+                      h(
+                        'div',
+                        { key: gi, className: 'cb-model-group' },
+                        h('div', { className: 'cb-model-gh' }, group.name),
+                        (Array.isArray(group.models) ? group.models : []).map((model, mi) =>
+                          h(
+                            'button',
+                            {
+                              key: mi,
+                              type: 'button',
+                              className: 'cb-model-item',
+                              onClick: () => void pickModel(group, model),
+                            },
+                            model.name,
+                          ),
+                        ),
+                      ),
+                    ),
+                )
+                : null,
+            ),
+            h(CbIcon, { name: 'sparkle', small: true }),
+            h('input', {
+              className: 'cb-input-field',
+              type: 'text',
+              value: draft,
+              placeholder: t(props.placeholderKey),
+              disabled: busy,
+              onChange: (event) => setDraft(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void send()
+                }
+              },
+            }),
+            h('button', {
+              type: 'button',
+              className: 'cb-send',
+              title: t('assistSend'),
+              disabled: busy || draft.trim() === '',
+              onClick: () => void send(),
+            }, h(CbIcon, { name: 'arrowUp', small: true }))))
+      }
+
+      // ── 文案台：接真实数据（2026-11-17）────────────────────────────────
+      //
+      // 左栏读 文案\ 下的真实 md（Host /copy-list），中栏可读可编、
+      // 工具条 9 个按钮全部落地。右栏助手沿用 BoardAssistant，一行没动。
+      //
+      // 三条与素材库一致的底线（照抄 t3 契约 §4.3，破坏会毁全库）：
+      //   1. 磁盘只存 md 原文，编辑器是 contenteditable + 纯文本，
+      //      **绝不做 md↔HTML 转换**（会毁掉全库搜索、复制全文与既有文件）
+      //   2. 格式按钮往纯文本里插 markdown 标记（**粗** / ## / - / >），不是富文本
+      //   3. 粘贴一律降级为纯文本
+
+      /** 状态值 → 显示文案的键。Host 的副本只回中文值，这里映射一次。 */
+      const COPY_STATUS_KEY = {
+        '草稿': 'copyStatusDraft',
+        '进行中': 'copyStatusDoing',
+        '待发布': 'copyStatusReady',
+        '已发布': 'copyStatusDone',
+        '归档': 'copyStatusArchived',
+      }
+
+      /** 把正文按行拆成可渲染的块：只认 h2 / quote / p，其余原样当段落。 */
+      function copyBlocksOf(text) {
+        const out = []
+        const rows = String(text).replaceAll('\r\n', '\n').split('\n')
+        for (const row of rows) {
+          const line = row.trimEnd()
+          if (line.trim() === '') continue
+          if (/^\s{0,3}#{1,2}\s+/.test(line)) {
+            out.push({ t: 'h2', text: line.replace(/^\s{0,3}#{1,2}\s+/, '') })
+            continue
+          }
+          if (/^\s{0,3}>\s?/.test(line)) {
+            out.push({ t: 'quote', text: line.replace(/^\s{0,3}>\s?/, '') })
+            continue
+          }
+          out.push({ t: 'p', text: line })
+        }
+        return out
+      }
+
+      /**
+       * 数正文字数：与 Host 侧 copy-desk 的算法保持一致（非空白字符）。
+       *
+       * markdown 标记符号不计入 —— 用户看到的「# 标题」是 2 个字，不是 3 个。
+       */
+      function copyWordCount(text) {
+        let body = String(text)
+        if (body.startsWith('---')) {
+          const end = body.indexOf('\n---', 3)
+          if (end >= 0) body = body.slice(end + 4)
+        }
+        const plain = body
+          .replaceAll('\r\n', '\n')
+          .split('\n')
+          .map((line) => line
+            .replace(/^\s{0,3}#{1,6}\s+/, '')
+            .replace(/^\s{0,3}>\s?/, '')
+            .replace(/^\s{0,3}[-*+]\s+\[[ xX]\]\s+/, '')
+            .replace(/^\s{0,3}[-*+]\s+/, '')
+            .replace(/^\s{0,3}\d+\.\s+/, '')
+            .replace(/^\s{0,3}([-*_]){3,}\s*$/, ''))
+          .join('\n')
+          .replace(/\*\*|__|`|~~/g, '')
+          .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+          .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+        return plain.replace(/\s+/g, '').length
+      }
+
+      /** 相对时间：刚刚 / N 分钟前 / N 小时前 / N 天前 / 日期。左栏 meta 行用。 */
+      function stampOf(mtime) {
+        if (typeof mtime !== 'number' || !isFinite(mtime) || mtime <= 0) return ''
+        const diff = Date.now() - mtime
+        if (diff < 60 * 1000) return '刚刚'
+        if (diff < 60 * 60 * 1000) return Math.floor(diff / 60000) + ' 分钟前'
+        if (diff < 24 * 60 * 60 * 1000) return Math.floor(diff / 3600000) + ' 小时前'
+        if (diff < 7 * 24 * 60 * 60 * 1000) return Math.floor(diff / 86400000) + ' 天前'
+        const d = new Date(mtime)
+        return (d.getMonth() + 1) + ' 月 ' + d.getDate() + ' 日'
+      }
+
+      // 左栏：搜索 + 按状态分组 + 真实稿件
+      function CopyList(props) {
+        const t = props.t
+        const docs = Array.isArray(props.docs) ? props.docs : []
+        const statuses = Array.isArray(props.statuses) ? props.statuses : []
+        const query = props.query
+        const setQuery = props.onQuery
+        const activePath = props.activePath
+        const loading = props.loading === true
+        const exists = props.exists === true
+
+        // 按状态分组；空组不显示。搜索命中时同样按状态归组，不另开一套外观。
+        const groups = statuses
+          .map((status) => ({
+            status,
+            label: t(COPY_STATUS_KEY[status] || 'copyStatusDraft'),
+            items: docs.filter((doc) => doc.status === status),
+          }))
+          .filter((group) => group.items.length > 0)
+
+        return h(
+          'div',
+          { className: 'cb-list' },
+          h(
+            'div',
+            { className: 'cb-search' },
+            h(CbIcon, { name: 'search', small: true }),
+            h('input', {
+              className: 'cb-search-field',
+              type: 'text',
+              value: query,
+              placeholder: t('copySearch'),
+              onChange: (event) => setQuery(event.target.value),
+            }),
+          ),
+          h(
+            'div',
+            { className: 'cb-list-scroll' },
+            loading && docs.length === 0 ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList')) : null,
+            !loading && !exists
+              ? h(
+                  'div',
+                  { className: 'cb-list-empty' },
+                  h('div', { className: 'cb-list-empty-t' }, t('copyEmptyDir')),
+                  h('div', { className: 'cb-list-empty-s' }, t('copyEmptyDirSub')),
+                )
+              : null,
+            !loading && exists && docs.length === 0
+              ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList'))
+              : null,
+            !loading && exists && docs.length > 0 && groups.length === 0
+              ? h('div', { className: 'cb-list-hint' }, t('copyNoMatch'))
+              : null,
+            groups.map((group) =>
+              h(
+                'div',
+                { key: group.status },
+                h(
+                  'div',
+                  { className: 'cb-list-group' },
+                  h('span', null, group.label),
+                  h('span', { className: 'cb-list-n' }, String(group.items.length)),
+                ),
+                group.items.map((doc) =>
+                  h(
+                    'div',
+                    {
+                      key: doc.path,
+                      className: 'cb-list-item',
+                      'data-active': doc.path === activePath,
+                      role: 'button',
+                      tabIndex: 0,
+                      title: doc.title,
+                      onClick: () => props.onPick(doc.path),
+                      onKeyDown: (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          props.onPick(doc.path)
+                        }
+                      },
+                    },
+                    h(CbIcon, { name: 'doc', small: true, className: 'cb-list-doc' }),
+                    h(
+                      'div',
+                      { className: 'cb-list-t' },
+                      h('b', null, doc.title !== '' ? doc.title : t('copyUntitled')),
+                      h('small', null, doc.words + ' ' + t('copyWordUnitShort') + ' · ' + stampOf(doc.mtime)),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        )
+      }
+
+      // 中栏：标题 / 元信息 / 工具条 / 正文 / 底部状态
+      //
+      // 工具条从「9 个装饰按钮」变成真按钮：
+      //   格式组（粗体 / H2 / 列表 / 引用）往纯文本插 markdown 标记；
+      //   插入图片给出图片语法；
+      //   改写 / 压缩把选中文字（没选就整篇）发给右栏助手；
+      //   复制公众号格式做本地转换后进剪贴板。
+      function CopyToolbar(props) {
+        const t = props.t
+        const disabled = props.disabled === true
+        const mode = props.mode
+        const onFormat = props.onFormat
+        const onAssist = props.onAssist
+        const onCopyMp = props.onCopyMp
+        /* AI 请求进行中：两个 AI 按钮禁用，避免连点把同一条请求发两次 */
+        const aiBusy = props.aiBusy === true
+        const fmt = (kind, label, icon) =>
+          h(
+            'button',
+            {
+              key: kind,
+              type: 'button',
+              className: 'cb-tb',
+              title: label,
+              'aria-label': label,
+              disabled: disabled || mode !== 'edit',
+              onClick: () => onFormat(kind),
+            },
+            icon ? h(CbIcon, { name: icon, small: true }) : label,
+          )
+        return h(
+          'div',
+          { className: 'cb-toolbar' },
+          fmt('bold', t('copyBold'), 'bold'),
+          fmt('h2', 'H2', null),
+          fmt('list', t('copyList'), 'list'),
+          fmt('quote', t('copyQuote'), 'quote'),
+          fmt('image', t('copyImage'), 'image'),
+          h('i', { className: 'cb-tb-sep' }),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'cb-tb',
+              title: t('copyTbRewrite'),
+              disabled: disabled || aiBusy,
+              onClick: () => onAssist('rewrite'),
+            },
+            h(CbIcon, { name: 'sparkle', small: true }),
+            t('copyTbRewrite'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'cb-tb',
+              title: t('copyTbCompress'),
+              disabled: disabled || aiBusy,
+              onClick: () => onAssist('compress'),
+            },
+            t('copyTbCompress'),
+          ),
+          aiBusy ? h('span', { className: 'cb-ai-busy' }, t('copyAiWorking')) : null,
+          h('i', { className: 'cb-tb-sep' }),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'cb-tb',
+              title: t('copyTbCopyMp'),
+              disabled: disabled,
+              onClick: onCopyMp,
+            },
+            t('copyTbCopyMp'),
+          ),
+        )
+      }
+
+      function CopyDoc(props) {
+        const t = props.t
+        const doc = props.doc
+        const meta = props.meta
+        const mode = props.mode
+
+        // 没选稿件：给空状态，别显示假内容
+        if (!doc) {
+          return h(
+            'div',
+            { className: 'cb-doc' },
+            h(
+              'div',
+              { className: 'cb-empty' },
+              h('div', { className: 'cb-empty-icon' }, '✎'),
+              h('h2', { className: 'cb-empty-title' }, t('copyEmptyList')),
+              h('div', { className: 'cb-empty-sub' }, t('copyEmptyDirSub')),
+              h(
+                'button',
+                { type: 'button', className: 'cb-empty-btn', onClick: props.onCreate },
+                t('copyNewDraft'),
+              ),
+            ),
+          )
+        }
+
+        const blocks = copyBlocksOf(doc.text)
+        const words = copyWordCount(doc.text)
+        const statusKey = COPY_STATUS_KEY[meta.status] || 'copyStatusDraft'
+
+        return h(
+          'div',
+          { className: 'cb-doc' },
+          h(
+            'div',
+            { className: 'cb-doc-head' },
+            h('h1', { className: 'cb-doc-title' }, doc.title !== '' ? doc.title : t('copyUntitled')),
+            h(
+              'div',
+              { className: 'cb-doc-meta' },
+              h('span', { className: 'cb-pill' }, t(statusKey)),
+              h(
+                'span',
+                { className: 'cb-pill cb-pill-grey', title: meta.hasMeta ? doc.path : t('copyNoMetaHint') },
+                meta.hasMeta ? doc.path : t('copyNoMetaHint'),
+              ),
+              h('i', { className: 'cb-dot' }),
+              h('span', null, words + ' ' + t('copyWordUnit')),
+              h('i', { className: 'cb-dot' }),
+              h('span', null, t('copyMinutesPrefix') + Math.max(1, Math.round(words / 350)) + t('copyMinutesUnit')),
+              h('span', { className: 'cb-dn-spacer' }),
+              // 阅读 / 编辑：与素材库同一套观感
+              h(
+                'div',
+                { className: 'vp-mode' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-modebtn',
+                    'data-active': mode === 'read',
+                    onClick: () => props.onMode('read'),
+                  },
+                  t('copyRead'),
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-modebtn',
+                    'data-active': mode === 'edit',
+                    disabled: doc.readOnly === true,
+                    onClick: () => props.onMode('edit'),
+                  },
+                  t('copyEdit'),
+                ),
+              ),
+            ),
+            h(CopyToolbar, {
+              t,
+              mode,
+              disabled: props.disabled === true,
+              aiBusy: props.aiBusy === true,
+              onFormat: props.onFormat,
+              onAssist: props.onAssist,
+              onCopyMp: props.onCopyMp,
+            }),
+          ),
+          mode === 'edit'
+            ? h('div', { className: 'cb-edit-wrap' }, props.editor)
+            : h(
+                'div',
+                { className: 'cb-prose' },
+                blocks.map((block, index) => {
+                  if (block.t === 'h2') return h('h2', { key: index }, block.text)
+                  if (block.t === 'quote') return h('p', { key: index, className: 'cb-quote' }, block.text)
+                  return h('p', { key: index }, block.text)
+                }),
+              ),
+          h(
+            'div',
+            { className: 'cb-doc-foot' },
+            h('span', null, h('b', null, String(words)), ' ' + t('copyWordUnit')),
+            h('span', null, t('copyParaUnit') + ' ', h('b', null, String(blocks.length))),
+            h(
+              'div',
+              { className: 'cb-foot-right' },
+              props.error !== ''
+                ? h('span', { className: 'cb-foot-err' }, props.error)
+                : h(CbIcon, { name: 'checkCircle', small: true }),
+              h('span', null, props.saveState === 'saving'
+                ? t('copySaving')
+                : props.dirty
+                  ? t('copyDirty')
+                  : t('copySaved')),
+            ),
+          ),
+        )
+      }
+
+      // 右栏：写作助手（只此一块）
+      function CopyBoard(props) {
+        const t = props.t
+        const root = typeof props.root === 'string' ? props.root : ''
+
+        const [docs, setDocs] = useState([])
+        const [statuses, setStatuses] = useState([])
+        const [exists, setExists] = useState(false)
+        const [loading, setLoading] = useState(true)
+        const [query, setQuery] = useState('')
+        const [activePath, setActivePath] = useState('')
+        const [doc, setDoc] = useState(null)
+        const [draft, setDraft] = useState('')
+        const [mode, setMode] = useState('read')
+        const [saveState, setSaveState] = useState('idle')
+        const [error, setError] = useState('')
+        const [notice, setNotice] = useState('')
+        /* AI 请求进行中：按钮转圈、防止连点发两次 */
+        const [aiBusy, setAiBusy] = useState(false)
+
+        const editorRef = useRef(null)
+        const composing = useRef(false)
+        const noticeTimer = useRef(null)
+        const saveTimer = useRef(null)
+
+        const flash = (text) => {
+          setNotice(text)
+          if (noticeTimer.current) clearTimeout(noticeTimer.current)
+          noticeTimer.current = setTimeout(() => {
+            noticeTimer.current = null
+            setNotice('')
+          }, 1800)
+        }
+
+        /** 把当前打开的稿件路径报给顶栏（「打开文件夹」用）。 */
+        useEffect(() => {
+          if (typeof props.onFocusPath !== 'function') return
+          props.onFocusPath(activePath)
+        }, [activePath, props.onFocusPath])
+
+        // 拉清单：换库根、改过稿、发给助手之后都要重拉（字数与状态会变）
+        const reload = async () => {
+          if (root === '') {
+            setDocs([])
+            setExists(false)
+            setLoading(false)
+            return
+          }
+          setLoading(true)
+          try {
+            const data = await vaultApiGet('/copy-list')
+            setDocs(Array.isArray(data.docs) ? data.docs : [])
+            setStatuses(Array.isArray(data.statuses) ? data.statuses : [])
+            setExists(data.exists === true)
+            setError('')
+          } catch (err) {
+            setDocs([])
+            setExists(false)
+            setError(t('copyLoadFailed') + messageOf(err))
+          } finally {
+            setLoading(false)
+          }
+        }
+
+        useEffect(() => {
+          setActivePath('')
+          setDoc(null)
+          setDraft('')
+          setMode('read')
+          setQuery('')
+          void reload()
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [root])
+
+        useEffect(
+          () => () => {
+            if (noticeTimer.current) clearTimeout(noticeTimer.current)
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+          },
+          [],
+        )
+
+        // 打开一篇稿件
+        const pick = async (path) => {
+          if (path === activePath && doc) return
+          setError('')
+          setActivePath(path)
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            const row = docs.find((item) => item.path === path)
+            setDoc({
+              path,
+              title: row ? row.title : vaultTitleOf(path),
+              text,
+              mtime: data.mtime,
+              readOnly: data.readOnly === true,
+            })
+            setDraft(text)
+            setSaveState('idle')
+            // 只读格式不允许进编辑态
+            if (data.readOnly === true) setMode('read')
+          } catch (err) {
+            setDoc(null)
+            setError(t('copyLoadFailed') + messageOf(err))
+          }
+        }
+
+        // 保存：磁盘只写 md 原文，带 expectedMtime 防冲突
+        const save = async (silent) => {
+          if (!doc) return
+          setSaveState('saving')
+          try {
+            const saved = await vaultApiPost('/file', { path: doc.path, content: draft, expectedMtime: doc.mtime }, 'PUT')
+            setDoc({ ...doc, text: draft, mtime: saved.mtime })
+            setSaveState('saved')
+            if (!silent) flash(t('copySaved'))
+            void reload()
+          } catch (err) {
+            setSaveState('error')
+            setError(t('copySaveFailed') + messageOf(err))
+          }
+        }
+
+        // 有改动就等 1.2 秒自动存（与素材库同一节奏）
+        useEffect(() => {
+          if (!doc || doc.text === draft) return undefined
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          saveTimer.current = setTimeout(() => {
+            saveTimer.current = null
+            void save(true)
+          }, 1200)
+          return () => {
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+          }
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [draft, doc])
+
+        // contenteditable ↔ draft：与素材库同一套（真实 \n + pre-wrap，不产生富文本节点）
+        const editorToText = (node) => {
+          if (!node) return ''
+          let out = ''
+          const walk = (parent) => {
+            for (const child of parent.childNodes) {
+              if (child.nodeType === 3) out += child.nodeValue
+              else if (child.nodeName === 'BR') out += '\n'
+              else if (child.nodeName === 'DIV' || child.nodeName === 'P') {
+                if (out !== '' && !out.endsWith('\n')) out += '\n'
+                walk(child)
+                if (!out.endsWith('\n')) out += '\n'
+              } else walk(child)
+            }
+          }
+          walk(node)
+          return out.replaceAll('\u00a0', ' ')
+        }
+
+        const textToEditor = (node, text) => {
+          if (!node) return
+          node.textContent = String(text).replaceAll('\u00a0', ' ')
+        }
+
+        /** 读选区，换算成 draft 的 [start,end) 偏移。 */
+        const readSelection = () => {
+          const node = editorRef.current
+          if (!node) return null
+          const selection = typeof window !== 'undefined' ? window.getSelection() : null
+          if (!selection || selection.rangeCount === 0) return null
+          const range = selection.getRangeAt(0)
+          if (!node.contains(range.startContainer) || !node.contains(range.endContainer)) return null
+          const probe = document.createRange()
+          probe.setStart(node, 0)
+          probe.setEnd(range.startContainer, range.startOffset)
+          const start = probe.toString().replaceAll('\u00a0', ' ').length
+          probe.setEnd(range.endContainer, range.endOffset)
+          const end = probe.toString().replaceAll('\u00a0', ' ').length
+          return { start: Math.min(start, end), end: Math.max(start, end) }
+        }
+
+        const setCaret = (node, offset) => {
+          const selection = typeof window !== 'undefined' ? window.getSelection() : null
+          if (!selection || !node) return
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+          let remaining = Math.max(0, offset)
+          let target = null
+          let at = 0
+          while (walker.nextNode()) {
+            const current = walker.currentNode
+            const length = current.nodeValue.replaceAll('\u00a0', ' ').length
+            if (remaining <= length) {
+              target = current
+              at = remaining
+              remaining = 0
+              break
+            }
+            remaining -= length
+          }
+          const range = document.createRange()
+          if (target) range.setStart(target, Math.min(at, target.nodeValue.length))
+          else {
+            range.selectNodeContents(node)
+            range.collapse(false)
+          }
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+
+        /**
+         * 格式按钮：往纯文本里插 markdown 标记。
+         * 绝不生成 HTML —— 磁盘只存 md，编辑器是纯文本（契约底线 2）。
+         */
+        const applyFormat = (kind) => {
+          if (!doc) return
+          const picked = readSelection() || { start: 0, end: 0 }
+          const start = picked.start
+          const end = picked.end
+          const value = draft
+          const selected = value.slice(start, end)
+          const lineStart = value.lastIndexOf('\n', start - 1) + 1
+          const lineHead = value.slice(lineStart)
+          let next = value
+          let caret = start
+          if (kind === 'bold') {
+            const text = selected !== '' ? selected : '加粗文字'
+            next = value.slice(0, start) + '**' + text + '**' + value.slice(end)
+            caret = start + 2 + text.length
+          } else if (kind === 'h2') {
+            // 已经有 ## 就去掉（第二次点等于取消）
+            if (/^##\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(3)
+              caret = Math.max(lineStart, start - 3)
+            } else {
+              next = value.slice(0, lineStart) + '## ' + lineHead
+              caret = start + 3
+            }
+          } else if (kind === 'list') {
+            if (/^-\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(2)
+              caret = Math.max(lineStart, start - 2)
+            } else {
+              next = value.slice(0, lineStart) + '- ' + lineHead
+              caret = start + 2
+            }
+          } else if (kind === 'quote') {
+            if (/^>\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(2)
+              caret = Math.max(lineStart, start - 2)
+            } else {
+              next = value.slice(0, lineStart) + '> ' + lineHead
+              caret = start + 2
+            }
+          } else if (kind === 'image') {
+            const text = '![](' + (selected !== '' ? selected : '图片路径') + ')'
+            next = value.slice(0, start) + text + value.slice(end)
+            caret = start + text.length
+          }
+          setDraft(next)
+          requestAnimationFrame(() => {
+            if (!editorRef.current) return
+            textToEditor(editorRef.current, next)
+            editorRef.current.focus()
+            setCaret(editorRef.current, caret)
+          })
+        }
+
+        /**
+         * 改写 / 压缩：发出去 → 等这一轮的回复 → 把结果替换回正文。
+         *
+         * 这是「改写」该有的行为：点了之后正文真的变了，而不是只往会话里塞一条消息。
+         * 三条规矩：
+         *   ① 有选中就只替换选中那段；没选中才动整篇
+         *   ② 整篇太长时先问一句（20,835 字的稿子无脑发一次就是两万多字上下文）
+         *   ③ 助手没吐出正文（被中断 / 只调工具）就如实提示，不改文档
+         *
+         * 发消息与等结果都走 assistantApi.askOnce —— 会话还是那个工作台会话，
+         * 右栏照样能看到这次请求，符合「任务出现在会话里」的预期。
+         */
+        const sendToAssist = async (how) => {
+          if (!doc) return
+          if (root === '') {
+            flash(t('assistNeedWorkspace'))
+            return
+          }
+          const picked = readSelection()
+          const hasSelection = picked && picked.end > picked.start
+          const body = hasSelection ? draft.slice(picked.start, picked.end) : draft
+          if (body.trim() === '') {
+            flash(t('copyNoSelection'))
+            return
+          }
+          /* ② 整篇且很长：先确认，避免一次塞两万字进去 */
+          if (!hasSelection && body.length > 3000) {
+            const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm(t('copyConfirmWhole').replace('{n}', String(body.length)))
+              : true
+            if (!ok) return
+          }
+          const head = how === 'rewrite' ? t('copyRewritePrompt') : t('copyCompressPrompt')
+          const message = head + '\n\n' + body
+          setAiBusy(true)
+          try {
+            const api = assistantApi(props.ctx)
+            const got = await api.askOnce(root, '', message)
+            await api.saveBinding(root, got.id)
+            /* ③ 没正文就如实说 */
+            if (got.empty || got.text.trim() === '') {
+              flash(t('copyAiEmpty'))
+              return
+            }
+            /* ① 替换：有选中替换选中段，没选中替换整篇 */
+            const start = hasSelection ? picked.start : 0
+            const end = hasSelection ? picked.end : draft.length
+            const next = draft.slice(0, start) + got.text + draft.slice(end)
+            setDraft(next)
+            requestAnimationFrame(() => {
+              if (!editorRef.current) return
+              textToEditor(editorRef.current, next)
+              setCaret(editorRef.current, start + got.text.length)
+            })
+            flash(t('copyAiDone'))
+          } catch (err) {
+            const raw = messageOf(err)
+            if (raw === 'ai-timeout') {
+              flash(t('copyAiTimeout'))
+            } else {
+              setError(raw === 'no-workspace' ? t('assistNeedWorkspace') : t('copyAiFailed') + raw)
+            }
+          } finally {
+            setAiBusy(false)
+          }
+        }
+
+        /**
+         * 复制公众号格式：本地做一次轻量转换，不联网、不改文件。
+         *
+         * 公众号编辑器吃 HTML，所以这里把 md 的几种常见标记换成最朴素的行内标签，
+         * 粘过去能保住段落、标题、加粗、引用，不引入任何样式类。
+         */
+        const copyMp = async () => {
+          if (!doc) return
+          const blocks = copyBlocksOf(draft)
+          const html = blocks
+            .map((block) => {
+              const inline = block.text
+                .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`(.+?)`/g, '<code>$1</code>')
+              if (block.t === 'h2') return '<h2>' + inline + '</h2>'
+              if (block.t === 'quote') return '<blockquote>' + inline + '</blockquote>'
+              return '<p>' + inline + '</p>'
+            })
+            .join('\n')
+          // 同时给 HTML 和纯文本两份：公众号编辑器读 HTML，记事本之类读纯文本
+          let ok = false
+          try {
+            if (typeof ClipboardItem !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.write === 'function') {
+              await navigator.clipboard.write([
+                new ClipboardItem({
+                  'text/html': new Blob([html], { type: 'text/html' }),
+                  'text/plain': new Blob([draft], { type: 'text/plain' }),
+                }),
+              ])
+              ok = true
+            }
+          } catch {
+            /* 退回纯文本 */
+          }
+          if (!ok) ok = await writeClipboard(draft)
+          flash(ok ? t('copyCopiedMp') : t('copyCopyFailed'))
+        }
+
+        // 新建稿件：写进 文案\，命名不撞车
+        const createDraft = async () => {
+          if (root === '') {
+            flash(t('assistNeedWorkspace'))
+            return
+          }
+          const base = t('copyNewDraftName')
+          let name = base
+          let n = 2
+          const taken = new Set(docs.map((item) => item.name))
+          while (taken.has(name + '.md')) {
+            name = base + ' ' + n
+            n += 1
+          }
+          const path = '文案/' + name + '.md'
+          try {
+            await vaultApiPost('/newfile', { path })
+            await vaultApiPost('/file', { path, content: '# ' + name + '\n\n' }, 'PUT')
+            await reload()
+            await pick(path)
+            setMode('edit')
+          } catch (err) {
+            setError(t('copySaveFailed') + messageOf(err))
+          }
+        }
+
+        // 搜索过滤：标题 + 文件名，大小写不敏感
+        const q = query.trim().toLowerCase()
+        const filtered = q === ''
+          ? docs
+          : docs.filter((item) =>
+              (item.title + ' ' + item.name).toLowerCase().includes(q))
+
+        const meta = doc
+          ? docs.find((item) => item.path === doc.path) || { status: '草稿', hasMeta: false, statusFromFile: false }
+          : { status: '草稿', hasMeta: false }
+
+        const dirty = !!doc && doc.text !== draft
+
+        return h(
+          'div',
+          { className: 'wb-pane cb-root' },
+          h(CopyList, {
+            t,
+            docs: filtered,
+            statuses: statuses.length > 0 ? statuses : ['草稿', '进行中', '待发布', '已发布', '归档'],
+            query,
+            onQuery: setQuery,
+            activePath,
+            loading,
+            exists,
+            onPick: (path) => void pick(path),
+          }),
+          h(CopyDoc, {
+            t,
+            doc,
+            meta,
+            mode,
+            dirty,
+            saveState,
+            error,
+            disabled: false,
+            onMode: (next) => setMode(next),
+            onFormat: applyFormat,
+            onAssist: (how) => void sendToAssist(how),
+            aiBusy,
+            onCopyMp: () => void copyMp(),
+            onCreate: () => void createDraft(),
+            editor: h('div', {
+              key: 'cb-edit-surface',
+              ref: (node) => {
+                editorRef.current = node
+                if (!node) return
+                if (composing.current) return
+                if (node.textContent === draft) return
+                textToEditor(node, draft)
+              },
+              className: 'cb-editor-surface',
+              contentEditable: true,
+              suppressContentEditableWarning: true,
+              spellCheck: false,
+              role: 'textbox',
+              'aria-multiline': true,
+              onCompositionStart: () => {
+                composing.current = true
+              },
+              onCompositionEnd: (event) => {
+                composing.current = false
+                setDraft(editorToText(event.currentTarget))
+              },
+              onInput: (event) => {
+                if (composing.current) return
+                setDraft(editorToText(event.currentTarget))
+              },
+              onKeyDown: (event) => {
+                if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
+                  event.preventDefault()
+                  void save(false)
+                }
+              },
+              // 粘贴一律降级为纯文本：md 文件里不能混进 HTML
+              onPaste: (event) => {
+                event.preventDefault()
+                const text = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
+                if (text === '') return
+                document.execCommand('insertText', false, text)
+              },
+            }),
+          }),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'cb-newdraft',
+              title: t('copyNewDraft'),
+              onClick: () => void createDraft(),
+            },
+            '＋',
+          ),
+          notice !== '' ? h('div', { className: 'cb-toast' }, notice) : null,
+          h(BoardAssistant, {
+            t,
+            ctx: props.ctx,
+            root,
+            titleKey: 'copyAssistant',
+            placeholderKey: 'copyAssistantInput',
+            tasks: [],
+          }),
+        )
+      }
+      // ── 写作台：接真实数据（2026-11-17）────────────────────────────────
+      //
+      // 存法照抄需求定案 §3.4：写作\项目名\ 下
+      //   项目.md      只放卷/章/场景结构与 order
+      //   正文\0001-*.md   纯正文，一章一文件
+      //   人物\ 地点\ 情节线\   设定
+      //
+      // 三条底线（同文案台 / 素材库）：
+      //   1. 磁盘只存 md 原文，编辑器是 contenteditable + 纯文本，绝不 md↔HTML 转换
+      //   2. 格式按钮往纯文本插 markdown 标记（** / ## / > / -），不是富文本
+      //   3. 粘贴一律降级为纯文本
+      //
+      // 中栏工具条 7 个按钮全部落地：
+      //   正文 / H2 / 引用  → 插 markdown 标记
+      //   续写 / 对话        → 把上下文发给右栏助手
+      //   大纲               → 把卷章结构汇总发给右栏助手
+      //   时间线             → 打开卷章结构面板（只读，来自 项目.md）
+
+      // 图标：纯 SVG path（24×24、stroke 1.6、fill none），不依赖图标字体或外部资源
+      const WBG_ICONS = {
+        search: ['M10.5 3.5a7 7 0 1 0 .01 14.01A7 7 0 0 0 10.5 3.5Z', 'm20 20-4.2-4.2'],
+        caretDown: ['m6 9 6 6 6-6'],
+        caretRight: ['m9 6 6 6-6 6'],
+        people: ['M12 12.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z', 'M5 20a7 7 0 0 1 14 0'],
+        map: ['m9 4 6 2 5-2v14l-5 2-6-2-5 2V6Z', 'M9 4v14M15 6v14'],
+        flag: ['M6 21V4h9l-1.5 3.5L15 11H6'],
+        pen: ['M4 20h4L18.5 9.5a2.8 2.8 0 0 0-4-4L4 16Z', 'm14 6 4 4'],
+        quote: ['M9 7H5v5h4v5H5', 'M19 7h-4v5h4v5h-4'],
+        star: ['M12 3v5M12 16v5M4.5 12h5M14.5 12h5', 'm7 7 2.5 2.5M14.5 14.5 17 17M17 7l-2.5 2.5M9.5 14.5 7 17'],
+        grid: ['M4 5h16v14H4Z', 'M4 10h16M10 5v14'],
+        clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M12 8v5l3.5 2'],
+        checkCircle: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0', 'm8 12.5 2.6 2.6L16 9.5'],
+        arrowUp: ['M12 19V5M6 11l6-6 6 6'],
+      }
+
+      function WbgIcon(props) {
+        let cls = props.small ? 'wbg-ic wbg-ic-sm' : 'wbg-ic'
+        if (typeof props.className === 'string' && props.className !== '') cls += ' ' + props.className
+        return h(
+          'svg',
+          { className: cls, viewBox: '0 0 24 24', 'aria-hidden': 'true', focusable: 'false' },
+          (WBG_ICONS[props.name] || []).map((d, index) => h('path', { key: index, d })),
+        )
+      }
+      /** 把正文按行拆成块：h2 / quote 认前面，其余当段落。写作台多认一个「场景分隔」。 */
+      function writeBlocksOf(text) {
+        const out = []
+        const rows = String(text).replaceAll('\r\n', '\n').split('\n')
+        for (const row of rows) {
+          const line = row.trimEnd()
+          if (line.trim() === '') continue
+          if (/^\s{0,3}#{1,2}\s+/.test(line)) {
+            out.push({ t: 'h2', text: line.replace(/^\s{0,3}#{1,2}\s+/, '') })
+            continue
+          }
+          if (/^\s{0,3}>\s?/.test(line)) {
+            out.push({ t: 'quote', text: line.replace(/^\s{0,3}>\s?/, '') })
+            continue
+          }
+          // 三个连续分隔线当场景切换
+          if (/^\s{0,3}([-*_])\1{2,}\s*$/.test(line)) {
+            out.push({ t: 'sep', text: '' })
+            continue
+          }
+          out.push({ t: 'p', text: line })
+        }
+        return out
+      }
+
+      /** 正文字数：与 Host 侧 write-desk 同一口径（剥掉 markdown 标记）。 */
+      function writeWordCount(text) {
+        return copyWordCount(text)
+      }
+
+      // 左栏：搜索 + 项目 / 卷章树 / 设定
+      function WritingList(props) {
+        const t = props.t
+        const projects = Array.isArray(props.projects) ? props.projects : []
+        const project = props.project
+        const query = props.query
+        const exists = props.exists === true
+        const loading = props.loading === true
+        const openVolumes = props.openVolumes || {}
+
+        const volumes = project ? (Array.isArray(project.volumes) ? project.volumes : []) : []
+        const settings = project && project.settings ? project.settings : {}
+
+        return h(
+          'div',
+          { className: 'wbg-list' },
+          h(
+            'div',
+            { className: 'wbg-search' },
+            h(WbgIcon, { name: 'search', small: true }),
+            h('input', {
+              className: 'wbg-search-field',
+              type: 'text',
+              value: query,
+              placeholder: t('writeSearch'),
+              onChange: (event) => props.onQuery(event.target.value),
+            }),
+          ),
+          h(
+            'div',
+            { className: 'wbg-scroll' },
+            loading ? h('div', { className: 'wbg-hint' }, t('writeLoading')) : null,
+            !loading && !exists
+              ? h(
+                  'div',
+                  { className: 'wbg-empty' },
+                  h('div', { className: 'wbg-empty-t' }, t('writeNoDir')),
+                  h('div', { className: 'wbg-empty-s' }, t('writeNoDirSub')),
+                  h('button', { type: 'button', className: 'wbg-empty-btn', onClick: props.onCreate }, t('writeNewProject')),
+                )
+              : null,
+            !loading && exists && projects.length === 0
+              ? h(
+                  'div',
+                  { className: 'wbg-empty' },
+                  h('div', { className: 'wbg-empty-t' }, t('writeNoProject')),
+                  h('button', { type: 'button', className: 'wbg-empty-btn', onClick: props.onCreate }, t('writeNewProject')),
+                )
+              : null,
+            // 项目选择（多个项目时）
+            projects.length > 1
+              ? h(
+                  'div',
+                  { className: 'wbg-projs' },
+                  h('div', { className: 'wbg-projs-k' }, t('writeProjects')),
+                  projects.map((item) =>
+                    h(
+                      'button',
+                      {
+                        key: item.path,
+                        type: 'button',
+                        className: 'wbg-proj',
+                        'data-active': project && project.path === item.path,
+                        onClick: () => props.onProject(item.path),
+                        title: item.path,
+                      },
+                      h('span', { className: 'wbg-proj-t' }, item.name),
+                      h('span', { className: 'wbg-proj-n' }, String(item.scenes)),
+                    ),
+                  ),
+                )
+              : null,
+            // 卷 → 章 → 场景
+            volumes.map((vol, vi) => {
+              const open = openVolumes[vi] !== false
+              return h(
+                'div',
+                { key: vi },
+                h(
+                  'div',
+                  {
+                    className: 'wbg-vol',
+                    'data-open': open,
+                    role: 'button',
+                    tabIndex: 0,
+                    onClick: () => props.onToggleVolume(vi),
+                    onKeyDown: (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        props.onToggleVolume(vi)
+                      }
+                    },
+                  },
+                  h(WbgIcon, { name: open ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                  h('span', { className: 'wbg-vol-t' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
+                  h('span', { className: 'wbg-vol-n' }, String((vol.chapters || []).length)),
+                ),
+                open
+                  ? (vol.chapters || []).map((ch, ci) =>
+                      h(
+                        'div',
+                        {
+                          key: ci,
+                          className: 'wbg-ch',
+                          'data-active': project && props.activeFile === ch.file,
+                          'data-todo': !ch.file,
+                          role: 'button',
+                          tabIndex: 0,
+                          title: ch.file ? ch.file : t('writeNoBodyYet'),
+                          onClick: () => {
+                            if (ch.file) props.onOpenChapter(ch)
+                          },
+                        },
+                        h('span', { className: 'wbg-ch-n' }, ('0' + (ci + 1)).slice(-2)),
+                        h('span', { className: 'wbg-ch-t' }, ch.title !== '' ? ch.title : t('writeUntitledChapter')),
+                        h('span', { className: 'wbg-ch-w' }, ch.file ? String(ch.words || 0) : '—'),
+                      ),
+                    )
+                  : null,
+              )
+            }),
+            // 设定：人物 / 地点 / 情节线
+            project
+              ? h('div', { className: 'wbg-sep' })
+              : null,
+            project
+              ? h(
+                  'div',
+                  { className: 'wbg-vol', 'data-open': 'true' },
+                  h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
+                  h('span', { className: 'wbg-vol-n' }, String(
+                    (settings['人物'] || []).length + (settings['地点'] || []).length + (settings['情节线'] || []).length,
+                  )),
+                )
+              : null,
+            project
+              ? ['人物', '地点', '情节线'].map((kind) =>
+                  (settings[kind] || []).length === 0
+                    ? null
+                    : h(
+                        'div',
+                        { key: kind },
+                        h('div', { className: 'wbg-setk' }, kind),
+                        settings[kind].map((row) =>
+                          h(
+                            'div',
+                            {
+                              key: row.path,
+                              className: 'wbg-set',
+                              role: 'button',
+                              tabIndex: 0,
+                              title: row.path,
+                              onClick: () => props.onOpenSetting(row),
+                            },
+                            h(WbgIcon, {
+                              name: kind === '人物' ? 'people' : kind === '地点' ? 'map' : 'flag',
+                              small: true,
+                              className: 'wbg-set-ic',
+                            }),
+                            h(
+                              'div',
+                              { className: 'wbg-set-t' },
+                              h('b', null, row.title),
+                              h('small', null, row.words + ' ' + t('writeWordUnit')),
+                            ),
+                          ),
+                        ),
+                      ),
+                )
+              : null,
+          ),
+        )
+      }
+
+// 中栏：格式工具条 —— 7 个按钮全部接上
+      function WritingToolbar(props) {
+        const t = props.t
+        const edit = props.mode === 'edit'
+        const disabled = props.disabled === true
+        /* AI 请求进行中：续写/对白禁用，避免连点 */
+        const aiBusy = props.aiBusy === true
+        const btn = (key, label, icon, onClick, opts) =>
+          h(
+            'button',
+            {
+              key,
+              type: 'button',
+              className: 'wbg-tb',
+              'data-on': opts && opts.on === true ? 'true' : 'false',
+              title: label,
+              'aria-label': label,
+              disabled: opts && opts.needEdit === true ? !edit || disabled : (disabled || (opts && opts.disabled === true)),
+              onClick,
+            },
+            icon ? h(WbgIcon, { key: 'i', name: icon, small: true }) : null,
+            h('span', { key: 'l' }, label),
+          )
+        return h(
+          'div',
+          { className: 'wbg-toolbar', role: 'toolbar' },
+          // 格式组：只在编辑态可用（阅读态没有正文可改）
+          btn('body', t('writeTbBody'), 'pen', () => props.onFormat('body'), { on: true, needEdit: true }),
+          btn('h2', 'H2', null, () => props.onFormat('h2'), { needEdit: true }),
+          btn('quote', t('writeTbQuote'), 'quote', () => props.onFormat('quote'), { needEdit: true }),
+          h('i', { className: 'wbg-tb-sep' }),
+          // 助手组：任何状态都能用
+          btn('continue', t('writeTbContinue'), 'star', () => props.onAssist('continue'), { disabled: aiBusy }),
+          btn('dialog', t('writeTbDialog'), null, () => props.onAssist('dialog'), { disabled: aiBusy }),
+          aiBusy ? h('span', { className: 'wbg-ai-busy' }, t('writeAiWorking')) : null,
+          h('i', { className: 'wbg-tb-sep' }),
+          btn('outline', t('writeTbOutline'), 'grid', () => props.onAssist('outline')),
+          btn('timeline', t('writeTbTimeline'), 'clock', () => props.onTimeline()),
+        )
+      }
+
+      // 中栏：标题 / 元信息 / 工具条 / 正文 / 底部状态
+      function WritingDoc(props) {
+        const t = props.t
+        const file = props.file
+
+        // 没打开正文：给空状态
+        if (!file) {
+          return h(
+            'div',
+            { className: 'wbg-doc' },
+            h(
+              'div',
+              { className: 'wbg-empty-doc' },
+              h('div', { className: 'wbg-empty-icon' }, '📖'),
+              h('h2', { className: 'wbg-empty-title' }, props.project ? t('writePickChapter') : t('writePickProject')),
+              h('div', { className: 'wbg-empty-sub' }, t('writePickChapterSub')),
+            ),
+          )
+        }
+
+        const blocks = writeBlocksOf(file.text)
+        const words = writeWordCount(file.text)
+
+        return h(
+          'div',
+          { className: 'wbg-doc' },
+          h(
+            'div',
+            { className: 'wbg-doc-head' },
+            h('h1', { className: 'wbg-doc-title' }, file.title),
+            h(
+              'div',
+              { className: 'wbg-doc-meta' },
+              props.project
+                ? h('span', { className: 'wbg-pill' }, props.project.title)
+                : null,
+              h('span', { className: 'wbg-pill wbg-pill-grey' }, file.name),
+              h('i', { className: 'wbg-dot' }),
+              h('span', null, words + ' ' + t('writeWordUnit')),
+              h('span', { className: 'wbg-dn-spacer' }),
+              h(
+                'div',
+                { className: 'vp-mode' },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-modebtn',
+                    'data-active': props.mode === 'read',
+                    onClick: () => props.onMode('read'),
+                  },
+                  t('writeRead'),
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-modebtn',
+                    'data-active': props.mode === 'edit',
+                    onClick: () => props.onMode('edit'),
+                  },
+                  t('writeEdit'),
+                ),
+              ),
+            ),
+            h(WritingToolbar, {
+              t,
+              mode: props.mode,
+              disabled: false,
+              aiBusy: props.aiBusy === true,
+              onFormat: props.onFormat,
+              onAssist: props.onAssist,
+              onTimeline: props.onTimeline,
+            }),
+          ),
+          props.mode === 'edit'
+            ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
+            : h(
+                'div',
+                { className: 'wbg-prose' },
+                blocks.map((block, index) => {
+                  if (block.t === 'sep') return h('div', { key: index, className: 'wbg-scene-sep' }, '◆')
+                  if (block.t === 'h2') return h('h2', { key: index }, block.text)
+                  if (block.t === 'quote') return h('p', { key: index, className: 'wbg-p-quote' }, block.text)
+                  return h('p', { key: index }, block.text)
+                }),
+              ),
+          h(
+            'div',
+            { className: 'wbg-doc-foot' },
+            h('span', null, h('b', null, String(words)), ' ' + t('writeWordUnit')),
+            h('span', null, t('writeFootParas') + ' ', h('b', null, String(blocks.filter((b) => b.t !== 'sep').length))),
+            h(
+              'div',
+              { className: 'wbg-foot-right' },
+              props.error !== ''
+                ? h('span', { className: 'wbg-foot-err' }, props.error)
+                : h(WbgIcon, { name: 'checkCircle', small: true }),
+              h('span', null, props.saveState === 'saving'
+                ? t('writeSaving')
+                : props.dirty
+                  ? t('writeDirty')
+                  : t('writeSaved')),
+            ),
+          ),
+        )
+      }
+
+      // 时间线 / 大纲面板：只读展示 项目.md 的卷章结构
+      function WritingOutline(props) {
+        const t = props.t
+        const project = props.project
+        if (!project) return null
+        return h(
+          'div',
+          { className: 'wbg-outline' },
+          h(
+            'div',
+            { className: 'wbg-outline-h' },
+            h(WbgIcon, { name: 'grid', small: true }),
+            h('span', null, t('writeTbTimeline')),
+            h('span', { className: 'wbg-dn-spacer' }),
+            h(
+              'button',
+              { type: 'button', className: 'wbg-outline-x', title: t('writeClose'), onClick: props.onClose },
+              '✕',
+            ),
+          ),
+          h(
+            'div',
+            { className: 'wbg-outline-body' },
+            (project.volumes || []).length === 0
+              ? h('div', { className: 'wbg-hint' }, t('writeNoStructure'))
+              : (project.volumes || []).map((vol, vi) =>
+                  h(
+                    'div',
+                    { key: vi, className: 'wbg-outline-vol' },
+                    h('div', { className: 'wbg-outline-vt' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
+                    (vol.chapters || []).map((ch, ci) =>
+                      h(
+                        'div',
+                        { key: ci, className: 'wbg-outline-ch' },
+                        h('span', { className: 'wbg-outline-cn' }, ('0' + (ci + 1)).slice(-2)),
+                        h('span', { className: 'wbg-outline-ct' }, ch.title !== '' ? ch.title : t('writeUntitledChapter')),
+                        h('span', { className: 'wbg-outline-cw' }, ch.file ? String(ch.words || 0) : '—'),
+                      ),
+                    ),
+                  ),
+                ),
+          ),
+        )
+      }
+
+// 右栏：写作助手（只此一块）
+      function WritingBoard(props) {
+        const t = props.t
+        const root = typeof props.root === 'string' ? props.root : ''
+
+        const [projects, setProjects] = useState([])
+        const [exists, setExists] = useState(false)
+        const [loading, setLoading] = useState(true)
+        const [query, setQuery] = useState('')
+        const [activeProject, setActiveProject] = useState('')
+        const [project, setProject] = useState(null)
+        const [activeFile, setActiveFile] = useState('')
+        const [file, setFile] = useState(null)
+        const [draft, setDraft] = useState('')
+        const [mode, setMode] = useState('read')
+        const [saveState, setSaveState] = useState('idle')
+        const [error, setError] = useState('')
+        const [notice, setNotice] = useState('')
+        const [outlineOpen, setOutlineOpen] = useState(false)
+        const [openVolumes, setOpenVolumes] = useState({})
+        /* AI 请求进行中：防止连点把同一条续写发两次 */
+        const [aiBusy, setAiBusy] = useState(false)
+        /* 新建项目的自绘输入条（不用 window.prompt：Electron 不支持） */
+        const [newProjectOpen, setNewProjectOpen] = useState(false)
+        const [projectDraft, setProjectDraft] = useState('')
+
+        const editorRef = useRef(null)
+        const composing = useRef(false)
+        const noticeTimer = useRef(null)
+        const saveTimer = useRef(null)
+
+        const flash = (text) => {
+          setNotice(text)
+          if (noticeTimer.current) clearTimeout(noticeTimer.current)
+          noticeTimer.current = setTimeout(() => {
+            noticeTimer.current = null
+            setNotice('')
+          }, 1800)
+        }
+
+        /**
+         * 把当前打开的正文/设定路径报给顶栏（「打开文件夹」用）。
+         *
+         * 用 file.path 而不是 project.path：大王要看的是「我选中的那个文件」在哪，
+         * 而一篇正文的路径比整个项目的路径更精确（能直接落到 正文\ 目录）。
+         */
+        useEffect(() => {
+          if (typeof props.onFocusPath !== 'function') return
+          props.onFocusPath(file && typeof file.path === 'string' ? file.path : '')
+        }, [file, props.onFocusPath])
+
+        // 项目清单
+        const reloadProjects = async () => {
+          if (root === '') {
+            setProjects([])
+            setExists(false)
+            setLoading(false)
+            return []
+          }
+          setLoading(true)
+          try {
+            const data = await vaultApiGet('/write-list')
+            const rows = Array.isArray(data.projects) ? data.projects : []
+            setProjects(rows)
+            setExists(data.exists === true)
+            setError('')
+            return rows
+          } catch (err) {
+            setProjects([])
+            setExists(false)
+            setError(t('writeLoadFailed') + messageOf(err))
+            return []
+          } finally {
+            setLoading(false)
+          }
+        }
+
+        // 单项目结构
+        const loadProject = async (path) => {
+          if (path === '') return
+          try {
+            const data = await vaultApiGet('/write-project?path=' + encodeURIComponent(path))
+            setProject(data)
+            setActiveProject(path)
+            setActiveFile('')
+            setFile(null)
+            setDraft('')
+            setError('')
+            // 默认展开第一卷
+            setOpenVolumes({ 0: true })
+          } catch (err) {
+            setProject(null)
+            setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
+
+        useEffect(() => {
+          setActiveProject('')
+          setProject(null)
+          setFile(null)
+          setActiveFile('')
+          setDraft('')
+          setQuery('')
+          void (async () => {
+            const rows = await reloadProjects()
+            // 只有一个项目时直接打开，省一次点击
+            if (rows.length === 1) await loadProject(rows[0].path)
+          })()
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [root])
+
+        useEffect(
+          () => () => {
+            if (noticeTimer.current) clearTimeout(noticeTimer.current)
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+          },
+          [],
+        )
+
+        // 打开一章正文
+        const openChapter = async (chapter) => {
+          if (!chapter || !chapter.file || !project) return
+          const path = project.path + '/正文/' + chapter.file
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setFile({
+              path,
+              name: chapter.file,
+              title: chapter.title !== '' ? chapter.title : chapter.file,
+              text,
+              mtime: data.mtime,
+              readOnly: data.readOnly === true,
+            })
+            setActiveFile(chapter.file)
+            setDraft(text)
+            setSaveState('idle')
+            setError('')
+            if (data.readOnly === true) setMode('read')
+          } catch (err) {
+            setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
+
+        // 打开设定文件（人物/地点/情节线）—— 同样可读可编
+        const openSetting = async (row) => {
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(row.path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setFile({
+              path: row.path,
+              name: row.name,
+              title: row.title,
+              text,
+              mtime: data.mtime,
+              readOnly: data.readOnly === true,
+            })
+            setActiveFile('')
+            setDraft(text)
+            setSaveState('idle')
+            setError('')
+          } catch (err) {
+            setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
+
+        const save = async (silent) => {
+          if (!file) return
+          setSaveState('saving')
+          try {
+            const saved = await vaultApiPost('/file', { path: file.path, content: draft, expectedMtime: file.mtime }, 'PUT')
+            setFile({ ...file, text: draft, mtime: saved.mtime })
+            setSaveState('saved')
+            if (!silent) flash(t('writeSaved'))
+            // 字数变了，项目结构要重读
+            if (activeProject !== '') void loadProject(activeProject)
+          } catch (err) {
+            setSaveState('error')
+            setError(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
+        useEffect(() => {
+          if (!file || file.text === draft) return undefined
+          if (saveTimer.current) clearTimeout(saveTimer.current)
+          saveTimer.current = setTimeout(() => {
+            saveTimer.current = null
+            void save(true)
+          }, 1200)
+          return () => {
+            if (saveTimer.current) clearTimeout(saveTimer.current)
+          }
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [draft, file])
+
+        // contenteditable ↔ draft（与素材库/文案台同一套）
+        const editorToText = (node) => {
+          if (!node) return ''
+          let out = ''
+          const walk = (parent) => {
+            for (const child of parent.childNodes) {
+              if (child.nodeType === 3) out += child.nodeValue
+              else if (child.nodeName === 'BR') out += '\n'
+              else if (child.nodeName === 'DIV' || child.nodeName === 'P') {
+                if (out !== '' && !out.endsWith('\n')) out += '\n'
+                walk(child)
+                if (!out.endsWith('\n')) out += '\n'
+              } else walk(child)
+            }
+          }
+          walk(node)
+          return out.replaceAll('\u00a0', ' ')
+        }
+
+        const textToEditor = (node, text) => {
+          if (!node) return
+          node.textContent = String(text).replaceAll('\u00a0', ' ')
+        }
+
+        const readSelection = () => {
+          const node = editorRef.current
+          if (!node) return null
+          const selection = typeof window !== 'undefined' ? window.getSelection() : null
+          if (!selection || selection.rangeCount === 0) return null
+          const range = selection.getRangeAt(0)
+          if (!node.contains(range.startContainer) || !node.contains(range.endContainer)) return null
+          const probe = document.createRange()
+          probe.setStart(node, 0)
+          probe.setEnd(range.startContainer, range.startOffset)
+          const start = probe.toString().replaceAll('\u00a0', ' ').length
+          probe.setEnd(range.endContainer, range.endOffset)
+          const end = probe.toString().replaceAll('\u00a0', ' ').length
+          return { start: Math.min(start, end), end: Math.max(start, end) }
+        }
+
+        const setCaret = (node, offset) => {
+          const selection = typeof window !== 'undefined' ? window.getSelection() : null
+          if (!selection || !node) return
+          const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
+          let remaining = Math.max(0, offset)
+          let target = null
+          let at = 0
+          while (walker.nextNode()) {
+            const current = walker.currentNode
+            const length = current.nodeValue.replaceAll('\u00a0', ' ').length
+            if (remaining <= length) {
+              target = current
+              at = remaining
+              remaining = 0
+              break
+            }
+            remaining -= length
+          }
+          const range = document.createRange()
+          if (target) range.setStart(target, Math.min(at, target.nodeValue.length))
+          else {
+            range.selectNodeContents(node)
+            range.collapse(false)
+          }
+          selection.removeAllRanges()
+          selection.addRange(range)
+        }
+
+        /** 格式按钮：插 markdown 标记，绝不生成 HTML。 */
+        const applyFormat = (kind) => {
+          if (!file) return
+          const picked = readSelection() || { start: 0, end: 0 }
+          const start = picked.start
+          const end = picked.end
+          const value = draft
+          const lineStart = value.lastIndexOf('\n', start - 1) + 1
+          const lineHead = value.slice(lineStart)
+          let next = value
+          let caret = start
+          if (kind === 'body') {
+            // 正文：去掉行首的 ## / > / - （回到普通段落）
+            if (/^##\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(3)
+              caret = Math.max(lineStart, start - 3)
+            } else if (/^>\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(2)
+              caret = Math.max(lineStart, start - 2)
+            } else if (/^-\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(2)
+              caret = Math.max(lineStart, start - 2)
+            } else {
+              next = value
+            }
+          } else if (kind === 'h2') {
+            if (/^##\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(3)
+              caret = Math.max(lineStart, start - 3)
+            } else {
+              next = value.slice(0, lineStart) + '## ' + lineHead
+              caret = start + 3
+            }
+          } else if (kind === 'quote') {
+            if (/^>\s/.test(lineHead)) {
+              next = value.slice(0, lineStart) + lineHead.slice(2)
+              caret = Math.max(lineStart, start - 2)
+            } else {
+              next = value.slice(0, lineStart) + '> ' + lineHead
+              caret = start + 2
+            }
+          }
+          if (next === value) return
+          setDraft(next)
+          requestAnimationFrame(() => {
+            if (!editorRef.current) return
+            textToEditor(editorRef.current, next)
+            editorRef.current.focus()
+            setCaret(editorRef.current, caret)
+          })
+        }
+
+        /**
+         * 续写 / 对白润色 / 大纲表。
+         *
+         * 三者行为不同，不能一把梭：
+         *   续写   —— 结果**追加**到正文末尾（接着写，不是替换掉已有的）
+         *   润色   —— 结果**替换**选中段（没选中就整篇）
+         *   大纲表 —— 只看结构、给意见，**不碰正文**（结果留在会话里）
+         *
+         * 前两个走 askOnce 取回正文再改文档；第三个只发不等结果。
+         */
+        const sendToAssist = async (how) => {
+          if (root === '') {
+            flash(t('assistNeedWorkspace'))
+            return
+          }
+          const picked = readSelection()
+          const hasSelection = picked && picked.end > picked.start
+          const body = file ? (hasSelection ? draft.slice(picked.start, picked.end) : draft) : ''
+          let head = ''
+          let payload = body
+          if (how === 'continue') {
+            head = t('writePromptContinue')
+            /* 续写要带上已写的部分当上下文，否则模型不知道接着写什么 */
+            payload = file ? draft : body
+          } else if (how === 'dialog') {
+            head = t('writePromptDialog')
+          } else {
+            head = t('writePromptOutline')
+            payload = project
+              ? (project.volumes || []).map((vol) =>
+                  '【' + (vol.title || t('writeUntitledVolume')) + '】\n' +
+                  (vol.chapters || []).map((ch, ci) =>
+                    '  ' + ('0' + (ci + 1)).slice(-2) + ' ' + (ch.title || t('writeUntitledChapter')) +
+                    (ch.file ? '（' + (ch.words || 0) + ' 字）' : '（未写）')).join('\n'),
+                ).join('\n\n')
+              : ''
+          }
+          if (payload.trim() === '' && how !== 'outline') {
+            flash(t('writeNoBody'))
+            return
+          }
+          const message = head + (payload.trim() === '' ? '' : '\n\n' + payload)
+
+          /* ③ 大纲表：只看结构，不取回、不改正文 */
+          if (how === 'outline') {
+            try {
+              const api = assistantApi(props.ctx)
+              const id = await api.sendText(root, '', message)
+              await api.saveBinding(root, id)
+              flash(t('writeSentToAssist'))
+            } catch (err) {
+              const raw = messageOf(err)
+              setError(raw === 'no-workspace' ? t('assistNeedWorkspace') : t('writeLoadFailed') + raw)
+            }
+            return
+          }
+
+          if (!file) {
+            flash(t('writeNoBody'))
+            return
+          }
+          /* 整篇且很长时先确认（window.confirm 在 Electron 里可用，只有 prompt 被移除） */
+          if (!hasSelection && how === 'dialog' && body.length > 3000) {
+            const ok = typeof window !== 'undefined' && typeof window.confirm === 'function'
+              ? window.confirm(t('writeConfirmWhole').replace('{n}', String(body.length)))
+              : true
+            if (!ok) return
+          }
+          setAiBusy(true)
+          try {
+            const api = assistantApi(props.ctx)
+            const got = await api.askOnce(root, '', message)
+            await api.saveBinding(root, got.id)
+            if (got.empty || got.text.trim() === '') {
+              flash(t('writeAiEmpty'))
+              return
+            }
+            /* 续写：追加到末尾，中间补一个空行 */
+            if (how === 'continue') {
+              const sep = draft.trimEnd() === '' ? '' : '\n\n'
+              const next = draft.trimEnd() + sep + got.text
+              setDraft(next)
+              requestAnimationFrame(() => {
+                if (!editorRef.current) return
+                textToEditor(editorRef.current, next)
+                setCaret(editorRef.current, next.length)
+              })
+              flash(t('writeAiDone'))
+              return
+            }
+            /* 润色：替换选中段（没选中就整篇） */
+            const start = hasSelection ? picked.start : 0
+            const end = hasSelection ? picked.end : draft.length
+            const next = draft.slice(0, start) + got.text + draft.slice(end)
+            setDraft(next)
+            requestAnimationFrame(() => {
+              if (!editorRef.current) return
+              textToEditor(editorRef.current, next)
+              setCaret(editorRef.current, start + got.text.length)
+            })
+            flash(t('writeAiDone'))
+          } catch (err) {
+            const raw = messageOf(err)
+            if (raw === 'ai-timeout') {
+              flash(t('writeAiTimeout'))
+            } else {
+              setError(raw === 'no-workspace' ? t('assistNeedWorkspace') : t('writeAiFailed') + raw)
+            }
+          } finally {
+            setAiBusy(false)
+          }
+        }
+
+        /**
+         * 新建项目。
+         *
+         * ⚠️ 这里**不能**用 window.prompt —— DSH 是 Electron，渲染进程没有 prompt，
+         * 调用会直接返回 null 且不弹窗，表现就是「点了没反应」（2026-11-17 实际踩到）。
+         * 所以改成自绘输入条：先点按钮把 newProjectOpen 打开，用户填名字回车再提交。
+         * 素材库的「新建文件/文件夹」用的是同一套做法（vp-deletebar + vp-name-input）。
+         */
+        const openNewProject = () => {
+          if (root === '') {
+            flash(t('assistNeedWorkspace'))
+            return
+          }
+          setProjectDraft(t('writeNewProjectDefault'))
+          setNewProjectOpen(true)
+        }
+
+        const commitNewProject = async () => {
+          if (!newProjectOpen) return
+          const name = String(projectDraft).trim() || t('writeNewProjectDefault')
+          setNewProjectOpen(false)
+          try {
+            const made = await vaultApiPost('/write-new', { name })
+            await reloadProjects()
+            await loadProject(made.path)
+            flash(t('writeProjectCreated'))
+          } catch (err) {
+            setError(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
+        // 搜索过滤：项目名
+        const q = query.trim().toLowerCase()
+        const filteredProjects = q === ''
+          ? projects
+          : projects.filter((item) => item.name.toLowerCase().includes(q))
+
+        const dirty = !!file && file.text !== draft
+
+        return h(
+          'div',
+          { className: 'wb-pane wbg-root' },
+          h(WritingList, {
+            t,
+            projects: filteredProjects,
+            project,
+            query,
+            exists,
+            loading,
+            activeFile,
+            openVolumes,
+            onQuery: setQuery,
+            onProject: (path) => void loadProject(path),
+            onOpenChapter: (ch) => void openChapter(ch),
+            onOpenSetting: (row) => void openSetting(row),
+            onToggleVolume: (vi) => setOpenVolumes((next) => ({ ...next, [vi]: next[vi] === false })),
+            onCreate: () => openNewProject(),
+          }),
+          h(WritingDoc, {
+            t,
+            project,
+            file,
+            mode,
+            dirty,
+            saveState,
+            error,
+            aiBusy,
+            onMode: (next) => setMode(next),
+            onFormat: applyFormat,
+            onAssist: (how) => void sendToAssist(how),
+            onTimeline: () => setOutlineOpen((open) => !open),
+            editor: h('div', {
+              key: 'wbg-edit-surface',
+              ref: (node) => {
+                editorRef.current = node
+                if (!node) return
+                if (composing.current) return
+                if (node.textContent === draft) return
+                textToEditor(node, draft)
+              },
+              className: 'wbg-editor-surface',
+              contentEditable: true,
+              suppressContentEditableWarning: true,
+              spellCheck: false,
+              role: 'textbox',
+              'aria-multiline': true,
+              onCompositionStart: () => {
+                composing.current = true
+              },
+              onCompositionEnd: (event) => {
+                composing.current = false
+                setDraft(editorToText(event.currentTarget))
+              },
+              onInput: (event) => {
+                if (composing.current) return
+                setDraft(editorToText(event.currentTarget))
+              },
+              onKeyDown: (event) => {
+                if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
+                  event.preventDefault()
+                  void save(false)
+                }
+              },
+              onPaste: (event) => {
+                event.preventDefault()
+                const text = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
+                if (text === '') return
+                document.execCommand('insertText', false, text)
+              },
+            }),
+          }),
+          outlineOpen
+            ? h(WritingOutline, { t, project, onClose: () => setOutlineOpen(false) })
+            : null,
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'wbg-newproj',
+              title: t('writeNewProject'),
+              onClick: () => openNewProject(),
+            },
+            '＋',
+          ),
+          /* 新建项目的输入条：照素材库 vp-deletebar 的做法，回车提交、Esc 取消 */
+          newProjectOpen
+            ? h('div', { className: 'wbg-newproj-bar' },
+              h('span', { className: 'wbg-newproj-k' }, t('writeNewProjectPrompt')),
+              h('input', {
+                className: 'wbg-newproj-input',
+                autoFocus: true,
+                value: projectDraft,
+                placeholder: t('writeNewProjectDefault'),
+                onChange: (event) => setProjectDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void commitNewProject()
+                  } else if (event.key === 'Escape') {
+                    setNewProjectOpen(false)
+                  }
+                },
+              }),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-go',
+                onClick: () => void commitNewProject(),
+              }, t('ok')),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-x',
+                onClick: () => setNewProjectOpen(false),
+              }, t('cancel')),
+            )
+            : null,
+          notice !== '' ? h('div', { className: 'wbg-toast' }, notice) : null,
+          h(BoardAssistant, {
+            t,
+            ctx: props.ctx,
+            root,
+            titleKey: 'writeAssistant',
+            placeholderKey: 'writeInput',
+            tasks: [],
+          }),
         )
       }
 
@@ -3415,6 +7092,61 @@ window.__ModuleLoader__.load({
 .dn-btn-primary { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .dn-danger { border-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); }
 .dn-libheader { gap: 16px; }
+.wb-header { gap: 18px; padding: 10px 20px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.wb-switch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
+.wb-sw { display: flex; flex-direction: column; align-items: center; gap: 5px; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; border-radius: 50%; }
+.wb-sw-icon { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-tertiary); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: background .15s, border-color .15s, color .15s; }
+.wb-sw-label { font-size: 10.5px; line-height: 1.3; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.wb-sw:hover .wb-sw-icon { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
+.wb-sw[data-active="true"] .wb-sw-icon { background: var(--dsw-alias-brand-primary); border-color: transparent; color: var(--dsw-alias-bg-base); }
+.wb-sw[data-active="true"] .wb-sw-label { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.wb-sw:focus-visible { outline: none; }
+.wb-sw:focus-visible .wb-sw-icon { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+/* 选择器：包一层定位上下文，弹出层挂在它下面 */
+.wb-ws-wrap { position: relative; flex: none; }
+.wb-ws { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-secondary); max-width: 520px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.wb-ws { font: inherit; cursor: pointer; }
+.wb-ws:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.wb-ws[data-open="true"] { border-color: var(--dsw-alias-brand-primary); }
+/* 弹出层：与文案台/素材库同样的面板观感（描边 + 浮起） */
+.wb-ws-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; width: 420px; max-width: 70vw; display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .28); }
+.wb-ws-pop-h { font-size: 12px; line-height: 1.6; color: var(--dsw-alias-label-secondary); }
+.wb-ws-input { width: 100%; box-sizing: border-box; height: 30px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; }
+.wb-ws-input:focus { border-color: var(--dsw-alias-brand-primary); }
+.wb-ws-err { font-size: 11.5px; color: var(--dsw-alias-state-error-primary); }
+.wb-ws-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.wb-ws-btn { height: 26px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.wb-ws-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.wb-ws-btn-primary { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.wb-ws-icon { width: 13px; height: 13px; flex: none; fill: none; stroke: var(--dsw-alias-label-tertiary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.wb-ws-k { color: var(--dsw-alias-label-tertiary); flex: none; }
+.wb-ws-name { color: var(--dsw-alias-label-primary); font-weight: 600; flex: none; }
+.wb-ws-path { font-family: "SF Mono", Consolas, monospace; font-size: 11.5px; color: var(--dsw-alias-label-tertiary); overflow: hidden; text-overflow: ellipsis; }
+.wb-ws-tag { font-size: 10px; color: var(--dsw-alias-brand-primary); border: 1px solid var(--dsw-alias-border-l3); border-radius: 4px; padding: 0 5px; flex: none; }
+.wb-ws-caret { width: 13px; height: 13px; flex: none; fill: none; stroke: var(--dsw-alias-label-tertiary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.wb-body { flex: 1; min-height: 0; display: flex; position: relative; }
+.wb-pane { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wb-pane[hidden] { display: none !important; }
+.wb-pane-split { flex-direction: row; }
+.wb-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+.wb-aside { width: 268px; flex: none; min-height: 0; display: flex; flex-direction: column; gap: 14px; padding: 14px; border-left: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform); }
+.wb-aside-block { display: flex; flex-direction: column; min-height: 0; }
+.wb-aside-grow { flex: 1; }
+.wb-aside-h { display: flex; align-items: center; gap: 7px; padding: 0 2px 8px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.wb-aside-t { flex: 1; min-width: 0; }
+.wb-aside-n { font-size: 10.5px; font-weight: 400; color: var(--dsw-alias-label-tertiary); }
+.wb-outline { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.wb-outline-row { display: flex; align-items: center; gap: 7px; padding: 6px 6px; border-radius: 6px; font-size: 12px; line-height: 1.45; color: var(--dsw-alias-label-secondary); }
+.wb-outline-row[data-indent="1"] { padding-left: 20px; }
+.wb-outline-row[data-active="true"] { color: var(--dsw-alias-label-primary); font-weight: 600; background: var(--dsw-alias-bg-layer-1); }
+.wb-outline-dot { width: 4px; height: 4px; border-radius: 50%; flex: none; background: var(--dsw-alias-label-dimmed); }
+.wb-outline-row[data-active="true"] .wb-outline-dot { background: var(--dsw-alias-brand-primary); }
+.wb-outline-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wb-assistant-empty { flex: 1; min-height: 60px; display: flex; align-items: center; justify-content: center; padding: 14px; border: 1px dashed var(--dsw-alias-border-l3); border-radius: 10px; font-size: 11.5px; line-height: 1.7; color: var(--dsw-alias-label-tertiary); text-align: center; }
+.wb-empty { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px; }
+.wb-empty-card { max-width: 380px; text-align: center; }
+.wb-empty-title { margin: 0 0 8px; font-size: 15px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.wb-empty-body { margin: 0; font-size: 12.5px; line-height: 1.75; color: var(--dsw-alias-label-secondary); }
 .vp-pad { padding: 16px; }
 .vp-hint { font-size: 12.5px; color: var(--dsw-alias-label-secondary); line-height: 1.7; }
 .dn-btn-sm { font-size: 12px; padding: 3px 9px; }
@@ -3424,13 +7156,11 @@ window.__ModuleLoader__.load({
 .vp-treehead-btn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
 .vp-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 9px; border-radius: 7px; border: 1px solid transparent; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13.5px; outline: none; }
 .vp-search:focus { border-color: var(--dsw-alias-brand-primary); }
-.vp-resultlist, .vp-trashlist { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
+.vp-resultlist { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .vp-resultrow { display: flex; flex-direction: column; gap: 2px; width: 100%; box-sizing: border-box; text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
 .vp-resultrow:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-resultname { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-resultexcerpt { font-size: 11px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-trashrow { display: flex; align-items: center; gap: 6px; padding: 4px 8px; }
-.vp-trashclear { align-self: flex-start; margin-top: 6px; }
 .vp-formatbar { display: flex; align-items: center; gap: 4px; padding: 2px 0 6px; border-bottom: 1px solid var(--dsw-alias-border-l1); margin-bottom: 6px; }
 .vp-fmtbtn { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; min-width: 26px; padding: 2px 7px; border-radius: 6px; cursor: pointer; }
 .vp-fmtbtn:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
@@ -3438,13 +7168,9 @@ window.__ModuleLoader__.load({
 .vp-iconbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vp-iconbtn:disabled { opacity: .4; cursor: default; }
 .vp-icon-danger:hover { color: var(--dsw-alias-state-error-primary); }
-.vp-icon-copy { color: #5b9dd9; }
-.vp-icon-path { color: #7f9c6f; }
 .vp-icon-rename { color: var(--dsw-alias-label-secondary); font-size: 13px; }
 .vp-icon-rename:hover { color: var(--dsw-alias-brand-primary); }
 .vp-ext { flex: 0 0 auto; font-size: 20px; font-weight: 700; color: var(--dsw-alias-label-secondary); padding-right: 2px; }
-.vp-icon-send { color: #e0a93a; }
-.vp-icon-copy:hover, .vp-icon-send:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-doctitle { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 26px; font-weight: 700; letter-spacing: .01em; line-height: 1.3; padding: 2px 6px; border-radius: 6px; cursor: text; }
 .vp-doctitle:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-titleinput { flex: 0 1 70%; min-width: 140px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 26px; font-weight: 700; outline: none; }
@@ -3475,10 +7201,18 @@ window.__ModuleLoader__.load({
 .vp-tree-icon { flex: 0 0 auto; width: 14px; text-align: center; font-size: 11px; opacity: .75; }
 .vp-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-tree-row[data-kind="dir"] .vp-tree-name { font-weight: 700; font-size: 15px; }
+/* 三个固定库：用库别图标，名字再加一点分量，和普通文件夹区分开 */
+.vp-tree-icon-lib { font-size: 13px; line-height: 1; }
+/* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
+.vp-iconbtn-off { opacity: .3; pointer-events: none; }
 .vp-tree-empty { font-size: 12px; color: var(--dsw-alias-label-secondary); padding: 6px 8px; }
 .vp-editor { flex: 1; min-width: 0; min-height: 0; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 14px; background: var(--dsw-alias-bg-layer-1); display: flex; flex-direction: column; }
 .vp-doc { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 20px 16px; gap: 10px; }
 .vp-dochead { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+/* 复制路径按钮：挪进标题行后跟 .vp-mode 并排，观感照 vp-mode 的描边 pill */
+.vp-pathbtn { display: inline-flex; align-items: center; height: 26px; padding: 0 9px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; }
+.vp-pathbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.vp-pathbtn:disabled { opacity: .4; cursor: default; }
 .vp-mode { display: flex; gap: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 2px; }
 .vp-modebtn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px; cursor: pointer; }
 .vp-modebtn[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
@@ -3979,7 +7713,6 @@ mark.df-hit[data-active="true"] {
   background: color-mix(in srgb, var(--dsw-alias-brand-primary, #4c8dff) 55%, transparent);
   outline: 1px solid color-mix(in srgb, var(--dsw-alias-brand-primary, #4c8dff) 70%, transparent);
 }
-.vp-icon-find[data-on="true"] { color: var(--dsw-alias-brand-primary, inherit); }
 
 /* ══ [章节导航] 目录页可点击的章节项 ═══════════════════════════════════════
    目录页逐行渲染后，能对上真实章节的行加 .v-toc-link。
@@ -4080,7 +7813,7 @@ mark.df-hit[data-active="true"] {
 .vp-opbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vp-opbtn:disabled { opacity: .32; cursor: default; }
 .vp-opbtn:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
-.vp-opbtn-icon { padding: 0 5px; font-size: 12px; }
+/* .vp-opbtn-icon 已删：只有原来的 ↑ ↓ 按钮用它，按钮移除了。 */
 
 /* ── 文档列：工具条 + 正文 ──────────────────────────────────────────────── */
 /*
@@ -4354,12 +8087,471 @@ mark.df-hit[data-active="true"] {
   flex: 0 0 auto; min-width: 52px; text-align: right;
   font-size: 10.5px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums;
 }
-.vp-empty-root {
-  margin-top: 26px; display: flex; align-items: center; gap: 7px;
-  font-size: 10.5px; color: var(--dsw-alias-label-tertiary); font-family: 'Consolas', monospace;
-}
-.vp-empty-root-k { opacity: .6; }
+/* .vp-empty-root / .vp-empty-root-k 已删：
+   空状态底部那行库根路径不显示了（顶栏工作区选择器已有），
+   留着就是没有元素的死样式。 */
 
+/* ── 文案台（三栏占位排版）─────────────────────────────────────────────── */
+/* ══ 文案台接真实数据（2026-11-17）═══════════════════════════════════════ */
+/* 搜索框从「假 div」变成真 input */
+.cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
+.cb-search-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-list-hint { padding: 18px 10px; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); text-align: center; }
+.cb-list-empty { padding: 26px 12px; text-align: center; }
+.cb-list-empty-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.cb-list-empty-s { margin-top: 6px; font-size: 11px; line-height: 1.65; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-list-item { cursor: pointer; }
+/* 列表项的小字一行放不下时省略，别把左边的图标挤歪 */
+.cb-list-t small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 中栏空状态 */
+.cb-empty { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px 24px; text-align: center; }
+.cb-empty-icon { font-size: 30px; line-height: 1; opacity: .5; }
+.cb-empty-title { margin: 0; font-size: 15px; font-weight: 650; color: var(--dsw-alias-label-primary); }
+.cb-empty-sub { font-size: 12px; line-height: 1.7; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); max-width: 320px; }
+.cb-empty-btn { margin-top: 4px; height: 28px; padding: 0 14px; border-radius: 7px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; cursor: pointer; }
+.cb-empty-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 标题行里把「阅读/编辑」推到右边 */
+.cb-dn-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* 编辑态：与素材库同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
+.cb-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 12px 40px 20px; }
+.cb-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+.cb-editor-surface:empty::before { content: attr(data-placeholder); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+
+/* 底部错误与保存状态 */
+.cb-foot-err { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-state-error-primary); }
+
+/* 新建稿件：左栏底部的小圆按钮，浮在列表上方 */
+.cb-newdraft { position: absolute; left: 202px; bottom: 16px; z-index: 5; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 15px; line-height: 1; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+.cb-newdraft:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 轻提示（已保存 / 已复制 / 已发送） */
+.cb-toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 70; max-width: 70%; padding: 7px 14px; border-radius: 8px; background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); pointer-events: none; }
+
+/* 工具条按钮在禁用态（阅读模式）依然是灰的，但不该看着像坏了 */
+.cb-tb:disabled { opacity: .45; cursor: default; }
+/* AI 请求进行中的提示文字（放在工具条末尾，不撑宽按钮） */
+.cb-ai-busy, .wbg-ai-busy { flex: 0 0 auto; padding: 0 8px; font-size: 11px; color: var(--dsw-alias-brand-primary); white-space: nowrap; }
+.cb-tb:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
+/* 工具条里有图标 + 文字的按钮（改写）：间距比纯文字按钮稍宽一点 */
+.cb-tb[data-with-icon="true"] { gap: 5px; }
+
+.cb-root { flex-direction: row; }
+.cb-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.cb-ic-sm { width: 13px; height: 13px; }
+.cb-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.cb-search { margin: 12px 12px 6px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 10px; }
+.cb-list-group { display: flex; align-items: center; gap: 6px; padding: 10px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.cb-list-n { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-list-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: var(--dsw-radius-sm, 8px); font-size: 12.5px; line-height: 1.35; color: var(--dsw-alias-label-secondary); }
+.cb-list-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.cb-list-item[data-active="true"] { background: var(--dsw-alias-bg-layer-1); box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
+.cb-list-doc { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-list-t { flex: 1; min-width: 0; }
+.cb-list-t b { display: block; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-list-item[data-active="true"] .cb-list-t b { font-weight: 600; }
+.cb-list-t small { font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+.cb-doc-head { flex: none; padding: 20px 40px 0; }
+.cb-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
+.cb-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 20px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
+.cb-pill-grey { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
+.cb-dot { width: 2px; height: 2px; border-radius: 50%; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
+.cb-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; margin: 14px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
+.cb-tb { height: 26px; min-width: 26px; padding: 0 8px; border: 0; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; font: inherit; font-size: 12.5px; color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer; }
+
+.cb-tb:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.cb-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.cb-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
+.cb-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 40px 28px; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); }
+.cb-prose p { margin: 0 0 16px; }
+.cb-prose h2 { margin: 22px 0 10px; font-size: 16px; font-weight: 650; line-height: 1.5; }
+.cb-prose .cb-quote { padding-left: 14px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.cb-doc-foot { flex: none; height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 40px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-doc-foot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.cb-foot-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.cb-foot-right .cb-ic { color: var(--dsw-alias-state-success-primary); }
+.cb-aside { width: 268px; flex: none; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 14px; border-left: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.cb-aside-h { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.cb-aside-h .cb-ic { color: var(--dsw-alias-label-secondary); }
+.cb-aside-n { margin-left: auto; font-size: 10.5px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-task-card { padding: 6px 12px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
+.cb-task { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12.5px; color: var(--dsw-alias-label-primary); }
+.cb-task .cb-ic { color: var(--dsw-alias-brand-primary); }
+.cb-task[data-done="true"], .cb-task[data-done="true"] .cb-ic { color: var(--dsw-alias-state-success-primary); }
+.cb-input { margin-top: auto; flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 7px 0 10px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-input > .cb-ic { color: var(--dsw-alias-brand-primary); }
+.cb-send { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
+/* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
+.vp-body { gap: 0; padding: 0; }
+.vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; }
+/* .vp-libhead / .vp-libmark / .vp-libname 已删：
+   左栏那条「库 / 工作台」标题行已移除，现在搜索框直接打头，
+   与文案台 .cb-search、写作台 .wbg-search 一致。 */
+/* .vp-libroot 已删：素材库左栏「库」下面那行完整路径不显示了。
+   它原先 flex:1 0 100% 独占一整行，删掉后左栏头部从两行收成一行。 */
+/* 搜索框现在是左栏第一个元素（标题行已删），上边距补到 12px 与右/下对齐 */
+.vp-tree .vp-search { width: auto; margin: 12px 12px 6px; }
+.vp-tree .vp-treeops { padding: 0 12px 6px; }
+.vp-tree .vp-treehead { margin: 0 12px; padding: 2px 0 6px; }
+.vp-treelist { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 10px; }
+.vp-treelist::-webkit-scrollbar { width: 7px; }
+.vp-treelist::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
+/* （原 .vp-libfoot 左栏底部工具条已取消：📂 挪到顶栏，左栏底部不再有工具条） */
+.vp-iconbtn[data-on="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
+.vp-splitter { flex: 0 0 4px; }
+.vp-doccol { background: var(--dsw-alias-bg-base); }
+.vp-editor { border: 0; border-radius: 0; background: transparent; }
+.vp-doc { padding: 20px 40px 24px; box-sizing: border-box; }
+.vp-docfoot { box-sizing: border-box; }
+.vp-dochead { padding-bottom: 8px; border-bottom: 0; }
+.vp-doctitle { font-size: 21px; font-weight: 650; letter-spacing: -.01em; }
+.vp-titleinput { font-size: 21px; font-weight: 650; }
+.vp-docbar { min-height: 0; height: auto; padding: 0; margin: 0 0 2px; border-bottom: 0; }
+.vp-docfoot { flex: none; height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 40px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-docfoot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.vp-docfoot-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: 10.5px; opacity: .8; }
+.vp-toc { flex: 0 0 268px; width: 268px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.vp-toc-head { padding: 12px 14px 8px; margin-bottom: 4px; }
+.vp-toc-title { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--dsw-alias-label-primary); }
+.vp-toc-item { font-size: 12px; }
+.vp-tocrail { background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+/* ── 写作台（三栏占位排版）─────────────────────────────────────────────── */
+.wbg-root { flex-direction: row; }
+.wbg-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+/* 左栏 240 */
+.wbg-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.wbg-search { margin: 12px 12px 6px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
+.wbg-vol { display: flex; align-items: center; gap: 6px; padding: 9px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.wbg-vol[data-open="false"] { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 500; }
+.wbg-vol-caret { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-vol-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbg-vol-n { flex: none; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-ch { display: flex; align-items: baseline; gap: 8px; padding: 7px 8px; border-radius: var(--dsw-radius-sm, 8px); font-size: 12.5px; line-height: 1.35; color: var(--dsw-alias-label-secondary); }
+.wbg-ch:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.wbg-ch[data-active="true"] { background: var(--dsw-alias-bg-layer-1); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.wbg-ch-n { flex: none; font-family: 'Consolas', monospace; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-ch-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
+.wbg-ch[data-active="true"] .wbg-ch-t { font-weight: 600; }
+.wbg-ch[data-todo="true"] .wbg-ch-t { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 400; }
+.wbg-ch-w { flex: none; font-size: 10.5px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-sep { height: 1px; margin: 10px 6px 0; background: var(--dsw-alias-border-l1); }
+.wbg-set { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: var(--dsw-radius-sm, 8px); }
+.wbg-set:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.wbg-set-ic { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-set-t { flex: 1; min-width: 0; }
+.wbg-set-t b { display: block; font-size: 12.5px; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbg-set-t small { display: block; margin-top: 1px; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 中栏 自适应 */
+.wbg-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+.wbg-doc-head { flex: none; padding: 20px 40px 0; }
+.wbg-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
+.wbg-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.wbg-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 20px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)); background: var(--dsw-alias-state-business-tertiary, var(--dsw-alias-bg-layer-2)); }
+.wbg-pill-grey { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
+.wbg-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; margin: 14px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
+/* ══ 写作台接真实数据（2026-11-17）══════════════════════════════════════ */
+/* 搜索框从「假 div」变成真 input */
+.wbg-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
+.wbg-search-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-hint { padding: 18px 10px; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); text-align: center; }
+
+/* 左栏空状态 */
+.wbg-empty { padding: 26px 12px; text-align: center; }
+.wbg-empty-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.wbg-empty-s { margin-top: 6px; font-size: 11px; line-height: 1.65; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-empty-btn { margin-top: 10px; height: 26px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.wbg-empty-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 项目切换条 */
+.wbg-projs { padding: 4px 6px 8px; }
+.wbg-projs-k { padding: 0 4px 5px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-proj { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 5px 8px; margin-bottom: 2px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; }
+.wbg-proj:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.wbg-proj[data-active="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 600; }
+.wbg-proj-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbg-proj-n { flex: none; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+
+/* 卷/章/设定项可点 */
+.wbg-vol { cursor: pointer; }
+.wbg-ch { cursor: pointer; }
+.wbg-set { cursor: pointer; }
+.wbg-setk { padding: 8px 8px 4px; font-size: 10.5px; font-weight: 600; letter-spacing: .03em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/* 未写的章（没有正文文件）看着是灰的，但仍可点（只是点了没反应） */
+.wbg-ch[data-todo="true"] { opacity: .5; cursor: default; }
+
+/* 中栏空状态 */
+.wbg-empty-doc { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 40px 24px; text-align: center; }
+.wbg-empty-icon { font-size: 30px; line-height: 1; opacity: .5; }
+.wbg-empty-title { margin: 0; font-size: 15px; font-weight: 650; color: var(--dsw-alias-label-primary); }
+.wbg-empty-sub { font-size: 12px; line-height: 1.7; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); max-width: 320px; }
+
+/* 标题行里把「阅读/编辑」推到右边 */
+.wbg-dn-spacer { flex: 1 1 auto; min-width: 8px; }
+
+/* 编辑态：与素材库/文案台同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
+.wbg-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 12px 40px 20px; }
+.wbg-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+
+/* 场景分隔符（正文里的三个连续短横线） */
+.wbg-scene-sep { margin: 18px 0; text-align: center; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); opacity: .55; user-select: none; }
+
+/* 底部错误与保存状态 */
+.wbg-foot-err { max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-state-error-primary); }
+
+/* 工具条按钮：真 button，必须重置浏览器默认样式（暗色下否则会露白底） */
+.wbg-tb { border: 0; background: none; font: inherit; cursor: pointer; }
+.wbg-tb:disabled { opacity: .45; cursor: default; }
+.wbg-tb:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
+.wbg-tb:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 时间线 / 大纲面板（右栏位置，只读） */
+.wbg-outline { width: 268px; flex: none; min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.wbg-outline-h { flex: none; display: flex; align-items: center; gap: 7px; padding: 13px 14px 9px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.wbg-outline-x { flex: none; width: 22px; height: 22px; display: grid; place-items: center; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font: inherit; font-size: 12px; cursor: pointer; }
+.wbg-outline-x:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.wbg-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 10px 14px; }
+.wbg-outline-vol { padding: 8px 0 4px; }
+.wbg-outline-vt { padding: 0 4px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.wbg-outline-ch { display: flex; align-items: center; gap: 7px; padding: 4px 6px; border-radius: 5px; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.wbg-outline-ch:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.wbg-outline-cn { flex: none; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }
+.wbg-outline-ct { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbg-outline-cw { flex: none; font-size: 10.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-variant-numeric: tabular-nums; }
+
+/* 新建项目：左栏底部的小圆按钮 */
+.wbg-newproj { position: absolute; left: 202px; bottom: 16px; z-index: 5; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 15px; line-height: 1; cursor: pointer; box-shadow: 0 2px 8px rgba(0, 0, 0, .18); }
+.wbg-newproj:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 新建项目输入条：照素材库 vp-deletebar 的做法（不用 window.prompt —— Electron 没有） */
+.wbg-newproj-bar { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 72; display: flex; align-items: center; gap: 8px; max-width: 78%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .32); }
+.wbg-newproj-k { flex: none; font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.wbg-newproj-input { flex: 1; min-width: 140px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; }
+.wbg-newproj-input:focus { border-color: var(--dsw-alias-brand-primary); }
+.wbg-newproj-go, .wbg-newproj-x { flex: none; height: 26px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
+.wbg-newproj-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.wbg-newproj-go:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.wbg-newproj-x:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+
+/* 轻提示 */
+.wbg-toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 70; max-width: 70%; padding: 7px 14px; border-radius: 8px; background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); pointer-events: none; }
+
+
+.wbg-tb { height: 26px; min-width: 26px; padding: 0 8px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+.wbg-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .07); }
+.wbg-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
+.wbg-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 40px 28px; font-size: 14px; line-height: 1.9; color: var(--dsw-alias-label-primary); }
+.wbg-prose p { margin: 0 0 16px; }
+.wbg-p-quote { padding-left: 14px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
+.wbg-p-ins { padding: 2px; border-radius: 2px; background: var(--dsw-alias-state-success-tertiary, var(--dsw-alias-bg-layer-2)); }
+.wbg-p-mem { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-caret { display: inline-block; width: 1.5px; height: 1.05em; margin-left: 2px; vertical-align: -2px; background: var(--dsw-alias-brand-primary); animation: wbg-blink 1.2s steps(1) infinite; }
+@keyframes wbg-blink { 0%, 66% { opacity: 1; } 66.01%, 100% { opacity: 0; } }
+.wbg-doc-foot { flex: none; height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 40px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-doc-foot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
+.wbg-foot-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.wbg-foot-right .wbg-ic { color: var(--dsw-alias-state-success-primary); }
+/* 右栏 268 */
+.wbg-aside-h .wbg-ic { color: var(--dsw-alias-label-secondary); }
+/* ── 审查修订（2026-11-16）：盒模型 / 行宽 / 溢出 / 选中态 / 小字对比度 ──── */
+/*
+ * 五条修订，都只覆盖同名选择器，不动原规则：
+ *   1. 栏宽显式 border-box —— 宿主重置一旦丢失，24px padding 会把 240 撑成 267
+ *   2. 正文加 max-width —— 1440 下 53 字/行、2560 下 132 字/行都不可读
+ *   3. 工具条允许横向滚动 —— 窄窗下 fit-content 会把「压缩 / 复制公众号格式」整段切掉
+ *   4. 选中态加品牌色左竖条 —— 亮色下 bg-layer-1 与列表底只差 1.06:1，等于看不出选的是哪篇
+ *   5. 11px 及以下元信息提到 label-secondary —— label-tertiary 在浅底只有 3.42:1，低于 AA 4.5:1
+ */
+.cb-list, .cb-aside, .cb-doc, .wbg-list, .wbg-aside, .wbg-doc { box-sizing: border-box; }
+.cb-search, .cb-input, .wbg-search { box-sizing: border-box; }
+/* 2. 行宽上限：正文 / 标题 / 底栏同宽，避免标题贴左而正文居中 */
+.cb-doc-head, .cb-prose, .cb-doc-foot, .wbg-doc-head, .wbg-prose, .wbg-doc-foot {
+  width: 100%; max-width: 760px; margin-left: auto; margin-right: auto;
+}
+.cb-toolbar, .wbg-toolbar { box-sizing: border-box; }
+/* 3. 工具条：窄了就横向滚，绝不裁掉后半段 */
+.cb-toolbar, .wbg-toolbar {
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+}
+.cb-toolbar::-webkit-scrollbar, .wbg-toolbar::-webkit-scrollbar { height: 4px; }
+.cb-toolbar::-webkit-scrollbar-thumb, .wbg-toolbar::-webkit-scrollbar-thumb {
+  background: var(--dsw-alias-border-l2); border-radius: 2px;
+}
+/* 4. 选中态：白底 + 阴影之外再加一根品牌色竖条 */
+.cb-list-item, .wbg-ch, .wbg-set {
+  position: relative; cursor: pointer; box-sizing: border-box;
+}
+.cb-list-item[data-active="true"], .wbg-ch[data-active="true"], .vp-tree-row[data-active="true"] {
+  box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary), 0 1px 2px rgba(0, 0, 0, .05);
+}
+.cb-list-item:hover, .wbg-ch:hover, .wbg-set:hover, .vp-tree-row:hover, .vp-toc-item:hover {
+  background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
+}
+/* 5. 小字对比度：11px 以下一律次级色，并禁止折行 */
+.cb-list-t small, .cb-list-n, .cb-aside-n, .cb-doc-meta, .cb-doc-foot,
+.wbg-ch-w, .wbg-vol-n, .wbg-aside-n, .wbg-doc-meta, .wbg-doc-foot {
+  color: var(--dsw-alias-label-secondary);
+}
+.cb-list-t small, .wbg-ch-w, .wbg-set-t small {
+  display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 6. 灰 pill 改描边式：bg-layer-2 在亮色是纯白（与正文底同色，chip 直接消失），
+      在暗色又和 12% 品牌混色撞近似色（两个 pill 分不出来） */
+.cb-pill-grey, .wbg-pill-grey {
+  background: transparent;
+  border: 1px solid var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-secondary);
+}
+/* 7. 列表图标与两行文字对齐（原来垂直居中，飘在两行之间的空隙里） */
+.cb-list-doc, .wbg-set-ic { align-self: flex-start; margin-top: 2px; }
+/* ── 回收站板块（2026-11-16）：顶栏 ⟳ + 第四板块 .tb-* ─────────────────── */
+/* 1. 顶栏刷新：紧挨工作区选择器左侧，只吃主题 token */
+/* 顶栏最右的回收站入口：与 ⟳ 同尺寸的方按钮，当前在回收站时点亮 */
+.wb-trash { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.wb-trash:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.wb-trash[data-active="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.wb-trash:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+/* 借用的 .wb-sw-icon 在圆形按钮里是 40px 圆底，这里要还原成裸图标 */
+.wb-trash .wb-sw-icon { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 0; background: none; }
+.wb-trash .wb-sw-icon:hover { background: none; }
+
+.wb-reload { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.wb-reload:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.wb-reload:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+/* 2. 板块外壳：说明 + 库根 + 按钮 一行头，下面整块可滚 */
+.tb-root { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+.tb-head { flex: none; display: flex; align-items: flex-start; gap: 14px; padding: 14px 20px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.tb-head-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.tb-title { font-size: 13px; font-weight: 600; line-height: 1.4; color: var(--dsw-alias-label-primary); }
+.tb-hint { margin: 0; font-size: 12px; line-height: 1.7; color: var(--dsw-alias-label-secondary); }
+.tb-rootline { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tb-root-k { flex: none; font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
+.tb-root-path { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: 10.5px; color: var(--dsw-alias-label-secondary); }
+.tb-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.tb-confirm { display: flex; align-items: center; gap: 6px; }
+.tb-btn { height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.tb-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.tb-btn:disabled { opacity: .45; cursor: default; }
+.tb-btn:disabled:hover { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); }
+.tb-btn-danger { color: var(--dsw-alias-state-error-primary); }
+.tb-btn-danger:hover { color: var(--dsw-alias-state-error-primary); border-color: var(--dsw-alias-state-error-primary); }
+.tb-error { flex: none; margin: 10px 20px 0; padding: 7px 10px; border-radius: 6px; background: var(--dsw-alias-bg-layer-1); font-size: 12px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
+/* 3. 分组列表：一组一张卡，组头深一档；条目行 = 图标 + 名字/时间 + 恢复 */
+.tb-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 12px 20px 20px; }
+.tb-empty { padding: 48px 0; text-align: center; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+.tb-group { flex: none; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); overflow: hidden; box-sizing: border-box; }
+.tb-group-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--dsw-alias-bg-layer-2); font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+.tb-group-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-group-n { flex: none; font-size: 10.5px; font-weight: 400; color: var(--dsw-alias-label-secondary); }
+.tb-row { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--dsw-alias-border-l1); box-sizing: border-box; }
+.tb-row:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.tb-row-ic { width: 14px; height: 14px; flex: none; fill: none; stroke: var(--dsw-alias-label-secondary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.tb-row-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tb-row-name { font-size: 12.5px; line-height: 1.45; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-row-time { font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.tb-restore { flex: none; height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-base); color: var(--dsw-alias-label-primary); font: inherit; font-size: 11.5px; white-space: nowrap; cursor: pointer; }
+.tb-restore:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.tb-restore:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 1px; }
+
+
+/* ── 文档工具条美化（2026-11-16）：对齐文案台 .cb-toolbar 观感 ─────────────── */
+/* 整条：圆角描边 pill 容器。宽度 fit-content，窄了横向滚；有下拉展开时 overflow 放开
+   （横向滚动的祖先一定会裁掉绝对定位子元素，所以展开期间临时退回 visible）。 */
+.vpb-bar { position: relative; display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; padding: 4px; margin: 2px 0 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; overflow-x: auto; overflow-y: auto; box-sizing: border-box; }
+.vpb-bar[data-menu="true"] { overflow: visible; }
+.vpb-bar::-webkit-scrollbar { height: 4px; }
+.vpb-bar::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 2px; }
+.vpb-bar :focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
+/* 组内每个控件是 pill：26px 高、8px 内边距、4px 圆角、12.5px 字号 */
+.vpb-pill { flex: 0 0 auto; height: 26px; min-width: 26px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer; box-sizing: border-box; }
+.vpb-pill:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.vpb-pill[data-on="true"], .vpb-pill[data-open="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+.vpb-pill:disabled { opacity: .35; cursor: default; }
+.vpb-pill:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
+.vpb-ib { font-size: 12.5px; padding: 0 7px; }
+/* 图标按钮（查找 / 复制全文）：符号比文字按钮抬 1px，省得看着偏小 */
+.vpb-ib-icon { font-size: 13.5px; padding: 0 6px; }
+.vpb-ib-danger:hover { color: var(--dsw-alias-state-error-primary); }
+/* 文件信息 / 分组 / 竖分隔条（对齐 .cb-tb-sep） */
+.vpb-info { flex: 0 0 auto; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
+.vpb-info-empty { opacity: .7; }
+.vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
+.vpb-sep { flex: 0 0 auto; width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
+/* 字号 A- / 值 / A+：三个并列按钮包成一组 */
+.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: 26px; padding: 0 2px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); }
+.vpb-zoom-btn { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 3px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
+.vpb-zoom-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.vpb-zoom-btn:disabled { opacity: .35; cursor: default; }
+.vpb-zoom-btn:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
+.vpb-zoom-val { min-width: 34px; text-align: center; font-size: 11.5px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+/* 自绘小下拉（.vp-newdrop 那套的观感，不用原生 select） */
+.vpb-drop { position: relative; flex: 0 0 auto; display: flex; }
+.vpb-droplabel { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
+.vpb-caret { flex: none; font-size: 8px; line-height: 1; opacity: .55; }
+.vpb-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 132px; max-width: 220px; max-height: 280px; overflow-y: auto; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); box-sizing: border-box; }
+.vpb-menu::-webkit-scrollbar { width: 6px; }
+.vpb-menu::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 3px; }
+.vpb-menu-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: 5px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; line-height: 1.35; text-align: left; white-space: nowrap; cursor: pointer; }
+.vpb-menu-item:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.vpb-menu-item[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+.vpb-menu-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.vpb-menu-check { flex: none; width: 10px; font-size: 11px; color: var(--dsw-alias-brand-primary); }
+/* 保存状态文字：同 pill 文字样式，失败转红 */
+.vpb-state { flex: 0 0 auto; height: 26px; padding: 0 6px; display: inline-flex; align-items: center; font-size: 11.5px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.vpb-state[data-state="saved"] { opacity: .72; }
+.vpb-state[data-state="saving"] { color: var(--dsw-alias-label-tertiary); }
+.vpb-state[data-state="error"] { color: var(--dsw-alias-state-error-primary); }/* ── 文件树排序下拉（2026-11-17）────────────────────────────────────────── */
+.vp-sortwrap { position: relative; flex: none; }
+.vp-sortbtn { display: inline-flex; align-items: center; gap: 3px; }
+.vp-sortbtn[data-open="true"] { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
+.vp-sortbtn-caret { font-size: 8px; opacity: .6; }
+.vp-sortdrop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 60; min-width: 148px; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .28); }
+.vp-sortdrop-item { display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 6px 9px; border: 0; border-radius: 5px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; white-space: nowrap; }
+.vp-sortdrop-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.vp-sortdrop-item[data-active="true"] { color: var(--dsw-alias-brand-primary); font-weight: 600; }
+.vp-sortdrop-t { flex: 1; min-width: 0; }
+.vp-sortdrop-ok { flex: none; font-size: 11px; }
+.vp-sortdrop-sep { height: 1px; margin: 4px 2px; background: var(--dsw-alias-border-l1); }
+.vp-sortdrop-clear { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+
+/* ── 右栏助手：会话状态 + 真输入框（2026-11-17）────────────────────────── */
+.cb-status { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-status-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
+.cb-status-dot[data-running="true"] { background: var(--dsw-alias-state-success-primary); }
+.cb-sess { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 9px 11px 10px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
+.cb-sess-k { font-size: 10.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-sess-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-sess-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+.cb-sess-btn { height: 24px; padding: 0 9px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+.cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.cb-aside-err { flex: none; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
+.cb-input-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
+.cb-input-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-input-field:disabled { opacity: .6; }
+.cb-send { border: 0; cursor: pointer; }
+.cb-send:disabled { opacity: .45; cursor: default; }
+/* 模型座位：贴输入行左侧，弹出层向上开（输入行在底部，向下会被裁） */
+.cb-model { position: relative; flex: none; min-width: 0; max-width: 132px; }
+.cb-model-btn { display: inline-flex; align-items: center; gap: 3px; max-width: 132px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.cb-model-btn:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
+.cb-model-btn[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.cb-model-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-model-caret { flex: none; font-size: 8px; opacity: .6; }
+.cb-model-menu { position: absolute; right: 0; left: auto; bottom: calc(100% + 8px); z-index: 60; width: 288px; max-height: 340px; overflow-y: auto; padding: 6px; border-radius: 10px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 12px 34px rgba(0, 0, 0, .3); }
+.cb-model-menu::-webkit-scrollbar { width: 7px; }
+.cb-model-menu::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
+.cb-model-group { padding: 4px 0; }
+.cb-model-group + .cb-model-group { border-top: 1px solid var(--dsw-alias-border-l1); margin-top: 2px; }
+.cb-model-gh { padding: 8px 10px 6px; font-size: 10.5px; font-weight: 600; letter-spacing: .04em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-model-item { display: block; width: 100%; box-sizing: border-box; text-align: left; padding: 8px 10px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; line-height: 1.5; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-model-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.cb-model-empty { padding: 12px 10px; font-size: 11.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-sess-hint { font-size: 10.5px; line-height: 1.55; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 `
 
     const appliedContexts = typeof WeakSet === 'function' ? new WeakSet() : null
@@ -4391,8 +8583,8 @@ mark.df-hit[data-active="true"] {
         }
       }, 'dsh-notes: styles')
 
-      // 一个侧栏入口「资料库」+ 一个主面板；内部两个分页由组件是否在线决定显示。
-      ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID }, () => h(LibraryPage, { t, ctx })))
+      // 一个侧栏入口「工作台」+ 一个主面板；面板内分素材库 / 文案 / 写作 / 回收站四个板块。
+      ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID }, () => h(WorkbenchPage, { t, ctx })))
 
       ctx.slots.inject('sidebar.panellist', () =>
         ctx.slots.register(
