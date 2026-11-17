@@ -4755,47 +4755,46 @@ window.__ModuleLoader__.load({
             ),
             h('span', { className: 'dn-spacer' }),
             /*
-             * 顶栏从左到右：
-             *   〔素材库 文案台 写作台〕……〔📂 打开文件夹〕〔⟳ 刷新〕〔工作区选择器〕〔🗑 回收站〕
+             * 顶栏排法（2026-11-18 重排，按 shadcn 的分组 + 统一高度）：
              *
-             * 为什么 📂 和 ⟳ 放顶栏：它们作用的对象是「整个库」，不是当前这一栏的文件树；
-             * 📂 现在跟随当前板块打开对应的那层目录（见 BOARD_FOLDER），
-             * 所以它虽然是顶栏按钮，落点却跟着板块变，语义更贴「对应资源管理器中的位置」。
-             * 塞在左栏底部既错位（大王截图指出），又跟文件树同高，看着像文件操作的一部分。
-             * 为什么 🗑 放最右、且不混进圆形按钮组：回收站是「三个板块共用」的一个去处，
-             * 不是第四个并列的内容板块；放最右当入口图标，语义才不打架。
-             * 刷新是「当前板块」的刷新，所以计数放在 WorkbenchPage：
-             * 点一次 refreshTick + 1，各板块监听这个数决定重拉什么。
+             *   〔素材库 文案台 写作台〕 │ [📂] [⟳]  [工作区选择器] │ [🗑]
+             *       板块切换（主）        次要动作 + 上下文        去处
+             *
+             * 为什么这么分：
+             *   · 板块切换是「主操作」，用 40px 圆形 + 下方文字，视觉最重
+             *   · 打开文件夹/刷新是「次要动作」，用 32px 紧凑图标（与选择器同高），
+             *     不再带文字占一整行高；提示走 title
+             *   · 工作区选择器是「当前上下文」，和次要动作同组
+             *   · 回收站是「去处」不是板块，单独靠右，和前面用竖线隔开
              */
-            /*
-             * 「打开文件夹」：按钮形式照板块切换那套（圆形图标 + 下方小字）。
-             * 原来是个 emoji 📂 塞在方框里，和旁边的 SVG 图标风格不统一。
-             */
+            h('i', { className: 'wb-hsep' }),
+            /* 次要动作组：打开文件夹 / 刷新（32px 紧凑图标，与选择器同高） */
             h(
-              'button',
-              {
-                type: 'button',
-                className: 'wb-action',
-                /* 提示里显示真实落点：选了文件就显示它所在目录，没选显示板块目录 */
-                title: t('vaultOpenFolder') + '：' + openFolderHint(tab, boardFocusPath, t),
-                'aria-label': t('vaultOpenFolder'),
-                onClick: () => { void vaultOpenBoardFolder(tab, boardFocusPath) },
-              },
-              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'folderOpen' })),
-              h('span', { className: 'wb-action-label' }, t('vaultOpenFolder')),
-            ),
-            /* 「刷新」：同上，圆形图标 + 下方小字 */
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'wb-action',
-                title: t('vaultReload'),
-                'aria-label': t('vaultReload'),
-                onClick: () => setRefreshTick((tick) => tick + 1),
-              },
-              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'refresh' })),
-              h('span', { className: 'wb-action-label' }, t('vaultReload')),
+              'div',
+              { className: 'wb-actions' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'wb-iconbtn',
+                  /* 提示里显示真实落点：选了文件就显示它所在目录，没选显示板块目录 */
+                  title: t('vaultOpenFolder') + '：' + openFolderHint(tab, boardFocusPath, t),
+                  'aria-label': t('vaultOpenFolder'),
+                  onClick: () => { void vaultOpenBoardFolder(tab, boardFocusPath) },
+                },
+                h(BoardIcon, { name: 'folderOpen', className: 'wb-ic-lg' }),
+              ),
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'wb-iconbtn',
+                  title: t('vaultReload'),
+                  'aria-label': t('vaultReload'),
+                  onClick: () => setRefreshTick((tick) => tick + 1),
+                },
+                h(BoardIcon, { name: 'refresh', className: 'wb-ic-lg' }),
+              ),
             ),
             h(WorkspacePicker, {
               t,
@@ -4816,19 +4815,19 @@ window.__ModuleLoader__.load({
               onApply: () => void applyRoot(),
               onPick: () => void pickRoot(),
             }),
-            /* 「回收站」：同上。它是个「去处」不是板块，所以单独靠右，但外观统一 */
+            /* 回收站：「去处」不是板块，竖线隔开、单独靠右 */
+            h('i', { className: 'wb-hsep' }),
             h(
               'button',
               {
                 type: 'button',
-                className: 'wb-action wb-action-end',
+                className: 'wb-iconbtn',
                 'data-active': tab === 'trash',
                 title: t('tabTrashDesc'),
                 'aria-label': t('tabTrash'),
                 onClick: () => setTab(tab === 'trash' ? 'vault' : 'trash'),
               },
-              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'trash' })),
-              h('span', { className: 'wb-action-label' }, t('tabTrash')),
+              h(BoardIcon, { name: 'trash', className: 'wb-ic-lg' }),
             ),
           ),
           h(
@@ -7318,8 +7317,10 @@ window.__ModuleLoader__.load({
 .dn-btn-primary { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .dn-danger { border-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); }
 .dn-libheader { gap: 16px; }
-.wb-header { gap: 18px; padding: 10px 20px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1); /* 板块切换与动作按钮都是「图标+文字」竖排，顶部对齐才不会错位 */ align-items: flex-start; }
-.wb-switch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
+.wb-header { gap: 12px; padding: 8px 16px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1);
+  /* 板块切换是 40px 圆+文字（较高），右侧动作是 32px；用 center 让右侧一排竖着对齐中线 */
+  align-items: center; }
+.wb-switch { display: flex; align-items: flex-start; gap: 10px; flex: none; }
 .wb-sw { display: flex; flex-direction: column; align-items: center; gap: 5px; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; border-radius: 50%; }
 .wb-sw-icon { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-tertiary); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: background .15s, border-color .15s, color .15s; }
 .wb-sw-label { font-size: 10.5px; line-height: 1.3; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
@@ -7332,6 +7333,17 @@ window.__ModuleLoader__.load({
 /* ── 顶栏动作按钮（打开文件夹 / 刷新 / 回收站）────────────────────────────
    照 .wb-sw 的规格：圆形 40px 图标 + 下方 10.5px 小字，
    让动作按钮和板块切换按钮视觉上是一套（2026-11-18 大王要求）。 */
+/* 顶栏分组竖线：板块切换 ｜ 动作+上下文 ｜ 回收站 */
+.wb-hsep { flex: none; width: 1px; height: 20px; background: var(--dsw-alias-border-l1); margin: 0 2px; }
+/* 次要动作组：打开文件夹 / 刷新（并排，32px 高，与选择器同高） */
+.wb-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+/* 紧凑图标按钮：32px 方形圆角，与工作区选择器同高 */
+.wb-iconbtn { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+.wb-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.wb-iconbtn[data-active="true"] { background: var(--dsw-alias-brand-primary); border-color: transparent; color: var(--dsw-alias-bg-base); }
+.wb-iconbtn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+
+/* .wb-action（旧的「圆+文字」动作按钮）保留：万一别处还用 */
 .wb-action { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: 0 0 auto; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; white-space: nowrap; }
 .wb-action-icon { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); display: grid; place-items: center; transition: background .15s, color .15s, border-color .15s; }
 .wb-action-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
