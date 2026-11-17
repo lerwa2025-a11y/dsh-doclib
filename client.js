@@ -210,6 +210,7 @@ window.__ModuleLoader__.load({
         copyUntitled: '未命名稿件',
         copyWordUnitShort: '字',
         copyNewDraft: '新建稿件',
+        copyDrafts: '稿件',
         copyNewDraftName: '新稿件',
         copyLoadFailed: '稿件读取失败：',
         copyNoMetaHint: '这篇没有元数据，状态按「草稿」显示',
@@ -520,6 +521,7 @@ window.__ModuleLoader__.load({
         copyUntitled: 'Untitled draft',
         copyWordUnitShort: 'chars',
         copyNewDraft: 'New draft',
+        copyDrafts: 'Drafts',
         copyNewDraftName: 'New draft',
         copyLoadFailed: 'Failed to load draft: ',
         copyNoMetaHint: 'This draft has no metadata; status shows as Draft',
@@ -1390,7 +1392,9 @@ window.__ModuleLoader__.load({
        *
        * 之前它只能靠再点一次按钮收起，点别处都留在那儿；而它是绝对定位浮在文件树上，
        * 挡着列表很碍事。写法和下面 openMenu 那套一致（监听挂 document、卸载摘掉），
-       * 判断「在不在下拉里」用 closest('.vp-newmenu') —— 按钮和弹出的菜单都在这个容器内。
+       * 判断「在不在下拉里」用 closest() 认容器 class —— 按钮和弹出的菜单都在这个容器内。
+       * 容器换过两次名字（vp-newmenu → vp-newfloat → vp-newinline），三个都写上，
+       * 免得再出现「点加号被当成点外面、菜单开不了」。
        */
       /**
        * 把当前选中的路径报给顶栏，让「打开文件夹」能开对地方。
@@ -1409,7 +1413,7 @@ window.__ModuleLoader__.load({
         const onDocDown = (event) => {
           const target = event && event.target
           /* 加号容器叫 .vp-newfloat（原 .vp-newmenu），两个都认，挪位置不会再踩 */
-          if (target && typeof target.closest === 'function' && target.closest('.vp-newfloat, .vp-newmenu') !== null) return
+          if (target && typeof target.closest === 'function' && target.closest('.vp-newinline, .vp-newfloat, .vp-newmenu') !== null) return
           setNewMenuOpen(false)
         }
         const onKey = (event) => {
@@ -3750,16 +3754,13 @@ window.__ModuleLoader__.load({
               )
               : null,
 
-            /*
-             * 新建：圆形加号浮在左栏底部（2026-11-18 大王要求「加号放下面」）。
-             *
-             * 与文案台 .cb-newdraft、写作台 .wbg-newproj 同一套做法：
-             * position: absolute 相对 .vp-tree 定位到左下角。
-             * 菜单向上展开（bottom: 100%），因为按钮贴底边，往下开会跑出窗口。
-             */
             h(
               'div',
-              { className: 'vp-newfloat' },
+              { className: 'vp-treehead' },
+              h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
+            h(
+              'div',
+              { className: 'vp-newinline' },
               h(
                 'button',
                 {
@@ -3775,7 +3776,7 @@ window.__ModuleLoader__.load({
               newMenuOpen
                 ? h(
                   'div',
-                  { className: 'vp-newdrop vp-newdrop-up' },
+                  { className: 'vp-newdrop' },
                   h(
                     'button',
                     {
@@ -3801,11 +3802,6 @@ window.__ModuleLoader__.load({
                 )
                 : null,
             ),
-
-            h(
-              'div',
-              { className: 'vp-treehead' },
-              h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
               h(
                 'button',
                 {
@@ -5529,6 +5525,17 @@ window.__ModuleLoader__.load({
               onChange: (event) => setQuery(event.target.value),
             }),
           ),
+          /* 标题行「稿件」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
+          h('div', { className: 'cb-head' },
+            h('span', { className: 'cb-head-title' }, t('copyDrafts')),
+            h('button', {
+              type: 'button',
+              className: 'vp-newbtn-round',
+              title: t('copyNewDraft'),
+              'aria-label': t('copyNewDraft'),
+              onClick: () => void createDraft(),
+            }, '＋'),
+          ),
           h(
             'div',
             { className: 'cb-list-scroll' },
@@ -6267,16 +6274,7 @@ window.__ModuleLoader__.load({
               },
             }),
           }),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'cb-newdraft',
-              title: t('copyNewDraft'),
-              onClick: () => void createDraft(),
-            },
-            '＋',
-          ),
+          /* 浮动加号已移除：挪进上面的「稿件」标题行 */
           notice !== '' ? h('div', { className: 'cb-toast' }, notice) : null,
           h(BoardAssistant, {
             t,
@@ -6389,6 +6387,17 @@ window.__ModuleLoader__.load({
               placeholder: t('writeSearch'),
               onChange: (event) => props.onQuery(event.target.value),
             }),
+          ),
+          /* 标题行「项目」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
+          h('div', { className: 'wbg-head' },
+            h('span', { className: 'wbg-head-title' }, t('writeProjects')),
+            h('button', {
+              type: 'button',
+              className: 'vp-newbtn-round',
+              title: t('writeNewProject'),
+              'aria-label': t('writeNewProject'),
+              onClick: () => openNewProject(),
+            }, '＋'),
           ),
           h(
             'div',
@@ -7272,16 +7281,7 @@ window.__ModuleLoader__.load({
           outlineOpen
             ? h(WritingOutline, { t, project, onClose: () => setOutlineOpen(false) })
             : null,
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'wbg-newproj',
-              title: t('writeNewProject'),
-              onClick: () => openNewProject(),
-            },
-            '＋',
-          ),
+          /* 浮动加号已移除：挪进上面的「项目」标题行 */
           /* 新建项目的输入条：照素材库 vp-deletebar 的做法，回车提交、Esc 取消 */
           newProjectOpen
             ? h('div', { className: 'wbg-newproj-bar' },
@@ -8074,11 +8074,12 @@ mark.df-hit[data-active="true"] {
 /* .vp-treeops 已删：操作条整块移除（加号挪到左下角，其余进右键菜单）。 */
 /* .vp-newmenu 已删：加号容器改成 .vp-newfloat（absolute 定位到左下角）。 */
 /* 新建：浮动加号容器，贴在左栏左下角（2026-11-18 大王要求「加号放下面」） */
-.vp-newfloat { position: absolute; left: 12px; bottom: 14px; z-index: 6; }
+/* 新建加号：已挪进「文件」标题行（2026-11-18 大王要求） */
+.vp-newinline { position: relative; flex: 0 0 auto; display: flex; align-items: center; }
 /* 圆形加号按钮：与文案台 .cb-newdraft / 写作台 .wbg-newproj 视觉统一（2026-11-18） */
 .vp-newbtn-round {
   display: grid; place-items: center;
-  width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  width: 22px; height: 22px; padding: 0; border-radius: 50%;
   border: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary); font: inherit; font-size: 15px; line-height: 1;
@@ -8395,6 +8396,11 @@ mark.df-hit[data-active="true"] {
 /* ── 文案台（三栏占位排版）─────────────────────────────────────────────── */
 /* ══ 文案台接真实数据（2026-11-17）═══════════════════════════════════════ */
 /* 搜索框从「假 div」变成真 input */
+/* 文案台 / 写作台 左栏标题行（2026-11-18）：与素材库 .vp-treehead 同构
+   大王要求「新建按钮做到文件旁边」，三个板块统一。 */
+.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.cb-head-title, .wbg-head-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
+
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
 .cb-search-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-list-hint { padding: 18px 10px; font-size: 11.5px; line-height: 1.6; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); text-align: center; }
@@ -8443,7 +8449,7 @@ mark.df-hit[data-active="true"] {
 .cb-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .cb-ic-sm { width: 13px; height: 13px; }
 .cb-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
-.cb-search { margin: 12px 12px 6px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 10px; }
 .cb-list-group { display: flex; align-items: center; gap: 6px; padding: 10px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .cb-list-n { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -8526,7 +8532,7 @@ mark.df-hit[data-active="true"] {
 .wbg-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 /* 左栏 240 */
 .wbg-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
-.wbg-search { margin: 12px 12px 6px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
 .wbg-vol { display: flex; align-items: center; gap: 6px; padding: 9px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .wbg-vol[data-open="false"] { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 500; }
