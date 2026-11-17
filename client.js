@@ -1296,6 +1296,13 @@ window.__ModuleLoader__.load({
       const [error, setError] = useState('')
       const [imageTick, setImageTick] = useState(0)
       const [confirmDelete, setConfirmDelete] = useState(false)
+      /*
+       * 右键菜单状态：{ node, x, y } | null。
+       *
+       * 大王要求把「移动」「删除」从工具栏挪到右键菜单，界面上不再留按钮。
+       * x/y 是视口坐标，菜单用 position: fixed 定位，避免被树面板的 overflow 裁掉。
+       */
+      const [ctxMenu, setCtxMenu] = useState(null)
       const [creating, setCreating] = useState(null)
       const [renaming, setRenaming] = useState(false)
       const [renameDraft, setRenameDraft] = useState('')
@@ -2356,10 +2363,21 @@ window.__ModuleLoader__.load({
         return { base: name.slice(0, dot), ext: name.slice(dot) }
       }
 
-      const startRename = () => {
-        if (!selected) return
+      /**
+       * 开始改名。
+       *
+       * 接受可选 node：右键菜单里要用它，因为 setSelected 是异步的，
+       * 菜单项被点的那一刻 selected 可能还是旧值（会改错文件）。
+       */
+      const startRename = (node) => {
+        const target = node || selected
+        if (!target) return
+        if (isFixedLib(target.path)) {
+          setError(t('vaultLibFixed'))
+          return
+        }
         renameGuard.current = { cancelled: false, done: false }
-        setRenameDraft(splitExt(selected.name, selected.type === 'dir').base)
+        setRenameDraft(splitExt(target.name, target.type === 'dir').base)
         setRenameError('')
         setRenaming(true)
       }
@@ -2642,8 +2660,10 @@ window.__ModuleLoader__.load({
        *   · 服务端 assertTargetDir 会拒空串（库根不在三库内）
        * 所以首项的 path 必须是 素材，而不是空串。
        */
-      const openMovePicker = () => {
-        if (!selected) return
+      /** 打开「移动到…」；接受可选 node（右键菜单用，理由同 startRename）。 */
+      const openMovePicker = (node) => {
+        const target = node || selected
+        if (!target) return
         const dirs = [{ path: MATERIAL_ROOT, name: t('vaultMoveRoot'), depth: 0 }]
         const walk = (nodes, depth) => {
           for (const node of nodes) {
@@ -2654,10 +2674,10 @@ window.__ModuleLoader__.load({
         }
         walk(tree, 1)
         // 排除自己（不能移到自己里）和自己的子目录
-        const blocked = (target) => target === selected.path || target.startsWith(`${selected.path}/`)
+        const blocked = (dirPath) => dirPath === target.path || dirPath.startsWith(`${target.path}/`)
         // 当前位置（父目录）：标出来，别让人误点
         const parentOf = (path) => (path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : MATERIAL_ROOT)
-        const currentDir = parentOf(selected.path)
+        const currentDir = parentOf(target.path)
         setMoveTargets(
           dirs.filter((dir) => !blocked(dir.path)).map((dir) => ({ ...dir, current: dir.path === currentDir })),
         )
@@ -2733,6 +2753,44 @@ window.__ModuleLoader__.load({
         }
       }
 
+      /**
+       * 右键打开节点菜单。
+       *
+       * 顺带把该节点设为选中 —— 菜单里的「重命名」「删除」都靠 selected 定位，
+       * 不设的话会出现「右键了 A、操作了 B」的错位。
+       */
+      const openCtxMenu = (event, node) => {
+        event.preventDefault()
+        event.stopPropagation()
+        setSelected(node)
+        setConfirmDelete(false)
+        setRenaming(false)
+        setMoveOpen(false)
+        /* 菜单大约 180x150，贴边时往回收，别跑出视口 */
+        const menuW = 190
+        const menuH = 170
+        const vw = typeof window !== 'undefined' ? window.innerWidth : 1920
+        const vh = typeof window !== 'undefined' ? window.innerHeight : 1080
+        const x = Math.min(event.clientX, Math.max(8, vw - menuW - 8))
+        const y = Math.min(event.clientY, Math.max(8, vh - menuH - 8))
+        setCtxMenu({ node, x, y })
+      }
+
+      /* 点任何地方 / 按 Esc / 滚动 → 关掉右键菜单 */
+      useEffect(() => {
+        if (!ctxMenu) return undefined
+        const close = () => setCtxMenu(null)
+        const onKey = (event) => { if (event && event.key === 'Escape') close() }
+        document.addEventListener('mousedown', close)
+        document.addEventListener('keydown', onKey)
+        document.addEventListener('scroll', close, true)
+        return () => {
+          document.removeEventListener('mousedown', close)
+          document.removeEventListener('keydown', onKey)
+          document.removeEventListener('scroll', close, true)
+        }
+      }, [ctxMenu])
+
       const treeNode = (node, depth) => {
         if (node.type === 'dir') {
           const isOpen = expanded[node.path] === true
@@ -2758,7 +2816,10 @@ window.__ModuleLoader__.load({
                   setConfirmDelete(false)
                   setRenaming(false)
                   setMoveOpen(false)
+                  setCtxMenu(null)
                 },
+                /* 右键菜单：重命名 / 移动到… / 删除 */
+                onContextMenu: (event) => openCtxMenu(event, node),
                 title: node.path,
               },
               h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸'),
@@ -2785,7 +2846,9 @@ window.__ModuleLoader__.load({
             'data-active': active,
             'data-kind': 'file',
             style: { paddingLeft: `${22 + depth * 14}px` },
-            onClick: () => openFile(node),
+            onClick: () => { setCtxMenu(null); openFile(node) },
+            /* 右键菜单：重命名 / 移动到… / 删除 */
+            onContextMenu: (event) => openCtxMenu(event, node),
             title: node.path,
           },
           h('span', { className: 'vp-tree-icon' }, node.image ? '🖼' : isMarkdown ? '📄' : '📃'),
@@ -3001,10 +3064,10 @@ window.__ModuleLoader__.load({
           type: 'button', className: 'vpb-pill vpb-ib', onClick: () => void saveDoc(), disabled: !doc || !doc.dirty,
           title: t('vaultSaveNow'), 'aria-label': t('vaultSaveNow'),
         }, '💾'),
-        h('button', {
-          type: 'button', className: 'vpb-pill vpb-ib vpb-ib-danger', onClick: () => setConfirmDelete(true), disabled: !selected || isFixedLib(selected && selected.path),
-          title: t('vaultDelete'), 'aria-label': t('vaultDelete'),
-        }, '🗑'),
+        /*
+         * 🗑 删除按钮已移除：大王要求删除走右键菜单。
+         * 保存按钮 💾 保留（那个是高频操作，放右键反而更难用）。
+         */
       )
 
       const editorContent = (() => {
@@ -3653,13 +3716,64 @@ window.__ModuleLoader__.load({
                   )
                   : null,
               ),
-              h('button', { type: 'button', className: 'vp-opbtn', onClick: openMovePicker, disabled: !selected, title: t('vaultMoveTo') }, t('vaultMoveTo')),
+              /* 「移动到…」已挪到右键菜单（大王要求），工具栏不再放 */
               /*
                * 这里原来是 ↑ ↓ 两个「同类型内上移/下移」按钮，已按大王要求移除。
                * 连 dn-spacer 一起删了 —— 它当初只是为了把这两个按钮推到右端。
                * 排序改用「排序下拉」（名称/日期/体积），那个还在。
                */
             ),
+            /*
+             * 右键菜单：重命名 / 移动到… / 删除。
+             *
+             * 大王要求把「移动」「删除」从工具栏挪到右键，界面上不再留按钮。
+             * 用 fixed 定位（视口坐标），因为树面板有 overflow，绝对定位会被裁。
+             * mousedown 在 document 上会关掉它 —— 所以菜单项用 onMouseDown 阻止冒泡 + onClick 执行，
+             * 否则点菜单项的那一刻就被自己的关闭监听吃掉了。
+             */
+            ctxMenu
+              ? h(
+                'div',
+                {
+                  className: 'vp-ctxmenu',
+                  style: { left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' },
+                  onMouseDown: (event) => event.stopPropagation(),
+                  onContextMenu: (event) => event.preventDefault(),
+                },
+                /* 固定库：只能重命名以外的操作受限，这里直接不给删 */
+                h('div', { className: 'vp-ctxmenu-h' }, ctxMenu.node.name),
+                h('button', {
+                  type: 'button',
+                  className: 'vp-ctxmenu-item',
+                  disabled: isFixedLib(ctxMenu.node.path),
+                  onClick: () => {
+                    const node = ctxMenu.node
+                    setCtxMenu(null)
+                    startRename(node)
+                  },
+                }, t('vaultRenameHint')),
+                h('button', {
+                  type: 'button',
+                  className: 'vp-ctxmenu-item',
+                  onClick: () => {
+                    const node = ctxMenu.node
+                    setCtxMenu(null)
+                    openMovePicker(node)
+                  },
+                }, t('vaultMoveTo')),
+                h('i', { className: 'vp-ctxmenu-sep' }),
+                h('button', {
+                  type: 'button',
+                  className: 'vp-ctxmenu-item vp-ctxmenu-danger',
+                  disabled: isFixedLib(ctxMenu.node.path),
+                  onClick: () => {
+                    setCtxMenu(null)
+                    setConfirmDelete(true)
+                  },
+                }, t('vaultDelete')),
+              )
+              : null,
+
             h(
               'div',
               { className: 'vp-treehead' },
@@ -7194,6 +7308,16 @@ window.__ModuleLoader__.load({
 .vp-splitter { flex: 0 0 6px; cursor: col-resize; border-radius: 3px; background: transparent; }
 .vp-splitter:hover { background: var(--dsw-alias-brand-primary); opacity: .45; }
 .vp-tree-row { display: flex; align-items: center; gap: 5px; width: 100%; box-sizing: border-box; padding: 5px 8px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 14px; text-align: left; cursor: pointer; transition: background-color .12s ease; }
+/* 树节点右键菜单（2026-11-18）：fixed 定位避免被树面板 overflow 裁掉 */
+.vp-ctxmenu { position: fixed; z-index: 200; min-width: 168px; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); box-sizing: border-box; }
+.vp-ctxmenu-h { padding: 6px 9px 5px; font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border-bottom: 1px solid var(--dsw-alias-border-l1); margin-bottom: 3px; }
+.vp-ctxmenu-item { display: block; width: 100%; box-sizing: border-box; text-align: left; padding: 6px 9px; border: 0; border-radius: 5px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; line-height: 1.35; white-space: nowrap; cursor: pointer; }
+.vp-ctxmenu-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.vp-ctxmenu-item:disabled { opacity: .38; cursor: default; }
+.vp-ctxmenu-item:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
+.vp-ctxmenu-danger:hover { color: var(--dsw-alias-state-error-primary); }
+.vp-ctxmenu-sep { display: block; height: 1px; margin: 4px 2px; background: var(--dsw-alias-border-l1); }
+
 .vp-tree-row:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-tree-row[data-active="true"] { background: var(--dsw-alias-bg-layer-2); }
 .vp-tree-row[data-active="true"] .vp-tree-name { color: var(--dsw-alias-brand-primary); font-weight: 600; }
