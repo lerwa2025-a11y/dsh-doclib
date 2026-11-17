@@ -68,6 +68,18 @@ window.__ModuleLoader__.load({
         vaultSendChatNew: '发送到新对话',
         vaultRenameHint: '点标题改名',
         vaultRename: '重命名',
+        /* 树操作提示（2026-11-18 左栏改树后新增） */
+        vaultRenamePrompt: '新名字',
+        vaultRenamed: '已重命名',
+        vaultRenameFailed: '重命名失败：',
+        vaultMovePrompt: '移动到哪个目录（相对库根，例如 文案/已发布）',
+        vaultMoveFailed: '移动失败：',
+        vaultDeleteConfirm: '确定删除',
+        vaultDeleted: '已移入回收站',
+        vaultDeleteFailed: '删除失败：',
+        /* 左栏视图切换 */
+        copyViewTree: '目录',
+        copyViewGroup: '分组',
         vaultSaveNow: '手动保存（Ctrl+S）',
         vaultSearch: '搜索全库',
         vaultSearchEmpty: '没有匹配的笔记',
@@ -380,6 +392,18 @@ window.__ModuleLoader__.load({
         vaultSendChatNew: 'Send to a new chat',
         vaultRenameHint: 'Click the title to rename',
         vaultRename: 'Rename',
+        /* 树操作提示（2026-11-18） */
+        vaultRenamePrompt: 'New name',
+        vaultRenamed: 'Renamed',
+        vaultRenameFailed: 'Rename failed: ', 
+        vaultMovePrompt: 'Move to folder (relative to library root, e.g. 文案/published)',
+        vaultMoveFailed: 'Move failed: ', 
+        vaultDeleteConfirm: 'Delete',
+        vaultDeleted: 'Moved to trash',
+        vaultDeleteFailed: 'Delete failed: ', 
+        /* 左栏视图切换 */
+        copyViewTree: 'Folders',
+        copyViewGroup: 'Groups',
         vaultSaveNow: 'Save now (Ctrl+S)',
         vaultSearch: 'Search vault',
         vaultSearchEmpty: 'No matching notes',
@@ -4649,6 +4673,148 @@ window.__ModuleLoader__.load({
        * 为什么抽成组件：素材库那条 docBar 依赖十几个 state，每个板块各抄一遍就是三份重复。
        * 阅读设置读写同一份全局 reader-settings.json，切板块后设置连续。
        */
+      /**
+       * 通用文件树（2026-11-18）：文案台 / 写作台左栏共用。
+       *
+       * 观感照素材库（复用 .vp-tree-* 那套 CSS）：缩进、图标、展开箭头、右键菜单都一样。
+       * 组件自己管展开状态与右键菜单，外部只给数据 + 回调。
+       */
+      function CopyTree(props) {
+        const t = props.t
+        const nodes = Array.isArray(props.nodes) ? props.nodes : []
+        const activePath = typeof props.activePath === 'string' ? props.activePath : ''
+        const [expanded, setExpanded] = useState({})
+        const [ctxMenu, setCtxMenu] = useState(null)
+
+        /* 点外面 / 按 Esc 关右键菜单 */
+        useEffect(() => {
+          if (!ctxMenu) return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.vp-ctxmenu') !== null) return
+            setCtxMenu(null)
+          }
+          const onKey = (event) => { if (event.key === 'Escape') setCtxMenu(null) }
+          document.addEventListener('mousedown', onDown)
+          document.addEventListener('keydown', onKey)
+          return () => {
+            document.removeEventListener('mousedown', onDown)
+            document.removeEventListener('keydown', onKey)
+          }
+        }, [ctxMenu])
+
+        const openMenu = (event, node) => {
+          event.preventDefault()
+          event.stopPropagation()
+          /* 用视口坐标：树面板有 overflow，绝对定位会被裁 */
+          setCtxMenu({ node, x: event.clientX, y: event.clientY })
+        }
+
+        const row = (node, depth) => {
+          const isDir = node.type === 'dir'
+          const isOpen = expanded[node.path] === true
+          const isActive = activePath === node.path
+          const name = node.name
+          const isMarkdown = /\.(md|markdown)$/i.test(name)
+          /*
+           * 缩进：目录 6px 起、文件 22px 起（让文件比同级目录缩进一格），
+           * 与素材库 .vp-tree-row 的 style.paddingLeft 规则一致。
+           */
+          const padLeft = (isDir ? 6 : 22) + depth * 14
+          return h(
+            'div',
+            { key: node.path, className: isDir ? 'vp-tree-dir' : undefined },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vp-tree-row',
+                'data-active': isActive,
+                'data-kind': isDir ? 'dir' : 'file',
+                style: { paddingLeft: padLeft + 'px' },
+                title: node.path,
+                onClick: () => {
+                  setCtxMenu(null)
+                  if (isDir) {
+                    setExpanded((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                    if (typeof props.onPickDir === 'function') props.onPickDir(node)
+                  } else if (typeof props.onPick === 'function') {
+                    props.onPick(node)
+                  }
+                },
+                onContextMenu: (event) => openMenu(event, node),
+              },
+              h('span', { className: 'vp-tree-caret' }, isDir ? (isOpen ? '▾' : '▸') : ''),
+              h(
+                'span',
+                { className: 'vp-tree-icon' },
+                h(BoardIcon, {
+                  /*
+                   * 图标：目录 folder、md 用 fileText、图片 image、其它 file。
+                   * 素材库还按库别分 archive/pen/bookOpen，这里只有一个库，不用区分。
+                   */
+                  name: isDir ? 'folder' : (node.image ? 'image' : isMarkdown ? 'fileText' : 'file'),
+                  className: 'wb-ic',
+                }),
+              ),
+              h('span', { className: 'vp-tree-name' }, isDir ? name : name.replace(/\.(md|markdown)$/i, '')),
+            ),
+            isDir && isOpen
+              ? (Array.isArray(node.children) && node.children.length > 0
+                ? node.children.map((child) => row(child, depth + 1))
+                : h('div', { className: 'vp-tree-empty', style: { paddingLeft: (30 + depth * 14) + 'px' } }, t('vaultEmptyDir')))
+              : null,
+          )
+        }
+
+        return h(
+          'div',
+          { className: 'vp-treelist', style: { padding: '2px 4px 10px' } },
+          nodes.length === 0
+            ? h('div', { className: 'vp-tree-empty' }, t('vaultEmptyDir'))
+            : nodes.map((node) => row(node, 0)),
+          ctxMenu
+            ? h(
+              'div',
+              {
+                className: 'vp-ctxmenu',
+                style: { left: ctxMenu.x + 'px', top: ctxMenu.y + 'px' },
+                onMouseDown: (event) => event.stopPropagation(),
+                onContextMenu: (event) => event.preventDefault(),
+              },
+              h('div', { className: 'vp-ctxmenu-h' }, ctxMenu.node.name),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const node = ctxMenu.node
+                  setCtxMenu(null)
+                  if (typeof props.onRename === 'function') props.onRename(node)
+                },
+              }, t('vaultRename')),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const node = ctxMenu.node
+                  setCtxMenu(null)
+                  if (typeof props.onMove === 'function') props.onMove(node)
+                },
+              }, t('vaultMoveTo')),
+              h('i', { className: 'vp-ctxmenu-sep' }),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item vp-ctxmenu-danger',
+                onClick: () => {
+                  const node = ctxMenu.node
+                  setCtxMenu(null)
+                  if (typeof props.onDelete === 'function') props.onDelete(node)
+                },
+              }, t('vaultDelete')),
+            )
+            : null,
+        )
+      }
       function ReaderBar(props) {
         const t = props.t
         const hasDoc = props.hasDoc === true
@@ -5721,8 +5887,12 @@ window.__ModuleLoader__.load({
         const activePath = props.activePath
         const loading = props.loading === true
         const exists = props.exists === true
+        /* 树的节点（来自 /copy-tree）；拿不到就退回分组视图 */
+        const tree = Array.isArray(props.tree) ? props.tree : []
+        /* 视图切换：tree = 目录树（默认），group = 按状态分组 */
+        const view = props.view === 'group' ? 'group' : 'tree'
 
-        // 按状态分组；空组不显示。搜索命中时同样按状态归组，不另开一套外观。
+        /* 按状态分组（group 视图用）；空组不显示 */
         const groups = statuses
           .map((status) => ({
             status,
@@ -5730,6 +5900,31 @@ window.__ModuleLoader__.load({
             items: docs.filter((doc) => doc.status === status),
           }))
           .filter((group) => group.items.length > 0)
+
+        const stampOf = (mtime) => {
+          if (!mtime) return ''
+          const date = new Date(mtime)
+          return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+        }
+
+        /* 分组视图的单条稿件 */
+        const groupItem = (doc) => h(
+          'div',
+          {
+            key: doc.path,
+            className: 'cb-list-item',
+            'data-active': activePath === doc.path,
+            title: doc.path,
+            onClick: () => props.onPick(doc.path),
+          },
+          h(CbIcon, { name: 'doc', small: true, className: 'cb-list-doc' }),
+          h(
+            'div',
+            { className: 'cb-list-t' },
+            h('b', null, doc.title !== '' ? doc.title : t('copyUntitled')),
+            h('small', null, doc.words + ' ' + t('copyWordUnitShort') + ' · ' + stampOf(doc.mtime)),
+          ),
+        )
 
         return h(
           'div',
@@ -5746,85 +5941,85 @@ window.__ModuleLoader__.load({
               onChange: (event) => setQuery(event.target.value),
             }),
           ),
-          /* 标题行「稿件」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
+          /*
+           * 标题行「稿件」+ 新建加号 + 视图切换（2026-11-18）。
+           * 大王要求：可以新建文件和文件夹、带分组 ——
+           * 所以这一行除了加号，再给一个「树 / 分组」切换。
+           */
           h('div', { className: 'cb-head' },
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
+            h('button', {
+              type: 'button',
+              className: 'cb-head-seg',
+              'data-on': view === 'tree' ? 'true' : 'false',
+              title: t('copyViewTree'),
+              onClick: () => { if (typeof props.onView === 'function') props.onView('tree') },
+            }, t('copyViewTree')),
+            h('button', {
+              type: 'button',
+              className: 'cb-head-seg',
+              'data-on': view === 'group' ? 'true' : 'false',
+              title: t('copyViewGroup'),
+              onClick: () => { if (typeof props.onView === 'function') props.onView('group') },
+            }, t('copyViewGroup')),
             h('button', {
               type: 'button',
               className: 'vp-newbtn-round',
               title: t('copyNewDraft'),
               'aria-label': t('copyNewDraft'),
-              onClick: () => void createDraft(),
+              onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
             }, '＋'),
           ),
-          h(
-            'div',
-            { className: 'cb-list-scroll' },
-            loading && docs.length === 0 ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList')) : null,
-            !loading && !exists
-              ? h(
+          /*
+           * 主体：两个视图二选一。
+           * tree  —— 真实目录层级（默认），可右键重命名/移动/删除
+           * group —— 按状态归组的扁平列表（老视图）
+           */
+          view === 'tree'
+            ? h(CopyTree, {
+              t,
+              nodes: tree,
+              activePath,
+              onPick: (node) => props.onPick(node.path),
+              onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
+              onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
+              onMove: (node) => { if (typeof props.onMove === 'function') props.onMove(node) },
+              onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
+            })
+            : h(
+              'div',
+              { className: 'cb-list-scroll' },
+              loading && docs.length === 0 ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList')) : null,
+              !loading && !exists
+                ? h(
                   'div',
                   { className: 'cb-list-empty' },
                   h('div', { className: 'cb-list-empty-t' }, t('copyEmptyDir')),
                   h('div', { className: 'cb-list-empty-s' }, t('copyEmptyDirSub')),
                 )
-              : null,
-            !loading && exists && docs.length === 0
-              ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList'))
-              : null,
-            !loading && exists && docs.length > 0 && groups.length === 0
-              ? h('div', { className: 'cb-list-hint' }, t('copyNoMatch'))
-              : null,
-            groups.map((group) =>
-              h(
-                'div',
-                { key: group.status },
+                : null,
+              !loading && exists && docs.length === 0
+                ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList'))
+                : null,
+              !loading && exists && docs.length > 0 && groups.length === 0
+                ? h('div', { className: 'cb-list-hint' }, t('copyNoMatch'))
+                : null,
+              groups.map((group) =>
                 h(
                   'div',
-                  { className: 'cb-list-group' },
-                  h('span', null, group.label),
-                  h('span', { className: 'cb-list-n' }, String(group.items.length)),
-                ),
-                group.items.map((doc) =>
+                  { key: group.status },
                   h(
                     'div',
-                    {
-                      key: doc.path,
-                      className: 'cb-list-item',
-                      'data-active': doc.path === activePath,
-                      role: 'button',
-                      tabIndex: 0,
-                      title: doc.title,
-                      onClick: () => props.onPick(doc.path),
-                      onKeyDown: (event) => {
-                        if (event.key === 'Enter' || event.key === ' ') {
-                          event.preventDefault()
-                          props.onPick(doc.path)
-                        }
-                      },
-                    },
-                    h(CbIcon, { name: 'doc', small: true, className: 'cb-list-doc' }),
-                    h(
-                      'div',
-                      { className: 'cb-list-t' },
-                      h('b', null, doc.title !== '' ? doc.title : t('copyUntitled')),
-                      h('small', null, doc.words + ' ' + t('copyWordUnitShort') + ' · ' + stampOf(doc.mtime)),
-                    ),
+                    { className: 'cb-list-group' },
+                    h('span', null, group.label),
+                    h('span', { className: 'cb-list-n' }, String(group.items.length)),
                   ),
+                  group.items.map((doc) => groupItem(doc)),
                 ),
               ),
             ),
-          ),
         )
       }
-
-      // 中栏：标题 / 元信息 / 工具条 / 正文 / 底部状态
-      //
-      // 工具条从「9 个装饰按钮」变成真按钮：
-      //   格式组（粗体 / H2 / 列表 / 引用）往纯文本插 markdown 标记；
-      //   插入图片给出图片语法；
-      //   改写 / 压缩把选中文字（没选就整篇）发给右栏助手；
-      //   复制公众号格式做本地转换后进剪贴板。
       function CopyToolbar(props) {
         const t = props.t
         const disabled = props.disabled === true
@@ -6006,6 +6201,12 @@ window.__ModuleLoader__.load({
         const [loading, setLoading] = useState(true)
         const [query, setQuery] = useState('')
         const [activePath, setActivePath] = useState('')
+        /* 目录树（2026-11-18：左栏改树，数据来自 /copy-tree） */
+        const [copyTree, setCopyTree] = useState([])
+        /* 视图：tree = 目录树（默认），group = 按状态分组 */
+        const [listView, setListView] = useState('tree')
+        /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
+        const [treePrompt, setTreePrompt] = useState(null)
         const [doc, setDoc] = useState(null)
         const [draft, setDraft] = useState('')
         const [mode, setMode] = useState('read')
@@ -6047,6 +6248,14 @@ window.__ModuleLoader__.load({
           try {
             const data = await vaultApiGet('/copy-list')
             setDocs(Array.isArray(data.docs) ? data.docs : [])
+      /* 目录树（2026-11-18：左栏改树后需要；拉不到就空着，不影响列表） */
+      try {
+        const treeData = await vaultApiGet('/copy-tree')
+        setCopyTree(Array.isArray(treeData.tree) ? treeData.tree : [])
+      } catch (err) {
+        void err
+        setCopyTree([])
+      }
             setStatuses(Array.isArray(data.statuses) ? data.statuses : [])
             setExists(data.exists === true)
             setError('')
@@ -6124,6 +6333,65 @@ window.__ModuleLoader__.load({
           if (!doc) return
           const ok = await writeClipboard(draft !== '' ? draft : (doc.text || ''))
           if (ok) flash(t('copied'))
+        }
+
+        /*
+         * 树的三个文件操作（2026-11-18 左栏改树后需要）。
+         * 复用素材库那几条已有路由：/rename /move /delete，
+         * 都走 assertInLibrary 守卫，只能动「文案」库里的东西。
+         */
+        /*
+         * 重命名：打开自绘输入条（不能用 window.prompt —— Electron 没有）。
+         * 实际写盘在 promptCommit 里。
+         */
+        const renameNode = (node) => {
+          if (!node) return
+          setTreePrompt({ kind: 'rename', node, value: node.name })
+        }
+
+        /* 移动：同样走自绘输入条 */
+        const moveNode = (node) => {
+          if (!node) return
+          setTreePrompt({ kind: 'move', node, value: '文案' })
+        }
+
+        const deleteNode = async (node) => {
+          if (!node) return
+          if (!window.confirm(t('vaultDeleteConfirm') + node.name + '?')) return
+          try {
+            await vaultApiPost('/delete', { path: node.path })
+            if (activePath === node.path) setActivePath('')
+            void reload()
+            flash(t('vaultDeleted'))
+          } catch (err) {
+            flash(t('vaultDeleteFailed') + messageOf(err))
+          }
+        }
+
+        /**
+         * 提交树操作输入条（重命名 / 移动）。
+         *
+         * 为什么自绘而不用 window.prompt：DSH 是 Electron，
+         * 渲染进程没有 prompt，调用会直接返回 null（界面表现为「点了没反应」）。
+         */
+        const promptCommit = async () => {
+          if (!treePrompt) return
+          const { kind, node, value } = treePrompt
+          const typed = String(value || '').trim()
+          if (typed === '' || typed === node.name) { setTreePrompt(null); return }
+          setTreePrompt(null)
+          try {
+            if (kind === 'rename') {
+              await vaultApiPost('/rename', { path: node.path, name: typed })
+              flash(t('vaultRenamed'))
+            } else {
+              await vaultApiPost('/move', { path: node.path, to: typed })
+              flash(t('vaultMoved'))
+            }
+            void reload()
+          } catch (err) {
+            flash((kind === 'rename' ? t('vaultRenameFailed') : t('vaultMoveFailed')) + messageOf(err))
+          }
         }
 
         /*
@@ -6436,7 +6704,48 @@ window.__ModuleLoader__.load({
             loading,
             exists,
             onPick: (path) => void pick(path),
+            /* 新建稿件（2026-11-18 修：以前直接调 createDraft，作用域里没有） */
+            onCreate: () => void createDraft(),
+            /* 树视图（2026-11-18 左栏改树） */
+            tree: copyTree,
+            view: listView,
+            onView: (next) => setListView(next),
+            onPickDir: () => {},
+            onRename: (node) => void renameNode(node),
+            onMove: (node) => void moveNode(node),
+            onDelete: (node) => void deleteNode(node),
           }),
+            /*
+             * 树操作的自绘输入条（2026-11-18）：重命名 / 移动。
+             * 照写作台 wbg-newproj-bar 的做法：回车提交、Esc 取消。
+             */
+            treePrompt
+              ? h('div', { className: 'cb-prompt-bar' },
+                h('span', { className: 'cb-prompt-k' },
+                  treePrompt.kind === 'rename' ? t('vaultRename') : t('vaultMoveTo')),
+                h('input', {
+                  className: 'cb-prompt-input',
+                  type: 'text',
+                  autoFocus: true,
+                  value: treePrompt.value,
+                  onChange: (event) => setTreePrompt({ ...treePrompt, value: event.target.value }),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') { event.preventDefault(); void promptCommit() }
+                    if (event.key === 'Escape') { event.preventDefault(); setTreePrompt(null) }
+                  },
+                }),
+                h('button', {
+                  type: 'button',
+                  className: 'cb-prompt-go',
+                  onClick: () => void promptCommit(),
+                }, t('vaultSaveNow')),
+                h('button', {
+                  type: 'button',
+                  className: 'cb-prompt-x',
+                  onClick: () => setTreePrompt(null),
+                }, '✕'),
+              )
+              : null,
           h(CopyDoc, {
             t,
             doc,
@@ -6619,7 +6928,7 @@ window.__ModuleLoader__.load({
               className: 'vp-newbtn-round',
               title: t('writeNewProject'),
               'aria-label': t('writeNewProject'),
-              onClick: () => openNewProject(),
+              onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
             }, '＋'),
           ),
           h(
@@ -8645,7 +8954,15 @@ mark.df-hit[data-active="true"] {
 /* 搜索框从「假 div」变成真 input */
 /* 文案台 / 写作台 左栏标题行（2026-11-18）：与素材库 .vp-treehead 同构
    大王要求「新建按钮做到文件旁边」，三个板块统一。 */
-.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+/* 树操作输入条（2026-11-18）：不用 window.prompt（Electron 没有） */
+.cb-prompt-bar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 30; display: flex; align-items: center; gap: 6px; padding: 7px 9px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 8px 24px rgba(0, 0, 0, .28); }
+.cb-prompt-k { flex: none; font-size: 11px; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.cb-prompt-input { flex: 1; min-width: 0; height: 24px; padding: 0 7px; border-radius: 4px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; }
+.cb-prompt-input:focus { border-color: var(--dsw-alias-brand-primary); }
+.cb-prompt-go, .cb-prompt-x { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; }
+.cb-prompt-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+
+.cb-head, .wbg-head {.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .cb-head-title, .wbg-head-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
@@ -8695,7 +9012,7 @@ mark.df-hit[data-active="true"] {
 .cb-root { flex-direction: row; }
 .cb-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .cb-ic-sm { width: 13px; height: 13px; }
-.cb-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.cb-list { position: relative; width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
 .cb-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 10px; }
 .cb-list-group { display: flex; align-items: center; gap: 6px; padding: 10px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
@@ -8715,13 +9032,13 @@ mark.df-hit[data-active="true"] {
 .cb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
 .cb-pill-grey { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
 .cb-dot { width: 2px; height: 2px; border-radius: 50%; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
-.cb-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; margin: 14px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
+.cb-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; margin: 12px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
 .cb-tb { height: 26px; min-width: 26px; padding: 0 8px; border: 0; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: none; font: inherit; font-size: 12.5px; color: var(--dsw-alias-label-secondary); white-space: nowrap; cursor: pointer; }
 
 .cb-tb:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
 .cb-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
-.cb-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 40px 28px; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); }
+.cb-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 40px 28px; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); }
 .cb-prose p { margin: 0 0 16px; }
 .cb-prose h2 { margin: 22px 0 10px; font-size: 16px; font-weight: 650; line-height: 1.5; }
 .cb-prose .cb-quote { padding-left: 14px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
@@ -8808,7 +9125,7 @@ mark.df-hit[data-active="true"] {
 .wbg-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wbg-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)); background: var(--dsw-alias-state-business-tertiary, var(--dsw-alias-bg-layer-2)); }
 .wbg-pill-grey { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
-.wbg-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; margin: 14px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
+.wbg-toolbar { display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; margin: 12px 0 0; padding: 4px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; }
 /* ══ 写作台接真实数据（2026-11-17）══════════════════════════════════════ */
 /* 搜索框从「假 div」变成真 input */
 .wbg-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
@@ -8899,7 +9216,7 @@ mark.df-hit[data-active="true"] {
 .wbg-tb { height: 26px; min-width: 26px; padding: 0 8px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .wbg-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .07); }
 .wbg-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
-.wbg-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 18px 40px 28px; font-size: 14px; line-height: 1.9; color: var(--dsw-alias-label-primary); }
+.wbg-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 40px 28px; font-size: 14px; line-height: 1.9; color: var(--dsw-alias-label-primary); }
 .wbg-prose p { margin: 0 0 16px; }
 .wbg-p-quote { padding-left: 14px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
 .wbg-p-ins { padding: 2px; border-radius: 4px; background: var(--dsw-alias-state-success-tertiary, var(--dsw-alias-bg-layer-2)); }
@@ -9012,6 +9329,13 @@ mark.df-hit[data-active="true"] {
 /* 整条：圆角描边 pill 容器。宽度 fit-content，窄了横向滚；有下拉展开时 overflow 放开
    （横向滚动的祖先一定会裁掉绝对定位子元素，所以展开期间临时退回 visible）。 */
 .vpb-bar { position: relative; display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; padding: 4px; margin: 2px 0 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-2); white-space: nowrap; overflow-x: auto; overflow-y: auto; box-sizing: border-box; }
+/*
+ * 文案台 / 写作台的阅读栏要自己补左右边距（2026-11-18 修排版）。
+ * 素材库那边由 .vp-doc 的 padding: 20px 40px 提供，这两个板块的
+ * .cb-doc / .wbg-doc 没有左右 padding，所以不补的话阅读栏会贴左边缘。
+ * 上边距也给足，和上面那条 Markdown 工具条分开。
+ */
+.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 10px 40px 0; }
 .vpb-bar[data-menu="true"] { overflow: visible; }
 .vpb-bar::-webkit-scrollbar { height: 4px; }
 .vpb-bar::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
