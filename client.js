@@ -78,8 +78,6 @@ window.__ModuleLoader__.load({
         vaultDeleted: '已移入回收站',
         vaultDeleteFailed: '删除失败：',
         /* 左栏视图切换 */
-        copyViewTree: '目录',
-        copyViewGroup: '分组',
         vaultSaveNow: '手动保存（Ctrl+S）',
         vaultSearch: '搜索全库',
         vaultSearchEmpty: '没有匹配的笔记',
@@ -402,8 +400,6 @@ window.__ModuleLoader__.load({
         vaultDeleted: 'Moved to trash',
         vaultDeleteFailed: 'Delete failed: ', 
         /* 左栏视图切换 */
-        copyViewTree: 'Folders',
-        copyViewGroup: 'Groups',
         vaultSaveNow: 'Save now (Ctrl+S)',
         vaultSearch: 'Search vault',
         vaultSearchEmpty: 'No matching notes',
@@ -5880,51 +5876,24 @@ window.__ModuleLoader__.load({
       // 左栏：搜索 + 按状态分组 + 真实稿件
       function CopyList(props) {
         const t = props.t
-        const docs = Array.isArray(props.docs) ? props.docs : []
-        const statuses = Array.isArray(props.statuses) ? props.statuses : []
+        const tree = Array.isArray(props.tree) ? props.tree : []
         const query = props.query
         const setQuery = props.onQuery
         const activePath = props.activePath
-        const loading = props.loading === true
-        const exists = props.exists === true
-        /* 树的节点（来自 /copy-tree）；拿不到就退回分组视图 */
-        const tree = Array.isArray(props.tree) ? props.tree : []
-        /* 视图切换：tree = 目录树（默认），group = 按状态分组 */
-        const view = props.view === 'group' ? 'group' : 'tree'
+        /* 加号下拉：新建分组 / 新建文案 */
+        const [newOpen, setNewOpen] = useState(false)
 
-        /* 按状态分组（group 视图用）；空组不显示 */
-        const groups = statuses
-          .map((status) => ({
-            status,
-            label: t(COPY_STATUS_KEY[status] || 'copyStatusDraft'),
-            items: docs.filter((doc) => doc.status === status),
-          }))
-          .filter((group) => group.items.length > 0)
-
-        const stampOf = (mtime) => {
-          if (!mtime) return ''
-          const date = new Date(mtime)
-          return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
-        }
-
-        /* 分组视图的单条稿件 */
-        const groupItem = (doc) => h(
-          'div',
-          {
-            key: doc.path,
-            className: 'cb-list-item',
-            'data-active': activePath === doc.path,
-            title: doc.path,
-            onClick: () => props.onPick(doc.path),
-          },
-          h(CbIcon, { name: 'doc', small: true, className: 'cb-list-doc' }),
-          h(
-            'div',
-            { className: 'cb-list-t' },
-            h('b', null, doc.title !== '' ? doc.title : t('copyUntitled')),
-            h('small', null, doc.words + ' ' + t('copyWordUnitShort') + ' · ' + stampOf(doc.mtime)),
-          ),
-        )
+        /* 点外面收起加号菜单 */
+        useEffect(() => {
+          if (!newOpen) return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.cb-newmenu') !== null) return
+            setNewOpen(false)
+          }
+          document.addEventListener('mousedown', onDown)
+          return () => document.removeEventListener('mousedown', onDown)
+        }, [newOpen])
 
         return h(
           'div',
@@ -5942,82 +5911,60 @@ window.__ModuleLoader__.load({
             }),
           ),
           /*
-           * 标题行「稿件」+ 新建加号 + 视图切换（2026-11-18）。
-           * 大王要求：可以新建文件和文件夹、带分组 ——
-           * 所以这一行除了加号，再给一个「树 / 分组」切换。
+           * 标题行「稿件」+ 新建加号（2026-11-18 简化）：
+           * 去掉「目录/分组」切换和状态分组 —— 左栏就是纯文件树。
+           * 加号点开给两个选项：新建分组（真文件夹）/ 新建文案（md 文件）。
            */
           h('div', { className: 'cb-head' },
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
-            h('button', {
-              type: 'button',
-              className: 'cb-head-seg',
-              'data-on': view === 'tree' ? 'true' : 'false',
-              title: t('copyViewTree'),
-              onClick: () => { if (typeof props.onView === 'function') props.onView('tree') },
-            }, t('copyViewTree')),
-            h('button', {
-              type: 'button',
-              className: 'cb-head-seg',
-              'data-on': view === 'group' ? 'true' : 'false',
-              title: t('copyViewGroup'),
-              onClick: () => { if (typeof props.onView === 'function') props.onView('group') },
-            }, t('copyViewGroup')),
-            h('button', {
-              type: 'button',
-              className: 'vp-newbtn-round',
-              title: t('copyNewDraft'),
-              'aria-label': t('copyNewDraft'),
-              onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
-            }, '＋'),
-          ),
-          /*
-           * 主体：两个视图二选一。
-           * tree  —— 真实目录层级（默认），可右键重命名/移动/删除
-           * group —— 按状态归组的扁平列表（老视图）
-           */
-          view === 'tree'
-            ? h(CopyTree, {
-              t,
-              nodes: tree,
-              activePath,
-              onPick: (node) => props.onPick(node.path),
-              onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
-              onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
-              onMove: (node) => { if (typeof props.onMove === 'function') props.onMove(node) },
-              onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
-            })
-            : h(
-              'div',
-              { className: 'cb-list-scroll' },
-              loading && docs.length === 0 ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList')) : null,
-              !loading && !exists
-                ? h(
-                  'div',
-                  { className: 'cb-list-empty' },
-                  h('div', { className: 'cb-list-empty-t' }, t('copyEmptyDir')),
-                  h('div', { className: 'cb-list-empty-s' }, t('copyEmptyDirSub')),
+            h('div', { className: 'cb-newmenu' },
+              h('button', {
+                type: 'button',
+                className: 'vp-newbtn-round',
+                'data-open': newOpen ? 'true' : 'false',
+                title: t('vaultNew'),
+                'aria-label': t('vaultNew'),
+                onClick: () => setNewOpen((open) => !open),
+              }, '＋'),
+              newOpen
+                ? h('div', { className: 'cb-newdrop' },
+                  h('button', {
+                    type: 'button',
+                    className: 'cb-newdrop-item',
+                    onClick: () => {
+                      setNewOpen(false)
+                      if (typeof props.onCreateDir === 'function') props.onCreateDir()
+                    },
+                  },
+                  h(BoardIcon, { name: 'folder', className: 'wb-ic' }),
+                  h('span', null, t('vaultNewDir')),
+                  ),
+                  h('button', {
+                    type: 'button',
+                    className: 'cb-newdrop-item',
+                    onClick: () => {
+                      setNewOpen(false)
+                      if (typeof props.onCreate === 'function') props.onCreate()
+                    },
+                  },
+                  h(BoardIcon, { name: 'fileText', className: 'wb-ic' }),
+                  h('span', null, t('vaultNewMd')),
+                  ),
                 )
                 : null,
-              !loading && exists && docs.length === 0
-                ? h('div', { className: 'cb-list-hint' }, t('copyEmptyList'))
-                : null,
-              !loading && exists && docs.length > 0 && groups.length === 0
-                ? h('div', { className: 'cb-list-hint' }, t('copyNoMatch'))
-                : null,
-              groups.map((group) =>
-                h(
-                  'div',
-                  { key: group.status },
-                  h(
-                    'div',
-                    { className: 'cb-list-group' },
-                    h('span', null, group.label),
-                    h('span', { className: 'cb-list-n' }, String(group.items.length)),
-                  ),
-                  group.items.map((doc) => groupItem(doc)),
-                ),
-              ),
             ),
+          ),
+          /* 纯文件树（默认就是它，不再有视图切换） */
+          h(CopyTree, {
+            t,
+            nodes: tree,
+            activePath,
+            onPick: (node) => props.onPick(node.path),
+            onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
+            onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
+            onMove: (node) => { if (typeof props.onMove === 'function') props.onMove(node) },
+            onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
+          }),
         )
       }
       function CopyToolbar(props) {
@@ -6203,8 +6150,6 @@ window.__ModuleLoader__.load({
         const [activePath, setActivePath] = useState('')
         /* 目录树（2026-11-18：左栏改树，数据来自 /copy-tree） */
         const [copyTree, setCopyTree] = useState([])
-        /* 视图：tree = 目录树（默认），group = 按状态分组 */
-        const [listView, setListView] = useState('tree')
         /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
         const [treePrompt, setTreePrompt] = useState(null)
         const [doc, setDoc] = useState(null)
@@ -6378,10 +6323,13 @@ window.__ModuleLoader__.load({
           if (!treePrompt) return
           const { kind, node, value } = treePrompt
           const typed = String(value || '').trim()
-          if (typed === '' || typed === node.name) { setTreePrompt(null); return }
+          if (typed === '' || (node && typed === node.name)) { setTreePrompt(null); return }
           setTreePrompt(null)
           try {
-            if (kind === 'rename') {
+            if (kind === 'group') {
+              await vaultApiPost('/mkdir', { path: '文案/' + typed })
+              flash(t('vaultNewDir') + ' ' + t('vaultSaved'))
+            } else if (kind === 'rename') {
               await vaultApiPost('/rename', { path: node.path, name: typed })
               flash(t('vaultRenamed'))
             } else {
@@ -6653,6 +6601,15 @@ window.__ModuleLoader__.load({
         }
 
         // 新建稿件：写进 文案\，命名不撞车
+        /*
+         * 新建分组 = 在 文案\ 下真的建一个文件夹（2026-11-18 大王要求）。
+         * 用自绘输入条（ Electron 没有 window.prompt），复用 treePrompt。
+         */
+        const createGroup = () => {
+          if (root === '') { flash(t('assistNeedWorkspace')); return }
+          setTreePrompt({ kind: 'group', node: null, value: '' })
+        }
+
         const createDraft = async () => {
           if (root === '') {
             flash(t('assistNeedWorkspace'))
@@ -6706,10 +6663,9 @@ window.__ModuleLoader__.load({
             onPick: (path) => void pick(path),
             /* 新建稿件（2026-11-18 修：以前直接调 createDraft，作用域里没有） */
             onCreate: () => void createDraft(),
+            onCreateDir: createGroup,
             /* 树视图（2026-11-18 左栏改树） */
             tree: copyTree,
-            view: listView,
-            onView: (next) => setListView(next),
             onPickDir: () => {},
             onRename: (node) => void renameNode(node),
             onMove: (node) => void moveNode(node),
@@ -6722,7 +6678,8 @@ window.__ModuleLoader__.load({
             treePrompt
               ? h('div', { className: 'cb-prompt-bar' },
                 h('span', { className: 'cb-prompt-k' },
-                  treePrompt.kind === 'rename' ? t('vaultRename') : t('vaultMoveTo')),
+                  treePrompt.kind === 'rename' ? t('vaultRename') : (treePrompt.kind === 'group' ? t('vaultNewDir') : t('vaultMoveTo')),
+                ),
                 h('input', {
                   className: 'cb-prompt-input',
                   type: 'text',
@@ -8962,7 +8919,7 @@ mark.df-hit[data-active="true"] {
 .cb-prompt-go, .cb-prompt-x { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; }
 .cb-prompt-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 
-.cb-head, .wbg-head {.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .cb-head-title, .wbg-head-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
@@ -9014,9 +8971,6 @@ mark.df-hit[data-active="true"] {
 .cb-ic-sm { width: 13px; height: 13px; }
 .cb-list { position: relative; width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
 .cb-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-list-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 10px; }
-.cb-list-group { display: flex; align-items: center; gap: 6px; padding: 10px 6px 5px; font-size: 11.5px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
-.cb-list-n { margin-left: auto; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-list-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: var(--dsw-radius-sm, 8px); font-size: 12.5px; line-height: 1.35; color: var(--dsw-alias-label-secondary); }
 .cb-list-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .cb-list-item[data-active="true"] { background: var(--dsw-alias-bg-layer-1); box-shadow: 0 1px 2px rgba(0, 0, 0, .05); }
