@@ -6145,6 +6145,8 @@ window.__ModuleLoader__.load({
         const doc = props.doc
         const meta = props.meta
         const mode = props.mode
+        /* 阅读设置（2026-11-18）：外层容器用 */
+        const reader = props.reader || {}
 
         // 没选稿件：给空状态，别显示假内容
         if (!doc) {
@@ -6172,7 +6174,22 @@ window.__ModuleLoader__.load({
 
         return h(
           'div',
-          { className: 'cb-doc' },
+          {
+            /*
+             * 2026-11-18 修「配色不一致」：
+             * .dn-reader 必须包住整个文档区（标题行 + 工具条 + 阅读栏 + 正文），
+             * 而不是只包正文 —— 素材库就是这么做的（.dn-reader 包住整个三元）。
+             * 只包正文的话，标题行和阅读栏会露出 .cb-doc 的 bg-base，
+             * 而正文是纸面 bg-layer-1；暗色主题下这两者深浅不同，看着就是两块。
+             */
+            className: 'dn-reader cb-doc',
+            'data-rt-bg': reader.bg,
+            'data-rf-font': reader.font,
+            style: {
+              '--dn-reader-size': (reader.fontSize || 14) + 'px',
+              '--dn-reader-line': String(reader.line || 1.85),
+            },
+          },
           h(
             'div',
             { className: 'cb-doc-head' },
@@ -6247,16 +6264,7 @@ window.__ModuleLoader__.load({
             ? h('div', { className: 'cb-edit-wrap' }, props.editor)
             : h(
                 'div',
-                {
-                  className: 'dn-reader cb-prose',
-                  /* 阅读设置（2026-11-18）：复用素材库那套 data-rt-bg / data-rf-font + CSS 变量 */
-                  'data-rt-bg': props.reader && props.reader.bg ? props.reader.bg : '',
-                  'data-rf-font': props.reader && props.reader.font ? props.reader.font : '',
-                  style: {
-                    '--dn-reader-size': ((props.reader && props.reader.fontSize) || 14) + 'px',
-                    '--dn-reader-line': String((props.reader && props.reader.line) || 1.85),
-                  },
-                },
+                { className: 'cb-prose' },
                 blocks.map((block, index) => {
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
                   if (block.t === 'quote') return h('p', { key: index, className: 'cb-quote' }, block.text)
@@ -7292,12 +7300,23 @@ window.__ModuleLoader__.load({
       function WritingDoc(props) {
         const t = props.t
         const file = props.file
+        /* 阅读设置（2026-11-18）：外层容器用 */
+        const reader = props.reader || {}
 
         // 没打开正文：给空状态
         if (!file) {
           return h(
             'div',
-            { className: 'wbg-doc' },
+          {
+            /* 同文案台：.dn-reader 包住整个文档区，纸面才统一（2026-11-18） */
+            className: 'dn-reader wbg-doc',
+            'data-rt-bg': reader.bg,
+            'data-rf-font': reader.font,
+            style: {
+              '--dn-reader-size': (reader.fontSize || 14) + 'px',
+              '--dn-reader-line': String(reader.line || 1.9),
+            },
+          },
             h(
               'div',
               { className: 'wbg-empty-doc' },
@@ -7379,16 +7398,7 @@ window.__ModuleLoader__.load({
             ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
             : h(
                 'div',
-                {
-                  className: 'dn-reader wbg-prose',
-                  /* 阅读设置（2026-11-18）：同上，复用素材库机制 */
-                  'data-rt-bg': props.reader && props.reader.bg ? props.reader.bg : '',
-                  'data-rf-font': props.reader && props.reader.font ? props.reader.font : '',
-                  style: {
-                    '--dn-reader-size': ((props.reader && props.reader.fontSize) || 14) + 'px',
-                    '--dn-reader-line': String((props.reader && props.reader.line) || 1.9),
-                  },
-                },
+                { className: 'wbg-prose' },
                 blocks.map((block, index) => {
                   if (block.t === 'sep') return h('div', { key: index, className: 'wbg-scene-sep' }, '◆')
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
@@ -9216,7 +9226,7 @@ mark.df-hit[data-active="true"] {
 .cb-dn-spacer { flex: 1 1 auto; min-width: 8px; }
 
 /* 编辑态：与素材库同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
-.cb-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 10px 20px 20px; }
+.cb-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 10px 0 20px; }
 .cb-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 .cb-editor-surface:empty::before { content: attr(data-placeholder); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
@@ -9251,9 +9261,9 @@ mark.df-hit[data-active="true"] {
 .cb-list-t b { display: block; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-list-item[data-active="true"] .cb-list-t b { font-weight: 600; }
 .cb-list-t small { font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base);
+.cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); /* 边距统一由容器给（照素材库 .vp-doc 的做法，2026-11-18） */ padding: 12px 20px 16px;
   /* 兜底：子元素不许伸出中栏（下拉菜单已改 fixed，不受此裁剪影响） */ overflow: hidden; }
-.cb-doc-head { flex: none; padding: 14px 20px 0; }
+.cb-doc-head { flex: none; padding: 2px 0 0; }
 .cb-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .cb-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
@@ -9265,21 +9275,27 @@ mark.df-hit[data-active="true"] {
 .cb-tb:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
 .cb-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
-.cb-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 20px 24px; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); }
+.cb-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 0 24px; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); }
 /*
- * 文案台/写作台的正文容器借用素材库的 .dn-reader 机制（2026-11-18）：
- * data-rt-bg 出底色、data-rf-font 出字体、--dn-reader-size/-line 出字号行距。
- * 下面把 .dn-reader 自带的那几条布局属性覆盖回正文需要的形态。
+ * 文案台/写作台的整体纸面（2026-11-18 v3 修正）：
+ *
+ * .dn-reader 挂在**整个中栏容器**上（.cb-doc / .wbg-doc），
+ * 不是只挂正文 —— 素材库就是这么做的（.dn-reader 包住整个三元）。
+ * 只挂正文时，标题行和阅读栏会露出 .cb-doc 的 bg-base，
+ * 而正文是纸面 bg-layer-1；暗色主题下这两者深浅不同，看着就是两块。
  */
-.dn-reader.cb-prose, .dn-reader.wbg-prose {
-  display: block;              /* .dn-reader 默认 flex column，正文要块布局 */
-  border-radius: 0;            /* 正文区不要圆角 */
-  background: transparent;     /* 纸面由 .dn-reader::before 画，这里必须透明 */
-  /* 用变量而不是 inherit：字体由 --dn-reader-font（data-rf-font 给）控制 */
-  font-family: var(--dn-reader-font, inherit);
+.dn-reader.cb-doc, .dn-reader.wbg-doc {
+  border-radius: 0;            /* 中栏不要圆角（.dn-reader 默认 8px） */
+  background: transparent;     /* 纸面由 .dn-reader::before 画 */
+  color: var(--dn-reader-ink);
+}
+/* 正文：用变量跟着阅读栏走，背景透明露出父级纸面 */
+.dn-reader .cb-prose, .dn-reader .wbg-prose {
+  font-family: inherit;        /* 继承 .dn-reader 的 --dn-reader-font */
   font-size: var(--dn-reader-size, 14.5px);
   line-height: var(--dn-reader-line, 1.85);
   color: var(--dn-reader-ink);
+  background: transparent;
 }
 
 .cb-prose p { margin: 0 0 16px; }
@@ -9364,9 +9380,9 @@ mark.df-hit[data-active="true"] {
 .wbg-set-t b { display: block; font-size: 12.5px; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wbg-set-t small { display: block; margin-top: 1px; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 中栏 自适应 */
-.wbg-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base);
+.wbg-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); /* 同上：边距由容器给 */ padding: 12px 20px 16px;
   /* 同上：兜底裁剪 */ overflow: hidden; }
-.wbg-doc-head { flex: none; padding: 14px 20px 0; }
+.wbg-doc-head { flex: none; padding: 2px 0 0; }
 .wbg-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .wbg-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .wbg-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)); background: var(--dsw-alias-state-business-tertiary, var(--dsw-alias-bg-layer-2)); }
@@ -9412,7 +9428,7 @@ mark.df-hit[data-active="true"] {
 .wbg-dn-spacer { flex: 1 1 auto; min-width: 8px; }
 
 /* 编辑态：与素材库/文案台同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
-.wbg-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 10px 20px 20px; }
+.wbg-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 10px 0 20px; }
 .wbg-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 
 /* 场景分隔符（正文里的三个连续短横线） */
@@ -9462,7 +9478,7 @@ mark.df-hit[data-active="true"] {
 .wbg-tb { height: 26px; min-width: 26px; padding: 0 8px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .wbg-tb[data-on="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); box-shadow: 0 1px 2px rgba(0, 0, 0, .07); }
 .wbg-tb-sep { width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
-.wbg-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 20px 24px; font-size: 14px; line-height: 1.9; color: var(--dsw-alias-label-primary); }
+.wbg-prose { flex: 1; min-height: 0; overflow-y: auto; padding: 10px 0 24px; font-size: 14px; line-height: 1.9; color: var(--dsw-alias-label-primary); }
 .wbg-prose p { margin: 0 0 16px; }
 .wbg-p-quote { padding-left: 14px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
 .wbg-p-ins { padding: 2px; border-radius: 4px; background: var(--dsw-alias-state-success-tertiary, var(--dsw-alias-bg-layer-2)); }
@@ -9585,12 +9601,14 @@ mark.df-hit[data-active="true"] {
  *   · 隐藏滚动条 —— 极窄时仍可横向滚动，但不显示滚动条
  */
 .vpb-bar {
-  position: relative; display: flex; align-items: center; gap: 2px;
+  position: relative; display: flex; align-items: center; gap: 2px 6px; flex: none;
   width: fit-content; max-width: 100%; min-width: 0;
   padding: 2px 0; margin: 2px 0 8px;
   border: 0; border-radius: 0; background: transparent;
-  white-space: nowrap; overflow-x: auto; overflow-y: hidden;
-  box-sizing: border-box; scrollbar-width: none;
+  /* 窄时换行而不是横向滚动（2026-11-18）：滚动会让控件藏在可视区外，
+     看着就是「字超出阅读栏」。换行则整组下移，每个控件都完整。 */
+  white-space: normal; flex-wrap: wrap; overflow: visible;
+  box-sizing: border-box;
 }
 /*
  * 文案台 / 写作台的阅读栏要自己补左右边距（2026-11-18 修排版）。
@@ -9603,7 +9621,7 @@ mark.df-hit[data-active="true"] {
  * ⚠️ max-width 必须把左右 margin（共 80px）扣掉 —— 否则 100% + 80px 会溢出到
  * 右边的写作助手区（2026-11-18 大王截图指出）。
  */
-.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 10px 20px 0; max-width: calc(100% - 40px); }
+.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 8px 0 0; }
 .vpb-bar[data-menu="true"] { overflow: visible; }
 /*
  * 极窄时藏掉次要信息（2026-11-18）：
@@ -9614,8 +9632,8 @@ mark.df-hit[data-active="true"] {
 .vpb-state { max-width: 56px; }
 .vpb-droplabel { max-width: 84px; }
 /* 字数/状态可收缩：窄窗口先省略这两个，控件组保持 */
-.vpb-info { flex: 0 1 auto !important; min-width: 0; max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vpb-state { flex: 0 1 auto !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vpb-info { flex: 0 0 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vpb-state { flex: 0 0 auto; white-space: nowrap; }
 .vpb-bar::-webkit-scrollbar { height: 0; display: none; }
 .vpb-bar::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 .vpb-bar :focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
@@ -9636,7 +9654,7 @@ mark.df-hit[data-active="true"] {
 .vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
 .vpb-sep { flex: 0 0 auto; width: 1px; height: 13px; margin: 0 5px; background: var(--dsw-alias-border-l1); opacity: .7; }
 /* 字号 A- / 值 / A+：三个并列按钮包成一组 */
-.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: 26px; padding: 0 2px; border-radius: 4px; background: transparent; }
+.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: 26px; padding: 0 2px; border-radius: 4px; background: transparent; white-space: nowrap; }
 .vpb-zoom-btn { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
 .vpb-zoom-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .vpb-zoom-btn:disabled { opacity: .35; cursor: default; }
