@@ -9124,7 +9124,8 @@ mark.df-hit[data-active="true"] {
 .cb-list-t b { display: block; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-list-item[data-active="true"] .cb-list-t b { font-weight: 600; }
 .cb-list-t small { font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+.cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base);
+  /* 兜底：子元素不许伸出中栏（下拉菜单已改 fixed，不受此裁剪影响） */ overflow: hidden; }
 .cb-doc-head { flex: none; padding: 20px 40px 0; }
 .cb-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .cb-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -9177,7 +9178,7 @@ mark.df-hit[data-active="true"] {
 .vp-splitter { flex: 0 0 4px; }
 .vp-doccol { background: var(--dsw-alias-bg-base); }
 .vp-editor { border: 0; border-radius: 0; background: transparent; }
-.vp-doc { padding: 20px 40px 24px; box-sizing: border-box; }
+.vp-doc { padding: 20px 40px 24px; box-sizing: border-box; overflow: hidden; }
 .vp-docfoot { box-sizing: border-box; }
 .vp-dochead { padding-bottom: 8px; border-bottom: 0; }
 .vp-doctitle { font-size: 21px; font-weight: 650; letter-spacing: -.01em; }
@@ -9219,7 +9220,8 @@ mark.df-hit[data-active="true"] {
 .wbg-set-t b { display: block; font-size: 12.5px; font-weight: 500; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wbg-set-t small { display: block; margin-top: 1px; font-size: 10.5px; line-height: 1.5; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 中栏 自适应 */
-.wbg-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
+.wbg-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base);
+  /* 同上：兜底裁剪 */ overflow: hidden; }
 .wbg-doc-head { flex: none; padding: 20px 40px 0; }
 .wbg-doc-title { margin: 0 0 8px; font-size: 21px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .wbg-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -9435,7 +9437,12 @@ mark.df-hit[data-active="true"] {
  * .cb-doc / .wbg-doc 没有左右 padding，所以不补的话阅读栏会贴左边缘。
  * 上边距也给足，和上面那条 Markdown 工具条分开。
  */
-.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 10px 40px 0; }
+/*
+ * 阅读栏在文案台/写作台要自己补左右边距（素材库那边由 .vp-doc 的 padding 提供）。
+ * ⚠️ max-width 必须把左右 margin（共 80px）扣掉 —— 否则 100% + 80px 会溢出到
+ * 右边的写作助手区（2026-11-18 大王截图指出）。
+ */
+.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 10px 40px 0; max-width: calc(100% - 80px); }
 .vpb-bar[data-menu="true"] { overflow: visible; }
 .vpb-bar::-webkit-scrollbar { height: 4px; }
 .vpb-bar::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
