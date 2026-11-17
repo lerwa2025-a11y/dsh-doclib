@@ -1408,7 +1408,8 @@ window.__ModuleLoader__.load({
         if (!newMenuOpen) return undefined
         const onDocDown = (event) => {
           const target = event && event.target
-          if (target && typeof target.closest === 'function' && target.closest('.vp-newmenu') !== null) return
+          /* 加号容器叫 .vp-newfloat（原 .vp-newmenu），两个都认，挪位置不会再踩 */
+          if (target && typeof target.closest === 'function' && target.closest('.vp-newfloat, .vp-newmenu') !== null) return
           setNewMenuOpen(false)
         }
         const onKey = (event) => {
@@ -3642,16 +3643,31 @@ window.__ModuleLoader__.load({
              * 文案台 (.cb-list) 和写作台 (.wbg-list) 左栏都是搜索框打头，
              * 所以这一栏整个删掉，搜索框直接成为左栏顶部。
              */
-            h('input', {
-              className: 'vp-search',
-              type: 'search',
-              value: query,
-              placeholder: t('vaultSearch'),
-              onChange: (event) => {
-                setQuery(event.target.value)
-                void runSearch(event.target.value)
+            /*
+             * 搜索框：结构与文案台 .cb-search 一致（描边容器 + 🔍 图标 + 透明 input）。
+             * 图标内联 SVG，因为 CbIcon 定义在文件后半段，素材库作用域里拿不到。
+             */
+            h('div', { className: 'vp-search' },
+              h('svg', {
+                className: 'vp-search-ic',
+                viewBox: '0 0 24 24',
+                'aria-hidden': 'true',
+                focusable: 'false',
               },
-            }),
+                h('path', { d: 'M10.5 3.5a7 7 0 1 0 .01 14.01A7 7 0 0 0 10.5 3.5Z' }),
+                h('path', { d: 'm20 20-4.2-4.2' }),
+              ),
+              h('input', {
+                className: 'vp-search-field',
+                type: 'text',
+                value: query,
+                placeholder: t('vaultSearch'),
+                onChange: (event) => {
+                  setQuery(event.target.value)
+                  void runSearch(event.target.value)
+                },
+              }),
+            ),
 
             /*
              * ── 文件操作条（v0.3 新增）──────────────────────────────────────
@@ -3659,65 +3675,12 @@ window.__ModuleLoader__.load({
              * 放在树面板里，因为它作用的对象就是这棵树。
              * 「新建」合并成一个下拉：新建文件 / 新建文件夹。
              */
-            h(
-              'div',
-              { className: 'vp-treeops' },
-              h(
-                'div',
-                { className: 'vp-newmenu' },
-                /*
-                 * 圆形加号按钮（2026-11-18 大王要求）：
-                 * 与文案台 .cb-newdraft、写作台 .wbg-newproj 视觉统一，
-                 * 点开再选「新建文件 / 新建文件夹」，功能与原来的下拉一致。
-                 */
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-newbtn-round',
-                    'data-open': newMenuOpen ? 'true' : 'false',
-                    onClick: () => setNewMenuOpen((open) => !open),
-                    title: t('vaultNew'),
-                    'aria-label': t('vaultNew'),
-                  },
-                  '＋',
-                ),
-                newMenuOpen
-                  ? h(
-                    'div',
-                    { className: 'vp-newdrop' },
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'vp-newdrop-item',
-                        onClick: () => { setNewMenuOpen(false); askCreate('file') },
-                      },
-                      h('span', { className: 'vp-newdrop-ic' }, '📄'),
-                      h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
-                      h('span', { className: 'vp-newdrop-k' }, 'Ctrl N'),
-                    ),
-                    h(
-                      'button',
-                      {
-                        type: 'button',
-                        className: 'vp-newdrop-item',
-                        onClick: () => { setNewMenuOpen(false); askCreate('dir') },
-                      },
-                      h('span', { className: 'vp-newdrop-ic' }, '📁'),
-                      h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
-                      h('span', { className: 'vp-newdrop-k' }, 'Ctrl ⇧ N'),
-                    ),
-                  )
-                  : null,
-              ),
-              /* 「移动到…」已挪到右键菜单（大王要求），工具栏不再放 */
-              /*
-               * 这里原来是 ↑ ↓ 两个「同类型内上移/下移」按钮，已按大王要求移除。
-               * 连 dn-spacer 一起删了 —— 它当初只是为了把这两个按钮推到右端。
-               * 排序改用「排序下拉」（名称/日期/体积），那个还在。
-               */
-            ),
+            /*
+             * .vp-treeops 整块已删（2026-11-18）：
+             *   · 加号按钮挪到左栏底部浮动（大王要求「加号放下面」）
+             *   · 移动到/上下移都进了右键菜单
+             *   · 所以这条操作条已经没有任何内容，留着只撑空白
+             */
             /*
              * 右键菜单：重命名 / 移动到… / 删除。
              *
@@ -3768,6 +3731,58 @@ window.__ModuleLoader__.load({
                 }, t('vaultDelete')),
               )
               : null,
+
+            /*
+             * 新建：圆形加号浮在左栏底部（2026-11-18 大王要求「加号放下面」）。
+             *
+             * 与文案台 .cb-newdraft、写作台 .wbg-newproj 同一套做法：
+             * position: absolute 相对 .vp-tree 定位到左下角。
+             * 菜单向上展开（bottom: 100%），因为按钮贴底边，往下开会跑出窗口。
+             */
+            h(
+              'div',
+              { className: 'vp-newfloat' },
+              h(
+                'button',
+                {
+                  type: 'button',
+                  className: 'vp-newbtn-round',
+                  'data-open': newMenuOpen ? 'true' : 'false',
+                  onClick: () => setNewMenuOpen((open) => !open),
+                  title: t('vaultNew'),
+                  'aria-label': t('vaultNew'),
+                },
+                '＋',
+              ),
+              newMenuOpen
+                ? h(
+                  'div',
+                  { className: 'vp-newdrop vp-newdrop-up' },
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'vp-newdrop-item',
+                      onClick: () => { setNewMenuOpen(false); askCreate('file') },
+                    },
+                    h('span', { className: 'vp-newdrop-ic' }, '📄'),
+                    h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
+                    h('span', { className: 'vp-newdrop-k' }, 'Ctrl N'),
+                  ),
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'vp-newdrop-item',
+                      onClick: () => { setNewMenuOpen(false); askCreate('dir') },
+                    },
+                    h('span', { className: 'vp-newdrop-ic' }, '📁'),
+                    h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
+                    h('span', { className: 'vp-newdrop-k' }, 'Ctrl ⇧ N'),
+                  ),
+                )
+                : null,
+            ),
 
             h(
               'div',
@@ -4283,11 +4298,22 @@ window.__ModuleLoader__.load({
           'M4 19.5V5a2 2 0 0 1 2-2h13v18H6a2 2 0 0 1-2-2Z',
           'M4 17h15',
         ],
-        // 垃圾桶轮廓：盖沿 → 提手 → 桶身，与另外三个同一套 stroke 画法
+        // 垃圾桶：Lucide trash-2（MIT）。比手画的多了两条竖线，一眼能认出是垃圾桶
         trash: [
-          'M4 7h16',
-          'M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7',
-          'M6.6 7l.9 11.3a2 2 0 0 0 2 1.7h5a2 2 0 0 0 2-1.7L17.4 7',
+          'M3 6h18',
+          'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6',
+          'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
+          'M10 11v6',
+          'M14 11v6',
+        ],
+        // 打开文件夹：Lucide folder-open（MIT）。替换掉原来的 emoji 📂
+        folderOpen: [
+          'M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2',
+        ],
+        // 刷新：Lucide rotate-cw（MIT）
+        refresh: [
+          'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8',
+          'M21 3v5h-5',
         ],
       }
 
@@ -4658,29 +4684,35 @@ window.__ModuleLoader__.load({
              * 刷新是「当前板块」的刷新，所以计数放在 WorkbenchPage：
              * 点一次 refreshTick + 1，各板块监听这个数决定重拉什么。
              */
+            /*
+             * 「打开文件夹」：按钮形式照板块切换那套（圆形图标 + 下方小字）。
+             * 原来是个 emoji 📂 塞在方框里，和旁边的 SVG 图标风格不统一。
+             */
             h(
               'button',
               {
                 type: 'button',
-                className: 'wb-reload',
-                /* 按钮说明要跟着板块变：在文案台说「打开库根」会让人以为搞错了 */
+                className: 'wb-action',
                 /* 提示里显示真实落点：选了文件就显示它所在目录，没选显示板块目录 */
                 title: t('vaultOpenFolder') + '：' + openFolderHint(tab, boardFocusPath, t),
                 'aria-label': t('vaultOpenFolder'),
                 onClick: () => { void vaultOpenBoardFolder(tab, boardFocusPath) },
               },
-              '📂',
+              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'folderOpen' })),
+              h('span', { className: 'wb-action-label' }, t('vaultOpenFolder')),
             ),
+            /* 「刷新」：同上，圆形图标 + 下方小字 */
             h(
               'button',
               {
                 type: 'button',
-                className: 'wb-reload',
+                className: 'wb-action',
                 title: t('vaultReload'),
                 'aria-label': t('vaultReload'),
                 onClick: () => setRefreshTick((tick) => tick + 1),
               },
-              '⟳',
+              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'refresh' })),
+              h('span', { className: 'wb-action-label' }, t('vaultReload')),
             ),
             h(WorkspacePicker, {
               t,
@@ -4701,17 +4733,19 @@ window.__ModuleLoader__.load({
               onApply: () => void applyRoot(),
               onPick: () => void pickRoot(),
             }),
+            /* 「回收站」：同上。它是个「去处」不是板块，所以单独靠右，但外观统一 */
             h(
               'button',
               {
                 type: 'button',
-                className: 'wb-trash',
+                className: 'wb-action wb-action-end',
                 'data-active': tab === 'trash',
                 title: t('tabTrashDesc'),
                 'aria-label': t('tabTrash'),
                 onClick: () => setTab(tab === 'trash' ? 'vault' : 'trash'),
               },
-              h(BoardIcon, { name: 'trash' }),
+              h('span', { className: 'wb-action-icon' }, h(BoardIcon, { name: 'trash' })),
+              h('span', { className: 'wb-action-label' }, t('tabTrash')),
             ),
           ),
           h(
@@ -7201,7 +7235,7 @@ window.__ModuleLoader__.load({
 .dn-btn-primary { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .dn-danger { border-color: var(--dsw-alias-state-error-primary); color: var(--dsw-alias-state-error-primary); }
 .dn-libheader { gap: 16px; }
-.wb-header { gap: 18px; padding: 10px 20px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.wb-header { gap: 18px; padding: 10px 20px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1); /* 板块切换与动作按钮都是「图标+文字」竖排，顶部对齐才不会错位 */ align-items: flex-start; }
 .wb-switch { display: flex; align-items: flex-start; gap: 14px; flex: none; }
 .wb-sw { display: flex; flex-direction: column; align-items: center; gap: 5px; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; border-radius: 50%; }
 .wb-sw-icon { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-tertiary); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: background .15s, border-color .15s, color .15s; }
@@ -7211,6 +7245,20 @@ window.__ModuleLoader__.load({
 .wb-sw[data-active="true"] .wb-sw-label { color: var(--dsw-alias-label-primary); font-weight: 600; }
 .wb-sw:focus-visible { outline: none; }
 .wb-sw:focus-visible .wb-sw-icon { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+
+/* ── 顶栏动作按钮（打开文件夹 / 刷新 / 回收站）────────────────────────────
+   照 .wb-sw 的规格：圆形 40px 图标 + 下方 10.5px 小字，
+   让动作按钮和板块切换按钮视觉上是一套（2026-11-18 大王要求）。 */
+.wb-action { display: flex; flex-direction: column; align-items: center; gap: 5px; flex: none; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+.wb-action-icon { width: 40px; height: 40px; padding: 10px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); display: grid; place-items: center; transition: background .15s, color .15s, border-color .15s; }
+.wb-action-icon svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.wb-action-label { font-size: 10.5px; line-height: 1.3; color: var(--dsw-alias-label-tertiary); white-space: nowrap; }
+.wb-action:hover .wb-action-icon { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l3, var(--dsw-alias-border-l2)); }
+.wb-action:hover .wb-action-label { color: var(--dsw-alias-label-secondary); }
+.wb-action[data-active="true"] .wb-action-icon { background: var(--dsw-alias-brand-primary); border-color: transparent; color: var(--dsw-alias-bg-base); }
+.wb-action[data-active="true"] .wb-action-label { color: var(--dsw-alias-label-primary); font-weight: 600; }
+.wb-action:focus-visible { outline: none; }
+.wb-action:focus-visible .wb-action-icon { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
 /* 选择器：包一层定位上下文，弹出层挂在它下面 */
 .wb-ws-wrap { position: relative; flex: none; }
 .wb-ws { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 11px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-secondary); max-width: 520px; white-space: nowrap; overflow: hidden; cursor: pointer; }
@@ -7263,8 +7311,12 @@ window.__ModuleLoader__.load({
 .vp-treehead-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .vp-treehead-btn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .vp-treehead-btn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
-.vp-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; padding: 6px 9px; border-radius: 7px; border: 1px solid transparent; background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13.5px; outline: none; }
-.vp-search:focus { border-color: var(--dsw-alias-brand-primary); }
+/* 搜索框：对齐文案台 .cb-search（描边容器 + 图标 + 透明 input） */
+.vp-search { display: flex; align-items: center; gap: 7px; height: 30px; box-sizing: border-box; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 12.5px; }
+.vp-search-ic { width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.vp-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
+.vp-search-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-search:focus-within { border-color: var(--dsw-alias-brand-primary); }
 .vp-resultlist { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; }
 .vp-resultrow { display: flex; flex-direction: column; gap: 2px; width: 100%; box-sizing: border-box; text-align: left; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: inherit; font: inherit; cursor: pointer; }
 .vp-resultrow:hover { background: var(--dsw-alias-bg-layer-2); }
@@ -7889,12 +7941,10 @@ mark.df-hit[data-active="true"] {
 .vp-crumbhint { opacity: .75; }
 
 /* ── 树面板操作条 ───────────────────────────────────────────────────────── */
-.vp-treeops {
-  display: flex; align-items: center; gap: 2px;
-  /* 只剩一个圆按钮了，左内边距对齐搜索框（12px），竖着看是一条线 */
-  padding: 0 12px 6px; position: relative;
-}
-.vp-newmenu { position: relative; flex: 0 0 auto; }
+/* .vp-treeops 已删：操作条整块移除（加号挪到左下角，其余进右键菜单）。 */
+/* .vp-newmenu 已删：加号容器改成 .vp-newfloat（absolute 定位到左下角）。 */
+/* 新建：浮动加号容器，贴在左栏左下角（2026-11-18 大王要求「加号放下面」） */
+.vp-newfloat { position: absolute; left: 12px; bottom: 14px; z-index: 6; }
 /* 圆形加号按钮：与文案台 .cb-newdraft / 写作台 .wbg-newproj 视觉统一（2026-11-18） */
 .vp-newbtn-round {
   display: grid; place-items: center;
@@ -7913,6 +7963,9 @@ mark.df-hit[data-active="true"] {
   border: 1px solid var(--dsw-alias-border-l2);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
 }
+/* 向上展开的菜单：加号在左下角，往下开会跑出窗口（2026-11-18） */
+.vp-newdrop-up { top: auto; bottom: calc(100% + 6px); }
+
 .vp-newdrop-item {
   display: flex; align-items: center; gap: 8px; width: 100%;
   padding: 6px 9px; border: 0; border-radius: 5px;
@@ -8306,15 +8359,15 @@ mark.df-hit[data-active="true"] {
 .cb-send { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
-.vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; }
+.vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; /* 加号按钮 absolute 定位相对这里（同文案台 .cb-list 的做法） */ position: relative; }
 /* .vp-libhead / .vp-libmark / .vp-libname 已删：
    左栏那条「库 / 工作台」标题行已移除，现在搜索框直接打头，
    与文案台 .cb-search、写作台 .wbg-search 一致。 */
 /* .vp-libroot 已删：素材库左栏「库」下面那行完整路径不显示了。
    它原先 flex:1 0 100% 独占一整行，删掉后左栏头部从两行收成一行。 */
 /* 搜索框现在是左栏第一个元素（标题行已删），上边距补到 12px 与右/下对齐 */
-.vp-tree .vp-search { width: auto; margin: 12px 12px 6px; }
-.vp-tree .vp-treeops { padding: 0 12px 6px; }
+.vp-tree .vp-search { margin: 12px 12px 6px; }
+/* .vp-tree .vp-treeops 已删（同上） */
 .vp-tree .vp-treehead { margin: 0 12px; padding: 2px 0 6px; }
 .vp-treelist { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 10px; }
 .vp-treelist::-webkit-scrollbar { width: 7px; }
@@ -8530,17 +8583,12 @@ mark.df-hit[data-active="true"] {
 /* ── 回收站板块（2026-11-16）：顶栏 ⟳ + 第四板块 .tb-* ─────────────────── */
 /* 1. 顶栏刷新：紧挨工作区选择器左侧，只吃主题 token */
 /* 顶栏最右的回收站入口：与 ⟳ 同尺寸的方按钮，当前在回收站时点亮 */
-.wb-trash { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-.wb-trash:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.wb-trash[data-active="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-interactive-bg-hover); }
-.wb-trash:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+/* .wb-trash 已删：回收站按钮改用 .wb-action（圆形图标+文字，2026-11-18）。 */
 /* 借用的 .wb-sw-icon 在圆形按钮里是 40px 圆底，这里要还原成裸图标 */
-.wb-trash .wb-sw-icon { width: 16px; height: 16px; padding: 0; border: 0; border-radius: 0; background: none; }
-.wb-trash .wb-sw-icon:hover { background: none; }
+/* .wb-trash .wb-sw-icon 已删（同上） */
+/* .wb-trash .wb-sw-icon:hover 已删（同上） */
 
-.wb-reload { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 14px; line-height: 1; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
-.wb-reload:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.wb-reload:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+/* .wb-reload 已删：打开文件夹/刷新改用 .wb-action（圆形图标+文字，2026-11-18）。 */
 /* 2. 板块外壳：说明 + 库根 + 按钮 一行头，下面整块可滚 */
 .tb-root { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); }
 .tb-head { flex: none; display: flex; align-items: flex-start; gap: 14px; padding: 14px 20px 12px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
