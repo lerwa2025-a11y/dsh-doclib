@@ -67,6 +67,7 @@ window.__ModuleLoader__.load({
         vaultPathCopied: '路径已复制',
         vaultSendChatNew: '发送到新对话',
         vaultRenameHint: '点标题改名',
+        vaultRename: '重命名',
         vaultSaveNow: '手动保存（Ctrl+S）',
         vaultSearch: '搜索全库',
         vaultSearchEmpty: '没有匹配的笔记',
@@ -134,6 +135,7 @@ window.__ModuleLoader__.load({
         readerLine: '行距',
         vaultReload: '刷新',
         vaultNewFile: '新建文件',
+        vaultNewMd: '新建 md 文件',
         vaultNewDir: '新建文件夹',
         vaultDelete: '删除',
         vaultSaving: '保存中…',
@@ -376,6 +378,7 @@ window.__ModuleLoader__.load({
         vaultPathCopied: 'Path copied',
         vaultSendChatNew: 'Send to a new chat',
         vaultRenameHint: 'Click the title to rename',
+        vaultRename: 'Rename',
         vaultSaveNow: 'Save now (Ctrl+S)',
         vaultSearch: 'Search vault',
         vaultSearchEmpty: 'No matching notes',
@@ -443,6 +446,7 @@ window.__ModuleLoader__.load({
         readerLine: 'Line height',
         vaultReload: 'Reload',
         vaultNewFile: 'New file',
+        vaultNewMd: 'New .md file',
         vaultNewDir: 'New folder',
         vaultDelete: 'Delete',
         vaultSaving: 'Saving…',
@@ -3169,13 +3173,11 @@ window.__ModuleLoader__.load({
                     { type: 'button', className: 'vp-doctitle', title: t('vaultRenameHint'), onClick: startRename },
                     `📁 ${selected.name}`,
                   ),
-              renaming
-                ? null
-                : h(
-                    'button',
-                    { type: 'button', className: 'vp-iconbtn vp-icon-rename' + (isFixedLib(selected && selected.path) ? ' vp-iconbtn-off' : ''), title: t('vaultRenameHint'), onClick: startRename },
-                    '✎',
-                  ),
+              /*
+               * ✎ 改名按钮已移除（2026-11-18 大王要求）：
+               * 改名统一走左栏右键菜单，标题旁不再留按钮。
+               * 标题本身仍可点（vp-doctitle 的 onClick 还在），那是老习惯保留。
+               */
               h('span', { className: 'dn-spacer' }),
             ),
             docBar,
@@ -3222,18 +3224,7 @@ window.__ModuleLoader__.load({
             renaming
               ? h('span', { className: 'vp-ext' }, splitExt(selected.name, selected.type === 'dir').ext)
               : null,
-            renaming
-              ? null
-              : h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-iconbtn vp-icon-rename' + (isFixedLib(selected && selected.path) ? ' vp-iconbtn-off' : ''),
-                    title: t('vaultRenameHint'),
-                    onClick: startRename,
-                  },
-                  '✎',
-                ),
+            /* ✎ 改名按钮已移除：改名统一走左栏右键菜单（同文件夹分支） */
             h('span', { className: 'dn-spacer' }),
 
             /* 复制路径：从阅读工具条挪到「阅读 / 编辑」这一栏（2026-11-17） */
@@ -3674,18 +3665,22 @@ window.__ModuleLoader__.load({
               h(
                 'div',
                 { className: 'vp-newmenu' },
+                /*
+                 * 圆形加号按钮（2026-11-18 大王要求）：
+                 * 与文案台 .cb-newdraft、写作台 .wbg-newproj 视觉统一，
+                 * 点开再选「新建文件 / 新建文件夹」，功能与原来的下拉一致。
+                 */
                 h(
                   'button',
                   {
                     type: 'button',
-                    className: 'vp-newbtn',
+                    className: 'vp-newbtn-round',
                     'data-open': newMenuOpen ? 'true' : 'false',
                     onClick: () => setNewMenuOpen((open) => !open),
-                    title: t('vaultNewFile'),
+                    title: t('vaultNew'),
+                    'aria-label': t('vaultNew'),
                   },
-                  h('span', { className: 'vp-newbtn-plus' }, '＋'),
-                  h('span', { className: 'vp-newbtn-txt' }, t('vaultNew')),
-                  h('span', { className: 'vp-newbtn-caret' }, '▾'),
+                  '＋',
                 ),
                 newMenuOpen
                   ? h(
@@ -3699,7 +3694,7 @@ window.__ModuleLoader__.load({
                         onClick: () => { setNewMenuOpen(false); askCreate('file') },
                       },
                       h('span', { className: 'vp-newdrop-ic' }, '📄'),
-                      h('span', { className: 'vp-newdrop-t' }, t('vaultNewFile')),
+                      h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
                       h('span', { className: 'vp-newdrop-k' }, 'Ctrl N'),
                     ),
                     h(
@@ -3751,7 +3746,7 @@ window.__ModuleLoader__.load({
                     setCtxMenu(null)
                     startRename(node)
                   },
-                }, t('vaultRenameHint')),
+                }, t('vaultRename')),
                 h('button', {
                   type: 'button',
                   className: 'vp-ctxmenu-item',
@@ -7282,8 +7277,7 @@ window.__ModuleLoader__.load({
 .vp-iconbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vp-iconbtn:disabled { opacity: .4; cursor: default; }
 .vp-icon-danger:hover { color: var(--dsw-alias-state-error-primary); }
-.vp-icon-rename { color: var(--dsw-alias-label-secondary); font-size: 13px; }
-.vp-icon-rename:hover { color: var(--dsw-alias-brand-primary); }
+/* .vp-icon-rename 已删：标题旁的 ✎ 改名按钮已移除，改名统一走左栏右键菜单。 */
 .vp-ext { flex: 0 0 auto; font-size: 20px; font-weight: 700; color: var(--dsw-alias-label-secondary); padding-right: 2px; }
 .vp-doctitle { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 26px; font-weight: 700; letter-spacing: .01em; line-height: 1.3; padding: 2px 6px; border-radius: 6px; cursor: text; }
 .vp-doctitle:hover { background: var(--dsw-alias-bg-layer-2); }
@@ -7897,21 +7891,21 @@ mark.df-hit[data-active="true"] {
 /* ── 树面板操作条 ───────────────────────────────────────────────────────── */
 .vp-treeops {
   display: flex; align-items: center; gap: 2px;
-  padding: 0 4px 6px; position: relative;
+  /* 只剩一个圆按钮了，左内边距对齐搜索框（12px），竖着看是一条线 */
+  padding: 0 12px 6px; position: relative;
 }
 .vp-newmenu { position: relative; flex: 0 0 auto; }
-.vp-newbtn {
-  display: inline-flex; align-items: center; gap: 4px;
-  height: 24px; padding: 0 8px; border-radius: 6px;
+/* 圆形加号按钮：与文案台 .cb-newdraft / 写作台 .wbg-newproj 视觉统一（2026-11-18） */
+.vp-newbtn-round {
+  display: grid; place-items: center;
+  width: 24px; height: 24px; padding: 0; border-radius: 50%;
   border: 1px solid var(--dsw-alias-border-l1);
   background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-primary); font: inherit; font-size: 11.5px;
-  cursor: pointer; white-space: nowrap;
+  color: var(--dsw-alias-label-secondary); font: inherit; font-size: 15px; line-height: 1;
+  cursor: pointer;
 }
-.vp-newbtn:hover { background: var(--dsw-alias-bg-layer-1); border-color: var(--dsw-alias-border-l2); }
-.vp-newbtn[data-open="true"] { border-color: var(--dsw-alias-brand-primary); }
-.vp-newbtn-plus { font-size: 13px; line-height: 1; opacity: .85; }
-.vp-newbtn-caret { font-size: 8px; opacity: .5; }
+.vp-newbtn-round:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
+.vp-newbtn-round[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .vp-newdrop {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
   min-width: 176px; padding: 4px; border-radius: 8px;
