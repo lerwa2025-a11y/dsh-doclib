@@ -4680,6 +4680,25 @@ window.__ModuleLoader__.load({
         const nodes = Array.isArray(props.nodes) ? props.nodes : []
         const activePath = typeof props.activePath === 'string' ? props.activePath : ''
         const [expanded, setExpanded] = useState({})
+
+        /* 全部展开/收起信号（2026-11-18）：外部改这个 prop 就重设展开状态 */
+        const expandSignal = props.expandSignal || { n: 0, mode: 'all' }
+        useEffect(() => {
+          if (!expandSignal || expandSignal.n === 0) return
+          const next = {}
+          if (expandSignal.mode === 'all') {
+            const walk = (list) => {
+              for (const node of list || []) {
+                if (node.type === 'dir') {
+                  next[node.path] = true
+                  walk(node.children)
+                }
+              }
+            }
+            walk(nodes)
+          }
+          setExpanded(next)
+        }, [expandSignal.n, expandSignal.mode])
         const [ctxMenu, setCtxMenu] = useState(null)
 
         /* 点外面 / 按 Esc 关右键菜单 */
@@ -5953,12 +5972,50 @@ window.__ModuleLoader__.load({
                 )
                 : null,
             ),
+          /* 全部展开/收起 + 排序（2026-11-18 大王要求，与素材库一致） */
+          h('button', {
+            type: 'button',
+            className: 'vp-treehead-btn',
+            onClick: () => {
+              if (typeof props.onToggleExpand === 'function') props.onToggleExpand()
+            },
+            title: props.allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll'),
+          }, props.allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll')),
+          h('div', { className: 'vp-sortwrap' },
+            h('button', {
+              type: 'button',
+              className: 'vp-treehead-btn vp-sortbtn',
+              'data-open': sortOpen ? 'true' : 'false',
+              title: t('vaultSortTitle'),
+              onClick: () => setSortOpen((open) => !open),
+            },
+              h('span', { className: 'vp-sortbtn-txt' }, t('vaultSort')),
+              h('span', { className: 'vp-sortbtn-caret' }, '▾'),
+            ),
+            sortOpen
+              ? h('div', { className: 'vp-sortdrop' },
+                SORT_OPTIONS.map((item) =>
+                  h('button', {
+                    key: item.id,
+                    type: 'button',
+                    className: 'vp-sortdrop-item',
+                    'data-active': sortBy === item.id,
+                    onClick: () => {
+                      setSortOpen(false)
+                      if (typeof props.onSort === 'function') props.onSort(item.id)
+                    },
+                  }, h('span', null, t(item.labelKey)), sortBy === item.id ? h('span', { className: 'vp-sortdrop-ok' }, h(BoardIcon, { name: 'check', className: 'wb-ic-xs' })) : null),
+                ),
+              )
+              : null,
+          ),
           ),
           /* 纯文件树（默认就是它，不再有视图切换） */
           h(CopyTree, {
             t,
             nodes: tree,
             activePath,
+            expandSignal: props.expandSignal,
             onPick: (node) => props.onPick(node.path),
             onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
             onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
@@ -6150,6 +6207,9 @@ window.__ModuleLoader__.load({
         const [activePath, setActivePath] = useState('')
         /* 目录树（2026-11-18：左栏改树，数据来自 /copy-tree） */
         const [copyTree, setCopyTree] = useState([])
+        /* 排序 + 展开收起（2026-11-18） */
+        const [copySort, setCopySort] = useState('name')
+        const [expandSignal, setExpandSignal] = useState({ n: 0, mode: 'all' })
         /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
         const [treePrompt, setTreePrompt] = useState(null)
         const [doc, setDoc] = useState(null)
@@ -6195,7 +6255,7 @@ window.__ModuleLoader__.load({
             setDocs(Array.isArray(data.docs) ? data.docs : [])
       /* 目录树（2026-11-18：左栏改树后需要；拉不到就空着，不影响列表） */
       try {
-        const treeData = await vaultApiGet('/copy-tree')
+        const treeData = await vaultApiGet('/copy-tree?sortBy=' + encodeURIComponent(copySort))
         setCopyTree(Array.isArray(treeData.tree) ? treeData.tree : [])
       } catch (err) {
         void err
@@ -6605,6 +6665,11 @@ window.__ModuleLoader__.load({
          * 新建分组 = 在 文案\ 下真的建一个文件夹（2026-11-18 大王要求）。
          * 用自绘输入条（ Electron 没有 window.prompt），复用 treePrompt。
          */
+        /* 全部展开/收起切换 */
+        const toggleExpand = () => {
+          setExpandSignal((prev) => ({ n: prev.n + 1, mode: prev.mode === 'all' ? 'none' : 'all' }))
+        }
+
         const createGroup = () => {
           if (root === '') { flash(t('assistNeedWorkspace')); return }
           setTreePrompt({ kind: 'group', node: null, value: '' })
@@ -6664,6 +6729,12 @@ window.__ModuleLoader__.load({
             /* 新建稿件（2026-11-18 修：以前直接调 createDraft，作用域里没有） */
             onCreate: () => void createDraft(),
             onCreateDir: createGroup,
+            /* 排序 + 展开收起（2026-11-18） */
+            sortBy: copySort,
+            onSort: (id) => { setCopySort(id); void reload() },
+            allExpanded: expandSignal.mode === 'all',
+            onToggleExpand: toggleExpand,
+            expandSignal: expandSignal,
             /* 树视图（2026-11-18 左栏改树） */
             tree: copyTree,
             onPickDir: () => {},
@@ -6888,6 +6959,34 @@ window.__ModuleLoader__.load({
               onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
             }, '＋'),
           ),
+          /*
+         * 项目切换（2026-11-18 修）：
+         * 只要有项目就显示，放在标题行下方固定位置 ——
+         * 原来要 projects.length > 1 才出现，新建第一本书后没有切换入口；
+         * 而且它埋在滚动区里，项目多了要翻半天才找到。
+         */
+          projects.length > 0
+            ? h(
+              'div',
+              { className: 'wbg-projs' },
+              h('div', { className: 'wbg-projs-k' }, t('writeProjects')),
+              projects.map((item) =>
+                h(
+                  'button',
+                  {
+                    key: item.path,
+                    type: 'button',
+                    className: 'wbg-proj',
+                    'data-active': project && project.path === item.path,
+                    onClick: () => props.onProject(item.path),
+                    title: item.path,
+                  },
+                  h('span', { className: 'wbg-proj-t' }, item.name),
+                  h('span', { className: 'wbg-proj-n' }, String(item.scenes)),
+                  ),
+                ),
+              )
+            : null,
           h(
             'div',
             { className: 'wbg-scroll' },
@@ -6907,29 +7006,6 @@ window.__ModuleLoader__.load({
                   { className: 'wbg-empty' },
                   h('div', { className: 'wbg-empty-t' }, t('writeNoProject')),
                   h('button', { type: 'button', className: 'wbg-empty-btn', onClick: props.onCreate }, t('writeNewProject')),
-                )
-              : null,
-            // 项目选择（多个项目时）
-            projects.length > 1
-              ? h(
-                  'div',
-                  { className: 'wbg-projs' },
-                  h('div', { className: 'wbg-projs-k' }, t('writeProjects')),
-                  projects.map((item) =>
-                    h(
-                      'button',
-                      {
-                        key: item.path,
-                        type: 'button',
-                        className: 'wbg-proj',
-                        'data-active': project && project.path === item.path,
-                        onClick: () => props.onProject(item.path),
-                        title: item.path,
-                      },
-                      h('span', { className: 'wbg-proj-t' }, item.name),
-                      h('span', { className: 'wbg-proj-n' }, String(item.scenes)),
-                    ),
-                  ),
                 )
               : null,
             // 卷 → 章 → 场景
