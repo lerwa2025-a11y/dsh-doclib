@@ -266,6 +266,11 @@ window.__ModuleLoader__.load({
         writeNoDirSub: '新建一个项目，会自动建好 项目.md 与 正文、人物、地点、情节线 四个目录',
         writeNoProject: '还没有项目',
         writeNewProject: '新建项目',
+        /* 项目删除（2026-11-18） */
+        writeDeleteConfirm: '确定删除项目',
+        writeDeleteConfirmSub: '整个项目文件夹会移入回收站，之后可从回收站恢复。',
+        writeProjectDeleted: '项目已移入回收站',
+        writeDeleteFailed: '删除失败：',
         writeNewProjectPrompt: '新项目名：',
         writeNewProjectDefault: '未命名项目',
         writeProjectCreated: '项目已建好',
@@ -585,6 +590,11 @@ window.__ModuleLoader__.load({
         writeNoDirSub: 'Create a project — it sets up 项目.md plus the 正文 / 人物 / 地点 / 情节线 folders',
         writeNoProject: 'No projects yet',
         writeNewProject: 'New project',
+        /* 项目删除（2026-11-18） */
+        writeDeleteConfirm: 'Delete project',
+        writeDeleteConfirmSub: 'The whole project folder will be moved to trash and can be restored.',
+        writeProjectDeleted: 'Project moved to trash',
+        writeDeleteFailed: 'Delete failed: ', 
         writeNewProjectPrompt: 'Project name:',
         writeNewProjectDefault: 'Untitled project',
         writeProjectCreated: 'Project created',
@@ -7008,6 +7018,26 @@ window.__ModuleLoader__.load({
       // 左栏：搜索 + 项目 / 卷章树 / 设定
       function WritingList(props) {
         const t = props.t
+
+        /* 项目右键菜单（2026-11-18）：删除项目 */
+        const [projMenu, setProjMenu] = useState(null)
+
+        /* 点外面 / 按 Esc 关项目右键菜单 */
+        useEffect(() => {
+          if (!projMenu) return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.vp-ctxmenu') !== null) return
+            setProjMenu(null)
+          }
+          const onKey = (event) => { if (event.key === 'Escape') setProjMenu(null) }
+          document.addEventListener('mousedown', onDown)
+          document.addEventListener('keydown', onKey)
+          return () => {
+            document.removeEventListener('mousedown', onDown)
+            document.removeEventListener('keydown', onKey)
+          }
+        }, [projMenu])
         const projects = Array.isArray(props.projects) ? props.projects : []
         const project = props.project
         const query = props.query
@@ -7062,6 +7092,12 @@ window.__ModuleLoader__.load({
                     key: item.path,
                     type: 'button',
                     className: 'wbg-proj',
+                    /* 右键删除项目（2026-11-18） */
+                    onContextMenu: (event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setProjMenu({ item, x: event.clientX, y: event.clientY })
+                    },
                     'data-active': project && project.path === item.path,
                     onClick: () => props.onProject(item.path),
                     title: item.path,
@@ -7071,6 +7107,28 @@ window.__ModuleLoader__.load({
                   ),
                 ),
               )
+            : null,
+          /* 项目右键菜单（2026-11-18 大王要求：写作台项目要能删） */
+          projMenu
+            ? h(
+              'div',
+              {
+                className: 'vp-ctxmenu',
+                style: { left: projMenu.x + 'px', top: projMenu.y + 'px' },
+                onMouseDown: (event) => event.stopPropagation(),
+                onContextMenu: (event) => event.preventDefault(),
+              },
+              h('div', { className: 'vp-ctxmenu-h' }, projMenu.item.name),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item vp-ctxmenu-danger',
+                onClick: () => {
+                  const item = projMenu.item
+                  setProjMenu(null)
+                  if (typeof props.onDeleteProject === 'function') props.onDeleteProject(item)
+                },
+              }, t('vaultDelete')),
+            )
             : null,
           h(
             'div',
@@ -7480,6 +7538,32 @@ window.__ModuleLoader__.load({
             return []
           } finally {
             setLoading(false)
+          }
+        }
+
+        /**
+         * 删除项目（2026-11-18 大王要求：写作台项目要能删）。
+         *
+         * 项目就是一个目录（写作\项目名\），所以走 /delete 移入回收站，
+         * 不直接 rm —— 误删还能从回收站找回。
+         */
+        const deleteProject = async (item) => {
+          if (!item || typeof item.path !== 'string') return
+          const name = item.name || item.path
+          if (!window.confirm(t('writeDeleteConfirm') + name + '？\n' + t('writeDeleteConfirmSub'))) return
+          try {
+            await vaultApiPost('/delete', { path: item.path })
+            /* 删的是当前打开的项目 → 清空右栏，别显示已删的内容 */
+            if (project && project.path === item.path) {
+              setProject(null)
+              setFile(null)
+              setActiveFile('')
+              setActiveProject('')
+            }
+            await reloadProjects()
+            flash(t('writeProjectDeleted'))
+          } catch (err) {
+            flash(t('writeDeleteFailed') + messageOf(err))
           }
         }
 
@@ -7906,6 +7990,8 @@ window.__ModuleLoader__.load({
             onOpenSetting: (row) => void openSetting(row),
             onToggleVolume: (vi) => setOpenVolumes((next) => ({ ...next, [vi]: next[vi] === false })),
             onCreate: () => openNewProject(),
+            /* 右键删除项目（2026-11-18） */
+            onDeleteProject: (item) => void deleteProject(item),
           }),
           h(WritingDoc, {
             t,
@@ -9488,7 +9574,24 @@ mark.df-hit[data-active="true"] {
 /* ── 文档工具条美化（2026-11-16）：对齐文案台 .cb-toolbar 观感 ─────────────── */
 /* 整条：圆角描边 pill 容器。宽度 fit-content，窄了横向滚；有下拉展开时 overflow 放开
    （横向滚动的祖先一定会裁掉绝对定位子元素，所以展开期间临时退回 visible）。 */
-.vpb-bar { position: relative; display: flex; align-items: center; gap: 2px; width: fit-content; max-width: 100%; padding: 4px; margin: 2px 0 10px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); /* 与阅读区纸面同色（2026-11-18 大王：原来 layer-2 偏灰，和正文白底不一致） */ background: var(--dsw-alias-bg-layer-1); white-space: nowrap; overflow-x: auto; overflow-y: auto; box-sizing: border-box; }
+/*
+ * 阅读栏（2026-11-18 v2）：纸面上的一行控件，不再是独立卡片。
+ *
+ * 大王要求：做成一个整体、颜色一致、不要边框；窄窗口时文字不超出。
+ * 做法：
+ *   · 无边框、透明背景 —— 和正文同一张纸
+ *   · padding 归零 —— 控件左边缘和正文对齐
+ *   · min-width: 0 + 可收缩项 —— 窄窗口先省略字数/状态，按钮组不压缩
+ *   · 隐藏滚动条 —— 极窄时仍可横向滚动，但不显示滚动条
+ */
+.vpb-bar {
+  position: relative; display: flex; align-items: center; gap: 2px;
+  width: fit-content; max-width: 100%; min-width: 0;
+  padding: 2px 0; margin: 2px 0 8px;
+  border: 0; border-radius: 0; background: transparent;
+  white-space: nowrap; overflow-x: auto; overflow-y: hidden;
+  box-sizing: border-box; scrollbar-width: none;
+}
 /*
  * 文案台 / 写作台的阅读栏要自己补左右边距（2026-11-18 修排版）。
  * 素材库那边由 .vp-doc 的 padding: 20px 40px 提供，这两个板块的
@@ -9502,13 +9605,25 @@ mark.df-hit[data-active="true"] {
  */
 .cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 10px 20px 0; max-width: calc(100% - 40px); }
 .vpb-bar[data-menu="true"] { overflow: visible; }
-.vpb-bar::-webkit-scrollbar { height: 4px; }
+/*
+ * 极窄时藏掉次要信息（2026-11-18）：
+ * 容器查询不可靠，用 vpb-bar 自己的宽度做不了；改用「先省略、再隐藏」的渐进策略 ——
+ * 字数与状态是可选的，控件组一定要看得见。
+ * 这里用 scroll 容器 + 子项 flex-shrink 的自然行为，再给状态文字设上限。
+ */
+.vpb-state { max-width: 56px; }
+.vpb-droplabel { max-width: 84px; }
+/* 字数/状态可收缩：窄窗口先省略这两个，控件组保持 */
+.vpb-info { flex: 0 1 auto !important; min-width: 0; max-width: 78px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vpb-state { flex: 0 1 auto !important; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vpb-bar::-webkit-scrollbar { height: 0; display: none; }
 .vpb-bar::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 .vpb-bar :focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
 /* 组内每个控件是 pill：26px 高、8px 内边距、4px 圆角、12.5px 字号 */
 .vpb-pill { flex: 0 0 auto; height: 26px; min-width: 26px; padding: 0 8px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12.5px; line-height: 1; white-space: nowrap; cursor: pointer; box-sizing: border-box; }
+.vpb-pill { transition: background .12s, color .12s; }
 .vpb-pill:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.vpb-pill[data-on="true"], .vpb-pill[data-open="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); }
+.vpb-pill[data-on="true"], .vpb-pill[data-open="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vpb-pill:disabled { opacity: .35; cursor: default; }
 .vpb-pill:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
 .vpb-ib { font-size: 12.5px; padding: 0 7px; }
@@ -9519,9 +9634,9 @@ mark.df-hit[data-active="true"] {
 .vpb-info { flex: 0 0 auto; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dsw-alias-label-tertiary); font-variant-numeric: tabular-nums; }
 .vpb-info-empty { opacity: .7; }
 .vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
-.vpb-sep { flex: 0 0 auto; width: 1px; height: 14px; margin: 0 4px; background: var(--dsw-alias-border-l2); }
+.vpb-sep { flex: 0 0 auto; width: 1px; height: 13px; margin: 0 5px; background: var(--dsw-alias-border-l1); opacity: .7; }
 /* 字号 A- / 值 / A+：三个并列按钮包成一组 */
-.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: 26px; padding: 0 2px; border-radius: 4px; background: var(--dsw-alias-bg-layer-1); }
+.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 1px; height: 26px; padding: 0 2px; border-radius: 4px; background: transparent; }
 .vpb-zoom-btn { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
 .vpb-zoom-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .vpb-zoom-btn:disabled { opacity: .35; cursor: default; }
