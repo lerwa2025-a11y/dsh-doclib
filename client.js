@@ -5901,6 +5901,8 @@ window.__ModuleLoader__.load({
         const activePath = props.activePath
         /* 加号下拉：新建分组 / 新建文案 */
         const [newOpen, setNewOpen] = useState(false)
+        /* 排序下拉开合（2026-11-18 修黑屏：以前漏定义，读 sortOpen 直接崩） */
+        const [sortOpen, setSortOpen] = useState(false)
 
         /* 点外面收起加号菜单 */
         useEffect(() => {
