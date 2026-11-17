@@ -5899,6 +5899,7 @@ window.__ModuleLoader__.load({
         const query = props.query
         const setQuery = props.onQuery
         const activePath = props.activePath
+        const sortBy = props.sortBy
         /* 加号下拉：新建分组 / 新建文案 */
         const [newOpen, setNewOpen] = useState(false)
         /* 排序下拉开合（2026-11-18 修黑屏：以前漏定义，读 sortOpen 直接崩） */
@@ -5909,7 +5910,7 @@ window.__ModuleLoader__.load({
           if (!newOpen) return undefined
           const onDown = (event) => {
             const node = event.target
-            if (node && typeof node.closest === 'function' && node.closest('.cb-newmenu') !== null) return
+            if (node && typeof node.closest === 'function' && node.closest('.vp-newinline') !== null) return
             setNewOpen(false)
           }
           document.addEventListener('mousedown', onDown)
@@ -5938,7 +5939,7 @@ window.__ModuleLoader__.load({
            */
           h('div', { className: 'cb-head' },
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
-            h('div', { className: 'cb-newmenu' },
+            h('div', { className: 'vp-newinline' },
               h('button', {
                 type: 'button',
                 className: 'vp-newbtn-round',
@@ -5948,28 +5949,28 @@ window.__ModuleLoader__.load({
                 onClick: () => setNewOpen((open) => !open),
               }, '＋'),
               newOpen
-                ? h('div', { className: 'cb-newdrop' },
+                ? h('div', { className: 'vp-newdrop' },
                   h('button', {
                     type: 'button',
-                    className: 'cb-newdrop-item',
+                    className: 'vp-newdrop-item',
                     onClick: () => {
                       setNewOpen(false)
                       if (typeof props.onCreateDir === 'function') props.onCreateDir()
                     },
                   },
-                  h(BoardIcon, { name: 'folder', className: 'wb-ic' }),
-                  h('span', null, t('vaultNewDir')),
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
                   ),
                   h('button', {
                     type: 'button',
-                    className: 'cb-newdrop-item',
+                    className: 'vp-newdrop-item',
                     onClick: () => {
                       setNewOpen(false)
                       if (typeof props.onCreate === 'function') props.onCreate()
                     },
                   },
-                  h(BoardIcon, { name: 'fileText', className: 'wb-ic' }),
-                  h('span', null, t('vaultNewMd')),
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
                   ),
                 )
                 : null,
@@ -8016,7 +8017,8 @@ window.__ModuleLoader__.load({
 .vp-pad { padding: 16px; }
 .vp-hint { font-size: 12.5px; color: var(--dsw-alias-label-secondary); line-height: 1.7; }
 .dn-btn-sm { font-size: 12px; padding: 3px 9px; }
-.vp-treehead { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.vp-treehead { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1);
+  /* 标题行的下拉要浮在下面树列表之上（2026-11-18） */ position: relative; z-index: 20; }
 .vp-treehead-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 .vp-treehead-btn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .vp-treehead-btn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
@@ -8679,9 +8681,10 @@ mark.df-hit[data-active="true"] {
 .vp-newbtn-round:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .vp-newbtn-round[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .vp-newdrop {
-  position: absolute; top: calc(100% + 4px); left: 0; z-index: 40;
+  position: absolute; top: calc(100% + 4px); left: auto; right: 0; z-index: 60;
   min-width: 176px; padding: 4px; border-radius: 8px;
-  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1));
+  /* 菜单背景用实色面板（2026-11-18）：overlay 在部分主题下偏透，密排文字会透底 */
+  background: var(--dsw-alias-bg-layer-1, var(--dsw-alias-bg-overlay));
   border: 1px solid var(--dsw-alias-border-l2);
   box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
 }
@@ -8695,7 +8698,7 @@ mark.df-hit[data-active="true"] {
   cursor: pointer; text-align: left;
 }
 .vp-newdrop-item:hover { background: var(--dsw-alias-bg-layer-2); }
-.vp-newdrop-ic { width: 14px; display: inline-flex; align-items: center; justify-content: center; opacity: .75; }
+.vp-newdrop-ic { width: 16px; flex: none; display: inline-flex; align-items: center; justify-content: center; opacity: .75; }
 .vp-newdrop-t { flex: 1; }
 .vp-newdrop-k { font-size: 10.5px; color: var(--dsw-alias-label-tertiary); font-family: 'Consolas', monospace; }
 .vp-opbtn {
@@ -8997,7 +9000,8 @@ mark.df-hit[data-active="true"] {
 .cb-prompt-go, .cb-prompt-x { flex: none; height: 24px; padding: 0 9px; border-radius: 4px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; }
 .cb-prompt-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 
-.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1);
+  /* 下拉要浮在下面列表之上（2026-11-18） */ position: relative; z-index: 20; }
 .cb-head-title, .wbg-head-title { flex: 1; min-width: 0; font-size: 12.5px; color: var(--dsw-alias-label-secondary); }
 
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12.5px; outline: none; padding: 0; }
@@ -9047,7 +9051,7 @@ mark.df-hit[data-active="true"] {
 .cb-root { flex-direction: row; }
 .cb-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .cb-ic-sm { width: 13px; height: 13px; }
-.cb-list { position: relative; width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.cb-list { position: relative; width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; overflow: visible; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
 .cb-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 7px; padding: 0 9px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12.5px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-list-item { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: var(--dsw-radius-sm, 8px); font-size: 12.5px; line-height: 1.35; color: var(--dsw-alias-label-secondary); }
 .cb-list-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
@@ -9091,7 +9095,8 @@ mark.df-hit[data-active="true"] {
 .cb-send { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
-.vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; overflow: hidden; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; /* 加号按钮 absolute 定位相对这里（同文案台 .cb-list 的做法） */ position: relative; }
+.vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; /* 2026-11-18：原来 overflow:hidden 会把「新建」下拉裁掉（大王截图：被阅读栏遮住）。
+     树面板 radius 是 0 不需要裁剪，所以放开；树内容的滚动由 .vp-treelist 自己管。 */ overflow: visible; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; position: relative; }
 /* .vp-libhead / .vp-libmark / .vp-libname 已删：
    左栏那条「库 / 工作台」标题行已移除，现在搜索框直接打头，
    与文案台 .cb-search、写作台 .wbg-search 一致。 */
