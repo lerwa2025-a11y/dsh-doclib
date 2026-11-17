@@ -2087,6 +2087,21 @@ window.__ModuleLoader__.load({
 
 
       /** 全部展开 / 全部收起：收集树里所有文件夹路径。 */
+      /**
+       * 摊平后的树：如果顶层只有一个库节点（素材库只扫「素材」一个库），
+       * 就把它的 children 提上来 —— 不要「素材」这一层分组。
+       *
+       * 大王：直接显示素材里面的文件就行，不要这个组。
+       *
+       * 保持服务端返回结构不变：以后要做三库聚合视图，数据还是那样。
+       */
+      const flatTree = useMemo(() => {
+        if (tree.length === 1 && tree[0].type === 'dir' && tree[0].library === tree[0].name) {
+          return Array.isArray(tree[0].children) ? tree[0].children : []
+        }
+        return tree
+      }, [tree])
+
       const collectDirs = (nodes, out) => {
         for (const node of nodes) {
           if (node.type === 'dir') {
@@ -2098,14 +2113,14 @@ window.__ModuleLoader__.load({
       }
       const expandAll = () => {
         const next = {}
-        for (const path of collectDirs(tree, [])) next[path] = true
+        for (const path of collectDirs(flatTree, [])) next[path] = true
         setExpanded(next)
       }
       const collapseAll = () => setExpanded({})
 
       /** 是否所有文件夹都已展开（决定那个切换按钮显示「全部展开」还是「全部收起」）。 */
       const allExpanded = useMemo(() => {
-        const dirs = collectDirs(tree, [])
+        const dirs = collectDirs(flatTree, [])
         return dirs.length > 0 && dirs.every((path) => expanded[path] === true)
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [tree, expanded])
@@ -3883,9 +3898,9 @@ window.__ModuleLoader__.load({
                           ),
                         ),
                   )
-                : tree.length === 0
+                : flatTree.length === 0
                   ? h('div', { className: 'vp-tree-empty vp-pad' }, t('vaultEmptyDir'))
-                  : tree.map((node) => treeNode(node, 0)),
+                  : flatTree.map((node) => treeNode(node, 0)),
             ),
           ),
 
@@ -4307,13 +4322,21 @@ window.__ModuleLoader__.load({
         book: [
           'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20',
         ],
-        // Lucide trash-2 —— 回收站
+        // Lucide trash-2 —— 删除动作（右键菜单里的「删除」用）
         trash: [
           'M3 6h18',
           'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6',
           'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2',
           'M10 11v6',
           'M14 11v6',
+        ],
+        // Lucide history —— 回收站（顶栏入口用）
+        // 语义是「可以回溯的过去」，比垃圾桶贴切：
+        // 回收站不是「删除」，是「删掉但还能拿回来」。
+        history: [
+          'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8',
+          'M3 3v5h5',
+          'M12 7v5l4 2',
         ],
         // Lucide folder-open —— 打开文件夹
         folderOpen: [
@@ -4753,7 +4776,6 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
-            h('span', { className: 'dn-spacer' }),
             /*
              * 顶栏排法（2026-11-18 重排，按 shadcn 的分组 + 统一高度）：
              *
@@ -4796,6 +4818,7 @@ window.__ModuleLoader__.load({
                 h(BoardIcon, { name: 'refresh', className: 'wb-ic-lg' }),
               ),
             ),
+            h('span', { className: 'dn-spacer' }),
             h(WorkspacePicker, {
               t,
               root,
@@ -4827,7 +4850,7 @@ window.__ModuleLoader__.load({
                 'aria-label': t('tabTrash'),
                 onClick: () => setTab(tab === 'trash' ? 'vault' : 'trash'),
               },
-              h(BoardIcon, { name: 'trash', className: 'wb-ic-lg' }),
+              h(BoardIcon, { name: 'history', className: 'wb-ic-lg' }),
             ),
           ),
           h(
