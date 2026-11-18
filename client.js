@@ -9333,12 +9333,7 @@ mark.df-hit[data-active="true"] {
 .cb-editor-surface {
   flex: 1; min-height: 0; overflow-y: auto; outline: none;
   white-space: pre-wrap; word-break: break-word;
-  /*
-   * 首行对齐（2026-11-18 像素扫描定案）：
-   * 内容起点 = .cb-doc 的 padding-left 24，标题笔画正好落在 24。
-   * 编辑态不加任何额外左内边距，笔画同样落在 24，与标题一致。
-   * （上一轮加 10px 是误判：把字形留白当缺陷，反而推离了标题。）
-   */ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+  /* 首行对齐：本身无额外左内边距，靠 .cb-doc 的 padding 定位（照素材库）*/ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 .cb-editor-surface:empty::before { content: attr(data-placeholder); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
 /* 底部错误与保存状态 */
@@ -9604,7 +9599,7 @@ mark.df-hit[data-active="true"] {
 .wbg-editor-surface {
   flex: 1; min-height: 0; overflow-y: auto; outline: none;
   white-space: pre-wrap; word-break: break-word;
-  /* 首行对齐：同文案台，不加额外左内边距（2026-11-18 像素扫描定案） */ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+  /* 首行对齐：同文案台，靠容器 padding 定位（照素材库）*/ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 
 /* 场景分隔符（正文里的三个连续短横线） */
 .wbg-scene-sep { margin: 16px 0; text-align: center; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); opacity: .55; user-select: none; }
@@ -9678,7 +9673,15 @@ mark.df-hit[data-active="true"] {
 .cb-list, .cb-aside, .cb-doc, .wbg-list, .wbg-aside, .wbg-doc { box-sizing: border-box; }
 .cb-search, .cb-input, .wbg-search { box-sizing: border-box; }
 /* 2. 行宽上限：正文 / 标题 / 底栏同宽，避免标题贴左而正文居中 */
-.cb-doc-head, .cb-prose, .cb-doc-foot, .wbg-doc-head, .wbg-prose, .wbg-doc-foot {
+/*
+ * 中栏内容的统一限宽居中（原规则）。
+ *
+ * ⚠️ 2026-11-18 补：原来漏了阅读栏 .vpb-bar，导致
+ *   标题/正文/页脚被限宽 760 居中，而阅读栏仍贴左 ——
+ *   中栏宽于 760px 时首字就对不上（大王反馈的问题）。
+ */
+.cb-doc-head, .cb-prose, .cb-doc-foot, .cb-doc > .vpb-bar, .cb-edit-wrap,
+.wbg-doc-head, .wbg-prose, .wbg-doc-foot, .wbg-doc > .vpb-bar, .wbg-edit-wrap {
   width: 100%; max-width: 760px; margin-left: auto; margin-right: auto;
 }
 .cb-toolbar, .wbg-toolbar { box-sizing: border-box; }
@@ -9796,7 +9799,22 @@ mark.df-hit[data-active="true"] {
  * ⚠️ max-width 必须把左右 margin（共 40px）扣掉 —— 否则 100% + 40px 会溢出到
  * 右边的写作助手区（2026-11-18 大王截图指出）。
  */
-.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 8px 0 2px; }
+/*
+ * 阅读栏上下间距。
+ * ⚠️ 只写上下 margin —— 左右必须留给居中组的 margin:auto，
+ *    写成简写 margin: 8px 0 2px 会把左右重置成 0，阅读栏就又贴左了。
+ */
+/*
+ * 文案台/写作台的阅读栏：
+ *   · width 改成 100% —— 原来的 fit-content 让它宽度由内容决定，
+ *     导致居中组的 margin:auto 没有多余空间可分配，仍然贴左（2026-11-18 修）
+ *   · 内容靠 flex 排列，不需要 fit-content
+ *   · 上下间距单独写，避免简写覆盖 margin-left/right: auto
+ */
+.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar {
+  width: 100%;
+  margin-top: 8px; margin-bottom: 2px;
+}
 .vpb-bar[data-menu="true"] { overflow: visible; }
 /*
  * 极窄时藏掉次要信息（2026-11-18）：
@@ -9833,45 +9851,24 @@ mark.df-hit[data-active="true"] {
   font-variant-numeric: tabular-nums;
 }
 /*
- * 首行对齐（2026-11-18 大王要求）：
+ * 阅读栏首字对齐（2026-11-18 最终定案，像素扫描实测）：
  *
- * 实测坐标系：.cb-doc 左 240 + padding 24 = 内容起点 264。
- * 标题/正文的文字盒 left = 274.5，比内容起点多 10.5px ——
- * 那是字体自身的左侧留白（left side bearing），不是 CSS 缩进。
+ * 问题：阅读栏「17830 字」的「1」比正文首字右 7px。
+ *   · 900 / 1200 / 1600 三种中栏宽度下都是 7px —— 是固定偏移，与宽度无关
+ *   · 来源：.vpb-info 的 padding-left: 6px + 字形差约 1px
  *
- * 所以阅读栏第一个元素的 padding-left 不能清零，
- * 而是要和正文的「内容起点 + 字形留白」对齐。
- * 实测 .vpb-info 的 padding-left: 6px 时首字落在 270（差 4.5px），
- * 补到 10.5px 正好落在 274.5，与标题、正文三点一线。
+ * 素材库没有这个问题，因为它不要求和正文首字对齐；
+ * 文案台/写作台有这个要求，所以第一个元素的左内边距要去掉。
+ *
+ * 另外：阅读栏原本 width: fit-content，导致居中组（max-width:760 + margin:auto）
+ * 对它无效，中栏宽于 760px 时会贴左、与标题错开。已改成 width: 100%。
  */
-/*
- * 首行对齐（2026-11-18 像素扫描定案）：
- *
- * 3x DPI 扫描的四条基线：
- *   标题 h1    笔画 24  （内容起点，无额外缩进）
- *   参考段落   笔画 24
- *   编辑态     笔画 24  （去掉上一轮误加的 10px 后）
- *   阅读栏     笔画 24  ← 这里让 .vpb-info 左内边距归零即可
- *
- * 上一轮我用 Range 文字盒坐标判断对齐，那是含字形 advance 的盒子，
- * 跟肉眼看到的笔画起点不是一回事；加 10px 反而推离了标题。
- */
-/*
- * 阅读栏首字对齐（2026-11-18 像素扫描定案）：
- *
- * 内容起点 24 下，标题(18px)/正文(15px)的「索」笔画都在 24，
- * 而阅读栏「1」(11px) 笔画在 25 —— 因为 left side bearing 按字号比例缩放，
- * 11px 字形留白更少，笔画反而更靠左。
- * 用 -1px 补偿，让 11px 的「1」笔画也落在 24。
- */
-.vpb-bar > .vpb-info:first-child { padding-left: 0; margin-left: -1px; }
-/* 最后一个元素右侧对齐（它没有字形留白问题，保持 0） */
-.vpb-bar > :last-child { padding-right: 0; }
-/*
- * 取最宽松的阅读栏高度（大王：「直接按最大的阅读栏高」）：
- * 原来 30px，控件 26px + 上下 2px，紧贴。
- * 给到 34px，控件垂直居中、上下各留 4px，鼠标更好点，也不再压着正文。
- */
+.cb-doc > .vpb-bar > .vpb-info:first-child,
+.wbg-doc > .vpb-bar > .vpb-info:first-child {
+  padding-left: 0;
+  /* -1px：11px 字号的字形左侧留白比标题(18px)/正文(15px)少，笔画偏右 1px */
+  margin-left: -1px;
+}
 .vpb-bar { min-height: 34px; }
 .vpb-info-empty { opacity: .7; }
 .vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
