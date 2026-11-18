@@ -113,7 +113,7 @@ window.__ModuleLoader__.load({
         vaultFormatCodeSample: '代码',
         // ── [t7 视觉主题] ──
         readerBg: '阅读底色',
-        readerBgAuto: '跟随主题',
+        readerBgAuto: '主题',
         readerBgWhite: '纯白',
         readerBgCream: '米黄纸质',
         readerBgGreen: '淡绿护眼',
@@ -491,7 +491,7 @@ window.__ModuleLoader__.load({
         vaultFormatCodeSample: 'code',
         // ── [t7 视觉主题] ──
         readerBg: 'Reading background',
-        readerBgAuto: 'Follow theme',
+        readerBgAuto: 'Theme',
         readerBgWhite: 'Pure white',
         readerBgCream: 'Cream paper',
         readerBgGreen: 'Soft green',
