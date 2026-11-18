@@ -9330,7 +9330,16 @@ mark.df-hit[data-active="true"] {
 
 /* 编辑态：与素材库同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
 .cb-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 8px 0 24px; }
-.cb-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+.cb-editor-surface {
+  flex: 1; min-height: 0; overflow-y: auto; outline: none;
+  white-space: pre-wrap; word-break: break-word;
+  /*
+   * 首行对齐（2026-11-18 大王质疑后重测）：
+   * contenteditable 的文本节点从内容框起算，不含字体的 left side bearing，
+   * 而阅读态 p/h2 的文字盒含那 10.5px —— 所以编辑态首字比标题/阅读栏左 10.5px。
+   * 补 10px 让三者对齐（实测落在 274，与标题 274.5 齐）。
+   */
+  padding-left: 10px; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 .cb-editor-surface:empty::before { content: attr(data-placeholder); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
 /* 底部错误与保存状态 */
@@ -9593,7 +9602,11 @@ mark.df-hit[data-active="true"] {
 
 /* 编辑态：与素材库/文案台同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
 .wbg-edit-wrap { flex: 1; min-height: 0; display: flex; padding: 8px 0 24px; }
-.wbg-editor-surface { flex: 1; min-height: 0; overflow-y: auto; outline: none; white-space: pre-wrap; word-break: break-word; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+.wbg-editor-surface {
+  flex: 1; min-height: 0; overflow-y: auto; outline: none;
+  white-space: pre-wrap; word-break: break-word;
+  /* 首行对齐：同文案台，补字形左侧留白 10px（2026-11-18） */
+  padding-left: 10px; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 
 /* 场景分隔符（正文里的三个连续短横线） */
 .wbg-scene-sep { margin: 16px 0; text-align: center; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); opacity: .55; user-select: none; }
