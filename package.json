@@ -35,7 +35,8 @@
     "README.md",
     "LICENSE",
     "history.js",
-    "studio-session.js"
+    "studio-session.js",
+    "skills-list.js"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
