@@ -4986,17 +4986,56 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
            * 与素材库 .vp-tree-row 的 style.paddingLeft 规则一致。
            */
           const padLeft = (isDir ? 6 : 22) + depth * 14
-          return h(
-            'div',
-            { key: node.path, className: isDir ? 'vp-tree-dir' : undefined },
-            h(
+          /*
+           * 原地改名（2026-11-19 大王要求）：不再弹底部输入条，
+           * 直接把这一行的名字换成输入框。Enter 提交、Esc 取消、失焦也提交。
+           *
+           * 为什么整行换成 div：树行本来是 <button>，<button> 里嵌 <input> 是非法内容模型，
+           * 浏览器对嵌套交互元素处理不可靠（焦点被按钮抢走、回车触发按钮）。
+           * 改名期间这行不做按钮，点哪都只作用于输入框。
+           */
+          const renamingThis = props.rename && props.rename.path === node.path
+          const caretEl = h('span', { className: 'vp-tree-caret' }, isDir ? (isOpen ? '▾' : '▸') : '')
+          const iconEl = h(
+            'span',
+            { className: 'vp-tree-icon' },
+            h(BoardIcon, {
+              /*
+               * 图标：目录 folder、md 用 fileText、图片 image、其它 file。
+               * 素材库还按库别分 archive/pen/bookOpen，这里只有一个库，不用区分。
+               */
+              name: isDir ? 'folder' : (node.image ? 'image' : isMarkdown ? 'fileText' : 'file'),
+              className: 'wb-ic',
+            }),
+          )
+          const rowStyle = { paddingLeft: padLeft + 'px' }
+          const rowEl = renamingThis
+            ? h(
+              'div',
+              { className: 'vp-tree-row vp-tree-row-edit', style: rowStyle },
+              caretEl,
+              iconEl,
+              h('input', {
+                className: 'vp-tree-input',
+                autoFocus: true,
+                value: props.rename.value,
+                onClick: (event) => event.stopPropagation(),
+                onChange: (event) => props.rename.onValue(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') { event.preventDefault(); props.rename.commit() }
+                  else if (event.key === 'Escape') { event.preventDefault(); props.rename.cancel() }
+                },
+                onBlur: () => props.rename.commit(),
+              }),
+            )
+            : h(
               'button',
               {
                 type: 'button',
                 className: 'vp-tree-row',
                 'data-active': isActive,
                 'data-kind': isDir ? 'dir' : 'file',
-                style: { paddingLeft: padLeft + 'px' },
+                style: rowStyle,
                 title: node.path,
                 onClick: () => {
                   setCtxMenu(null)
@@ -5009,21 +5048,14 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 },
                 onContextMenu: (event) => openMenu(event, node),
               },
-              h('span', { className: 'vp-tree-caret' }, isDir ? (isOpen ? '▾' : '▸') : ''),
-              h(
-                'span',
-                { className: 'vp-tree-icon' },
-                h(BoardIcon, {
-                  /*
-                   * 图标：目录 folder、md 用 fileText、图片 image、其它 file。
-                   * 素材库还按库别分 archive/pen/bookOpen，这里只有一个库，不用区分。
-                   */
-                  name: isDir ? 'folder' : (node.image ? 'image' : isMarkdown ? 'fileText' : 'file'),
-                  className: 'wb-ic',
-                }),
-              ),
+              caretEl,
+              iconEl,
               h('span', { className: 'vp-tree-name' }, isDir ? name : name.replace(/\.(md|markdown)$/i, '')),
-            ),
+            )
+          return h(
+            'div',
+            { key: node.path, className: isDir ? 'vp-tree-dir' : undefined },
+            rowEl,
             isDir && isOpen
               ? (Array.isArray(node.children) && node.children.length > 0
                 ? node.children.map((child) => row(child, depth + 1))
@@ -7133,6 +7165,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
             onMove: (node) => { if (typeof props.onMove === 'function') props.onMove(node) },
             onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
+            /* 原地改名（2026-11-19）：把「正在改哪一行」交给树，树负责画输入框 */
+            rename: props.rename || null,
           }),
         )
       }
@@ -7365,6 +7399,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [treeExpanded, setTreeExpanded] = useState({})
         /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
         const [treePrompt, setTreePrompt] = useState(null)
+        /*
+         * 改名防重入（2026-11-19）：原地输入框会同时触发 Enter 与 blur，
+         * 两个回调拿到同一份旧 state，没有闸门会 POST 两次（第二次必然重名失败）。
+         */
+        const renameGuard = useRef({ done: false })
         const [doc, setDoc] = useState(null)
         const [draft, setDraft] = useState('')
         const [mode, setMode] = useState('read')
@@ -7507,6 +7546,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          */
         const renameNode = (node) => {
           if (!node) return
+          renameGuard.current = { done: false }
           setTreePrompt({ kind: 'rename', node, value: node.name })
         }
 
@@ -7538,6 +7578,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const promptCommit = async () => {
           if (!treePrompt) return
           const { kind, node, value } = treePrompt
+          if (kind === 'rename') {
+            if (renameGuard.current.done) return
+            renameGuard.current.done = true
+          }
           const typed = String(value || '').trim()
           if (typed === '' || (node && typed === node.name)) { setTreePrompt(null); return }
           setTreePrompt(null)
@@ -7554,6 +7598,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             }
             void reload()
           } catch (err) {
+            if (kind === 'rename') renameGuard.current.done = false
             flash((kind === 'rename' ? t('vaultRenameFailed') : t('vaultMoveFailed')) + messageOf(err))
           }
         }
@@ -7903,6 +7948,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onRename: (node) => void renameNode(node),
             onMove: (node) => void moveNode(node),
             onDelete: (node) => void deleteNode(node),
+            /*
+             * 原地改名（2026-11-19 大王要求）：不再弹底部输入条，
+             * 由树把那行名字直接换成输入框。这里只描述「正在改哪一行」。
+             */
+            rename: treePrompt && treePrompt.kind === 'rename' && treePrompt.node
+              ? {
+                path: treePrompt.node.path,
+                value: treePrompt.value,
+                onValue: (next) => setTreePrompt({ ...treePrompt, value: next }),
+                commit: () => void promptCommit(),
+                cancel: () => { renameGuard.current.done = true; setTreePrompt(null) },
+              }
+              : null,
             style: { width: listW + 'px' },
           }),
           /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
@@ -7918,7 +7976,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
              * 树操作的自绘输入条（2026-11-18）：重命名 / 移动。
              * 照写作台 wbg-newproj-bar 的做法：回车提交、Esc 取消。
              */
-            treePrompt
+            treePrompt && treePrompt.kind !== 'rename'
               ? h('div', { className: 'cb-prompt-bar' },
                 h('span', { className: 'cb-prompt-k' },
                   treePrompt.kind === 'rename' ? t('vaultRename') : (treePrompt.kind === 'group' ? t('vaultNewDir') : t('vaultMoveTo')),
@@ -8212,41 +8270,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             )
             : null,
           /*
-           * 结构编辑输入条（2026-11-18）：改名 / 加卷 / 加章 共用一条。
-           * 和新建项目那条并列摆在标题行下面 —— 同一个道理，贴着发起点，不飘到屏幕底部。
+           * 原地改名（2026-11-19 大王要求）：改名不再弹这条输入条，
+           * 直接在项目 / 卷 / 章的标题位置画输入框。
+           * 这里只留一行错误提示（比如重名失败），不再是个带输入框的浮条。
            */
-          props.editProj
-            ? h('div', { className: 'wbg-newproj-bar' },
-              h('span', { className: 'wbg-newproj-k' }, props.editProj.label + '：'),
-              h('input', {
-                className: 'wbg-newproj-input',
-                autoFocus: true,
-                value: props.editProj.draft,
-                placeholder: props.editProj.placeholder,
-                onChange: (event) => props.editProj.onDraft(event.target.value),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    props.editProj.commit()
-                  } else if (event.key === 'Escape') {
-                    props.editProj.cancel()
-                  }
-                },
-              }),
-              h('button', {
-                type: 'button',
-                className: 'wbg-newproj-go',
-                onClick: () => props.editProj.commit(),
-              }, t('ok')),
-              h('button', {
-                type: 'button',
-                className: 'wbg-newproj-x',
-                onClick: () => props.editProj.cancel(),
-              }, t('cancel')),
-              props.editProj.tip !== ''
-                ? h('span', { className: 'wbg-newproj-tip' }, props.editProj.tip)
-                : null,
-            )
+          props.editProj && props.editProj.tip !== ''
+            ? h('div', { className: 'wbg-inline-tip' }, props.editProj.tip)
             : null,
           /*
          * 项目切换（2026-11-18 修）：
@@ -8258,8 +8287,41 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             ? h(
               'div',
               { className: 'wbg-projs' },
-              projects.map((item) =>
-                h(
+              projects.map((item) => {
+                /*
+                 * 原地改名（2026-11-19）：正在改的这本就地换输入框，不弹底部输入条。
+                 * 整行换成 div —— <button> 里嵌 <input> 是非法内容模型。
+                 */
+                const renamingThis = props.editProj
+                  && props.editProj.kind === 'rename-project'
+                  && props.editProj.path === item.path
+                const projCount = h('span', { className: 'wbg-proj-n' }, String(item.scenes))
+                if (renamingThis) {
+                  return h(
+                    'div',
+                    {
+                      key: item.path,
+                      className: 'wbg-proj wbg-proj-edit',
+                      'data-active': project && project.path === item.path,
+                    },
+                    h('input', {
+                      className: 'wbg-nameinput',
+                      autoFocus: true,
+                      value: props.editProj.draft,
+                      placeholder: props.editProj.placeholder,
+                      onFocus: (event) => event.target.select(),
+                      onClick: (event) => event.stopPropagation(),
+                      onChange: (event) => props.editProj.onDraft(event.target.value),
+                      onKeyDown: (event) => {
+                        if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() }
+                        else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                      },
+                      onBlur: () => props.editProj.commit(),
+                    }),
+                    projCount,
+                  )
+                }
+                return h(
                   'button',
                   {
                     key: item.path,
@@ -8276,10 +8338,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     title: item.path,
                   },
                   h('span', { className: 'wbg-proj-t' }, item.name),
-                  h('span', { className: 'wbg-proj-n' }, String(item.scenes)),
-                  ),
-                ),
-              )
+                  projCount,
+                )
+              }),
+            )
             : null,
           /* 项目右键菜单（2026-11-18 大王要求：写作台项目要能删） */
           projMenu
@@ -8419,6 +8481,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               : null,
             bodyOpen ? volumes.map((vol, vi) => {
               const open = openVolumes[vi] !== false
+              /* 原地改卷名（2026-11-19）：正在改的这一卷把标题换成输入框 */
+              const volRenaming = props.editProj
+                && props.editProj.kind === 'rename-volume'
+                && props.editProj.vi === vi
               return h(
                 'div',
                 { key: vi },
@@ -8452,7 +8518,24 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     },
                   },
                   h(WbgIcon, { name: open ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
-                  h('span', { className: 'wbg-vol-t' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
+                  volRenaming
+                    ? h('input', {
+                      className: 'wbg-nameinput wbg-nameinput-vol',
+                      autoFocus: true,
+                      value: props.editProj.draft,
+                      placeholder: props.editProj.placeholder,
+                      onFocus: (event) => event.target.select(),
+                      /* 卷行整体是 role=button，点输入框不能把卷折叠起来 */
+                      onClick: (event) => event.stopPropagation(),
+                      onChange: (event) => props.editProj.onDraft(event.target.value),
+                      onKeyDown: (event) => {
+                        event.stopPropagation()
+                        if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() }
+                        else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                      },
+                      onBlur: () => props.editProj.commit(),
+                    })
+                    : h('span', { className: 'wbg-vol-t' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
                   h('span', { className: 'wbg-vol-n' }, String((vol.chapters || []).length)),
                   /*
                    * 卷行右侧只留一个 ＋ = 给这一卷加一章（2026-11-18 大王改定）。
@@ -8474,8 +8557,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                   }, '＋'),
                 ),
                 open
-                  ? (vol.chapters || []).map((ch, ci) =>
-                      h(
+                  ? (vol.chapters || []).map((ch, ci) => {
+                      /* 原地改章名（2026-11-19）：正在改的这一章把标题换成输入框 */
+                      const chRenaming = props.editProj
+                        && props.editProj.kind === 'rename-chapter'
+                        && props.editProj.vi === vi
+                        && props.editProj.ci === ci
+                      return h(
                         'div',
                         {
                           key: ci,
@@ -8502,10 +8590,26 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                           },
                         },
                         h('span', { className: 'wbg-ch-n' }, ('0' + (ci + 1)).slice(-2)),
-                        h('span', { className: 'wbg-ch-t' }, ch.title !== '' ? ch.title : t('writeUntitledChapter')),
+                        chRenaming
+                          ? h('input', {
+                            className: 'wbg-nameinput wbg-nameinput-ch',
+                            autoFocus: true,
+                            value: props.editProj.draft,
+                            placeholder: props.editProj.placeholder,
+                            onFocus: (event) => event.target.select(),
+                            onClick: (event) => event.stopPropagation(),
+                            onChange: (event) => props.editProj.onDraft(event.target.value),
+                            onKeyDown: (event) => {
+                              event.stopPropagation()
+                              if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() }
+                              else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                            },
+                            onBlur: () => props.editProj.commit(),
+                          })
+                          : h('span', { className: 'wbg-ch-t' }, ch.title !== '' ? ch.title : t('writeUntitledChapter')),
                         h('span', { className: 'wbg-ch-w' }, ch.file ? String(ch.words || 0) : '—'),
-                      ),
-                    )
+                      )
+                    })
                   : null,
               )
             }) : null,
@@ -9419,6 +9523,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          * 真正落盘在 commitEdit —— 一处写盘，三处复用。
          */
         const openEdit = (kind, payload, value) => {
+          editGuard.current = false
           setEditTip('')
           setEditPrompt({ kind, ...payload })
           setEditDraft(value === undefined || value === null ? '' : String(value))
@@ -9431,6 +9536,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         }
 
         /* 输入框的占位提示：改名时空着不合适，直接用默认名当提示 */
+        /*
+         * 改名防重入（2026-11-19）：原地输入框的 Enter 与 blur 会同时打进来，
+         * 两个回调拿的是同一份旧 state，没有闸门会 POST 两次（第二次必然重名失败）。
+         */
+        const editGuard = useRef(false)
+
         const editPlaceholderOf = () => {
           if (!editPrompt) return ''
           if (editPrompt.kind === 'rename-project') return t('writeProjectNamePrompt')
@@ -9464,6 +9575,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             closeEdit()
             return
           }
+          if (editGuard.current) return
+          editGuard.current = true
           /*
            * 改名项目的目标路径以「右键点中的那本书」为准，不用当前打开的那本 ——
            * 用户可以在没切过去的情况下直接改别的项目名。
@@ -9503,6 +9616,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             }
             closeEdit()
           } catch (err) {
+            editGuard.current = false
             setEditTip(t('writeSaveFailed') + messageOf(err))
           }
         }
@@ -9546,9 +9660,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onDeleteVolume: (index, title) => void deleteVolume(index, title),
             onDeleteChapter: (volumeIndex, chapterIndex, title) =>
               void deleteChapter(volumeIndex, chapterIndex, title),
-            /* 结构编辑输入条（与新建项目那条并列，同一时刻只画一个） */
+            /*
+             * 原地改名（2026-11-19 大王要求）：把「正在改哪一个」和输入框状态交给左栏，
+             * 左栏负责把那一行标题本身的字换成输入框，不再弹底部输入条。
+             *
+             * kind / vi / ci / path 是判定用的定位坐标：
+             *   项目 → path 比；卷 → vi 比；章 → vi + ci 比。
+             */
             editProj: editPrompt
               ? {
+                kind: editPrompt.kind,
+                vi: editPrompt.index !== undefined ? editPrompt.index : editPrompt.volumeIndex,
+                ci: editPrompt.chapterIndex,
+                path: editPrompt.path,
                 label: editLabelOf(),
                 placeholder: editPlaceholderOf(),
                 draft: editDraft,
@@ -9975,6 +10099,9 @@ body.dsh-resizing, body.dsh-resizing * {
 /* 目录与文件同字号（shadcn 原则：靠图标区分，不靠加粗放大）。
    原来目录 700/15px，比文件大一档，看着笨重。 */
 .vp-tree-row[data-kind="dir"] .vp-tree-name { font-weight: 500; }
+/* 原地改名的树行（2026-11-19）：整行换成 div，只剩输入框能动，所以不要 hover 底色 */
+.vp-tree-row-edit { cursor: default; background: transparent; }
+.vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
 /* 三个固定库：用库别图标，名字再加一点分量，和普通文件夹区分开 */
 .vp-tree-icon-lib { font-size: 13px; line-height: 1; }
 /* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
@@ -11261,6 +11388,17 @@ mark.df-hit[data-active="true"] {
 .wbg-projs-k { padding: 0 4px 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-proj { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 4px 8px; margin-bottom: 2px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .wbg-proj:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+/*
+ * 原地改名的输入框（2026-11-19 大王要求：不要弹窗，就在标题原地改）。
+ * 三个板块共用一套观感：字号跟随所在行、底色透明、只用一圈品牌色描边表示「正在编辑」。
+ * 不额外加重背景 —— 一加就和选中的行撞色，看不出哪个是输入框。
+ */
+.wbg-proj-edit { cursor: default; }
+.wbg-nameinput { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; line-height: inherit; outline: none; }
+.wbg-nameinput-vol { font-size: 11px; font-weight: 600; }
+.wbg-nameinput-ch { font-size: 12px; }
+/* 改名失败的提示：跟在标题行下面的小红字，不再是个带输入框的浮条 */
+.wbg-inline-tip { flex: none; margin: 0 12px 6px; padding: 4px 8px; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
 .wbg-proj[data-active="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 600; }
 .wbg-proj-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wbg-proj-n { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
