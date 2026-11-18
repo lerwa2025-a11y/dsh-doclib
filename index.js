@@ -21,6 +21,7 @@ import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import {
   addWriteChapter,
   addWriteVolume,
+  attachWriteChapterBody,
   createWriteProject,
   deleteWriteChapter,
   deleteWriteVolume,
@@ -385,6 +386,23 @@ export function apply(ctx) {
                 sendJson(res, 200, {
                   ok: true,
                   ...(await addWriteChapter(root, body && body.path, body && body.volumeIndex)),
+                })
+                return
+              }
+              /*
+               * 给「还没有正文文件」的章补一个空文件（2026-11-18 大王报障：
+               * 新建项目的第一章是灰的、点不动）。点开即建，前端不必再判断。
+               */
+              if (route === '/write-attach-chapter' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await attachWriteChapterBody(
+                    root,
+                    body && body.path,
+                    body && body.volumeIndex,
+                    body && body.chapterIndex,
+                  )),
                 })
                 return
               }

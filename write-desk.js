@@ -365,6 +365,11 @@ export async function createWriteProject(root, nameInput) {
   await mkdir(join(projectAbsolute, BODY_DIR), { recursive: true })
   // 项目.md 只放结构与 order，正文不写进来
   const stamp = new Date().toISOString().slice(0, 10)
+  /*
+   * 第一章直接带好正文文件（2026-11-18 大王报障）：
+   * 原来模板只写「## 第一章」不给文件，新建出来点第一章没反应。
+   */
+  const firstBody = '0001-第一章.md'
   const template = [
     '---',
     '书名: ' + name,
@@ -373,12 +378,13 @@ export async function createWriteProject(root, nameInput) {
     '',
     '# 第一卷',
     '',
-    '## 第一章',
+    '## 第一章 | ' + firstBody,
     '',
     '- 场景一',
     '',
   ].join('\n')
   await writeFile(join(projectAbsolute, PROJECT_FILE), template, 'utf8')
+  await writeFile(join(projectAbsolute, BODY_DIR, firstBody), '', 'utf8')
   return { name, path: `${WRITE_DIR}/${name}` }
 }
 /* ══════════════════════════════════════════════════════════════════════
@@ -622,6 +628,47 @@ export async function renameWriteVolume(root, projectRel, index, title) {
   return { ok: true, title: name }
 }
 
+/**
+ * 盘上正文目录里「下一个」文件名：最大数字前缀 + 1，四位补零。
+ * 新建章和「给已有章补正文」都用它，两处编号规则必须一致，
+ * 否则会出现两个 0002- 开头、或者序号跳号。
+ */
+async function makeBodyFileName(base, title) {
+  const bodyDir = join(base, BODY_DIR)
+  await mkdir(bodyDir, { recursive: true })
+  const bodies = await listMd(bodyDir)
+  let next = bodies.length + 1
+  for (const row of bodies) {
+    const m = /^(\d{1,4})[-_.\s]/.exec(row.name)
+    if (m) next = Math.max(next, parseInt(m[1], 10) + 1)
+  }
+  return String(next).padStart(4, '0') + '-' + safeTitle(title, '未命名章') + '.md'
+}
+
+/**
+ * 4b) 给「已经存在但还没有正文文件」的章补一个空正文（2026-11-18 大王报障）。
+ *
+ * 症状：新建项目模板里只有「## 第一章」这一行标题，没有正文文件，
+ * 于是左栏这一章是灰的、点不动 —— 大王说「我第一章不能编辑」。
+ * 现在点它就自动建文件再打开，不用让人自己去 正文\ 里手建。
+ * 已经有文件的章直接返回原文件，不重复建。
+ */
+export async function attachWriteChapterBody(root, projectRel, volumeIndex, chapterIndex) {
+  const base = await projectDir(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
+  const lines = structureLinesOf(text)
+  const at = chapterLineIndex(lines, Number(volumeIndex), Number(chapterIndex))
+  if (at < 0) throw new Error('找不到这一章')
+  const parsed = splitChapterLine(lines[at])
+  if (parsed.file !== '') return { ok: true, title: parsed.title, file: parsed.file, created: false }
+  const fileName = await makeBodyFileName(base, parsed.title)
+  await writeFile(join(base, BODY_DIR, fileName), '', { encoding: 'utf8', flag: 'wx' })
+  const out = lines.slice()
+  out[at] = '## ' + parsed.title + ' | ' + fileName
+  await writeProjectFile(base, joinProjectText(text, out))
+  return { ok: true, title: parsed.title, file: fileName, created: true }
+}
+
 /** 4) 新增章：写进 项目.md + 在 正文\ 建一个空文件。 */
 export async function addWriteChapter(root, projectRel, volumeIndex) {
   const base = await projectDir(root, projectRel)
@@ -640,13 +687,7 @@ export async function addWriteChapter(root, projectRel, volumeIndex) {
   // 正文文件序号：盘上已有文件里最大的数字前缀 + 1
   const bodyDir = join(base, BODY_DIR)
   await mkdir(bodyDir, { recursive: true })
-  const bodies = await listMd(bodyDir)
-  let next = bodies.length + 1
-  for (const row of bodies) {
-    const m = /^(\d{1,4})[-_.\s]/.exec(row.name)
-    if (m) next = Math.max(next, parseInt(m[1], 10) + 1)
-  }
-  const fileName = String(next).padStart(4, '0') + '-' + safeTitle(chapterTitle, '未命名章') + '.md'
+  const fileName = await makeBodyFileName(base, chapterTitle)
   const bodyAbsolute = join(bodyDir, fileName)
   // 'wx' = 已存在就报错，绝不覆盖别人的正文
   await writeFile(bodyAbsolute, '', { encoding: 'utf8', flag: 'wx' })

@@ -331,7 +331,8 @@ window.__ModuleLoader__.load({
         writeLoadingProject: '打开项目…',
         writeUntitledVolume: '未命名卷',
         writeUntitledChapter: '未命名章',
-        writeNoBodyYet: '这章还没正文，去「正文」目录里建一个文件',
+        writeNoBodyYet: '还没有正文，点一下就开始写',
+        writeAttachFailed: '建正文文件失败：',
         writePickChapter: '从左边选一章',
         writePickProject: '从左边选一个项目',
         writePickChapterSub: '选中章节后这里显示正文，可阅读可编辑',
@@ -697,7 +698,8 @@ window.__ModuleLoader__.load({
         writeLoadingProject: 'Opening project…',
         writeUntitledVolume: 'Untitled volume',
         writeUntitledChapter: 'Untitled chapter',
-        writeNoBodyYet: 'No body text yet — add a file under the 正文 folder',
+        writeNoBodyYet: 'No body text yet — click to start writing',
+        writeAttachFailed: 'Could not create the body file: ',
         writePickChapter: 'Pick a chapter on the left',
         writePickProject: 'Pick a project on the left',
         writePickChapterSub: 'Select a chapter to read or edit its text here',
@@ -8495,12 +8497,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                           key: ci,
                           className: 'wbg-ch',
                           'data-active': project && props.activeFile === ch.file,
-                          'data-todo': !ch.file,
                           role: 'button',
                           tabIndex: 0,
                           title: ch.file ? ch.file : t('writeNoBodyYet'),
                           onClick: () => {
-                            if (ch.file) props.onOpenChapter(ch)
+                            /* 2026-11-18：没正文文件的章也能点，点开自动补文件（见 openChapter） */
+                            props.onOpenChapter(ch, vi, ci)
                           },
                           onContextMenu: (event) => {
                             event.preventDefault()
@@ -9043,22 +9045,48 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           [],
         )
 
-        // 打开一章正文
-        const openChapter = async (chapter) => {
-          if (!chapter || !chapter.file || !project) return
-          const path = project.path + '/正文/' + chapter.file
+        /*
+         * 打开一章正文。
+         *
+         * 2026-11-18 修（大王报「我第一章不能编辑」）：
+         * 老项目 / 新建项目的模板里，章可能只有一行标题、没有正文文件。
+         * 原来这里直接 return，点上去像没反应。现在缺文件就先让 Host 补一个
+         * 空文件（顺带把「## 标题 | 文件名」写回 项目.md），然后再照常打开。
+         */
+        const openChapter = async (chapter, volumeIndex, chapterIndex) => {
+          if (!chapter || !project) return
+          let fileName = typeof chapter.file === 'string' ? chapter.file : ''
+          if (fileName === '') {
+            try {
+              const made = await vaultApiPost('/write-attach-chapter', {
+                path: project.path,
+                volumeIndex,
+                chapterIndex,
+              })
+              fileName = made && typeof made.file === 'string' ? made.file : ''
+            } catch (err) {
+              setError(t('writeAttachFailed') + messageOf(err))
+              return
+            }
+            if (fileName === '') {
+              setError(t('writeAttachFailed'))
+              return
+            }
+          }
+          const path = project.path + '/正文/' + fileName
+          const chapterTitle = chapter.title !== '' ? chapter.title : fileName
           try {
             const data = await vaultApiGet('/file?path=' + encodeURIComponent(path))
             const text = typeof data.text === 'string' ? data.text : ''
             setFile({
               path,
-              name: chapter.file,
-              title: chapter.title !== '' ? chapter.title : chapter.file,
+              name: fileName,
+              title: chapterTitle,
               text,
               mtime: data.mtime,
               readOnly: data.readOnly === true,
             })
-            setActiveFile(chapter.file)
+            setActiveFile(fileName)
             setDraft(text)
             setSaveState('idle')
             setError('')
@@ -9517,7 +9545,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             openVolumes,
             onQuery: setQuery,
             onProject: (path) => void loadProject(path),
-            onOpenChapter: (ch) => void openChapter(ch),
+            onOpenChapter: (ch, vi, ci) => void openChapter(ch, vi, ci),
             onOpenSetting: (row) => void openSetting(row),
             onToggleVolume: (vi) => setOpenVolumes((next) => ({ ...next, [vi]: next[vi] === false })),
             onCreate: () => openNewProject(),
@@ -11214,7 +11242,6 @@ mark.df-hit[data-active="true"] {
 .wbg-ch-n { flex: none; font-family: 'Consolas', monospace; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-ch-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .wbg-ch[data-active="true"] .wbg-ch-t { font-weight: 600; }
-.wbg-ch[data-todo="true"] .wbg-ch-t { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 400; }
 .wbg-ch-w { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-sep { height: 1px; margin: 8px 6px 0; background: var(--dsw-alias-border-l1); }
 .wbg-set { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--dsw-radius-sm, 8px); }
@@ -11260,7 +11287,6 @@ mark.df-hit[data-active="true"] {
 .wbg-set { cursor: pointer; }
 .wbg-setk { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .03em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 /* 未写的章（没有正文文件）看着是灰的，但仍可点（只是点了没反应） */
-.wbg-ch[data-todo="true"] { opacity: .5; cursor: default; }
 
 /* 中栏空状态 */
 .wbg-empty-doc { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 40px 24px; text-align: center; }
