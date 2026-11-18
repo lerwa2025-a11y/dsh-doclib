@@ -6512,7 +6512,7 @@ window.__ModuleLoader__.load({
             blank ? h('span', { className: 'cb-sess-hint' }, t('assistBlankHint')) : null,
             h('div', { className: 'cb-sess-btns' },
               sessionId !== ''
-                ? h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
+                ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
                 : null,
               h('button', {
                 type: 'button',
@@ -10471,7 +10471,22 @@ mark.df-hit[data-active="true"] {
   box-sizing: border-box;
 }
 .cb-input > .cb-ic { color: var(--dsw-alias-brand-primary); }
-.cb-send { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); transition: opacity .15s, transform .1s; }
+/*
+ * 发送按钮（2026-11-18 修正）：
+ * 上一版只把形状改成圆形，颜色还是品牌蓝 —— 大王指出来了。
+ * 截图里是薄荷绿，改用主题的 success 色（亮暗主题都跟随）。
+ */
+.cb-send {
+  width: 26px;
+  height: 26px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-success-primary);
+  color: var(--dsw-alias-label-inverse, var(--dsw-alias-bg-base));
+  transition: opacity .15s, transform .1s;
+}
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
 .vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; /* 2026-11-18：原来 overflow:hidden 会把「新建」下拉裁掉（大王截图：被阅读栏遮住）。
@@ -10953,11 +10968,22 @@ mark.df-hit[data-active="true"] {
 }
 .cb-sess-btn-danger:hover {
   color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+  border-color: var(--dsw-alias-state-error-primary);
+}
+.cb-sess-btn-danger:hover {
+  color: var(--dsw-alias-state-error-primary);
   border-color: var(--dsw-alias-state-error-primary);
   background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
 }
 .cb-sess-btn-danger:disabled { opacity: .5; cursor: default; }
 
+/*
+ * 会话区按钮（2026-11-18 配色）：三层级
+ *   默认（换一个新会话）  透明底 + 细边框
+ *   主操作（打开会话）    实心深灰，见下面的 data-primary
+ *   危险（删除会话）      红字红框，见 .cb-sess-btn-danger
+ */
 .cb-sess-btn {
   display: inline-flex;
   align-items: center;
@@ -10971,8 +10997,24 @@ mark.df-hit[data-active="true"] {
   color: var(--dsw-alias-label-secondary);
   font: inherit;
   font-size: 11px;
+  white-space: nowrap;
   cursor: pointer;
   transition: background .15s, color .15s, border-color .15s;
+}
+.cb-sess-btn:hover {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+  border-color: var(--dsw-alias-border-l3, var(--dsw-alias-border-l2));
+}
+/* 主操作（打开会话）：实心深灰，和截图一致 */
+.cb-sess-btn[data-primary="true"] {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: transparent;
+  color: var(--dsw-alias-label-primary);
+  font-weight: 600;
+}
+.cb-sess-btn[data-primary="true"]:hover {
+  background: var(--dsw-alias-interactive-bg-hover-solid, var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-2)));
 }
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
