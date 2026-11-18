@@ -157,6 +157,9 @@ window.__ModuleLoader__.load({
         assistIdle: '空闲',
         assistRunning: '运行中',
         assistOpen: '打开会话',
+        /* 助手栏收起（2026-11-18 大王要求：写作助手能收起到侧边） */
+        assistCollapse: '收起助手',
+        assistExpand: '展开助手',
         assistNew: '换一个新会话',
         assistSend: '发送',
         assistNoService: '当前环境没有会话服务，发不出去',
@@ -485,6 +488,8 @@ window.__ModuleLoader__.load({
         assistIdle: 'Idle',
         assistRunning: 'Running',
         assistOpen: 'Open session',
+        assistCollapse: 'Collapse assistant',
+        assistExpand: 'Expand assistant',
         assistNew: 'Start another session',
         assistSend: 'Send',
         assistNoService: 'No session service here; cannot send',
@@ -5634,6 +5639,11 @@ window.__ModuleLoader__.load({
         const [modelLabel, setModelLabel] = useState('')
         const [modelBusy, setModelBusy] = useState(false)
         const [modelOpen, setModelOpen] = useState(false)
+        /*
+         * 助手栏收起态（2026-11-18 大王要求：写作助手要能收起到侧边去）。
+         * 收起时只剩一条竖直窄条，点它或按钮展开 —— 正文区拿回 268px 宽度。
+         */
+        const [collapsed, setCollapsed] = useState(false)
 
         // 换库根就重新读绑定：一个工作台一个会话
         useEffect(() => {
@@ -5786,10 +5796,38 @@ window.__ModuleLoader__.load({
         const [blank, setBlank] = useState(false)
         const tasks = Array.isArray(props.tasks) ? props.tasks : []
 
-        return h('aside', { className: 'cb-aside' },
+        /* 收起时：只剩一条窄边，点它展开（2026-11-18） */
+        if (collapsed) {
+          return h(
+            'button',
+            {
+              type: 'button',
+              className: 'cb-aside-rail',
+              title: t('assistExpand'),
+              'aria-label': t('assistExpand'),
+              onClick: () => setCollapsed(false),
+            },
+            h(CbIcon, { name: 'sparkle', small: true }),
+            h('span', { className: 'cb-aside-rail-t' }, t(props.titleKey)),
+          )
+        }
+
+        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false' },
           h('div', { className: 'cb-aside-h' },
             h(CbIcon, { name: 'sparkle', small: true }),
             h('span', null, t(props.titleKey)),
+            /* 收起到侧边（2026-11-18） */
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'cb-aside-fold',
+                title: t('assistCollapse'),
+                'aria-label': t('assistCollapse'),
+                onClick: () => setCollapsed(true),
+              },
+              h(CbIcon, { name: 'chevronRight', small: true }),
+            ),
             h('span', { className: 'cb-status' },
               h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
               statusText)),
@@ -9364,11 +9402,63 @@ mark.df-hit[data-active="true"] {
 .cb-prose h2 { margin: 24px 0 8px; font-size: 15px; font-weight: 650; line-height: 1.5; }
 .cb-prose .cb-quote { padding-left: 12px; border-left: 2px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary); }
 .cb-doc-foot {
-  /* 页脚左右与正文对齐（2026-11-18 缩边距时同步） */ flex: none; height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 40px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+  /*
+   * 页脚（2026-11-18 修「已保存被挡住」）：
+   * 左右归零 —— 边距由容器 .cb-doc 的 padding 提供（照素材库）。
+   * 原来这里又加 0 40px，与容器叠加成 64px，窄窗口时把「已保存」挤出可视区。
+   */
+  flex: none; height: 38px; display: flex; align-items: center; gap: 16px;
+  padding: 0; min-width: 0; border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+}
 .cb-doc-foot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
-.cb-foot-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+/* 右对齐组可收缩（2026-11-18）：窄窗口时优先保留「已保存」，不撑破容器 */
+.cb-foot-right { margin-left: auto; flex: none; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+/* 左侧统计（字数/段落）可被裁，它是次要信息 */
+/* 左侧统计可压缩：窄时先截断它，保住「已保存」（2026-11-18） */
+.cb-doc-foot > span { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 兜底：任何情况下页脚内容不得伸出容器（否则会压到助手栏下面） */
+.cb-doc-foot { overflow: hidden; }
 .cb-foot-right .cb-ic { color: var(--dsw-alias-state-success-primary); }
-.cb-aside { width: 268px; flex: none; min-height: 0; display: flex; flex-direction: column; gap: 12px; padding: 12px; border-left: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.cb-aside {
+  width: 268px; flex: none; min-height: 0;
+  display: flex; flex-direction: column; gap: 12px; padding: 12px;
+  border-left: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1));
+  box-sizing: border-box;
+  transition: width .16s ease;
+}
+/*
+ * 收起按钮 / 收起后的窄条（2026-11-18 大王要求：写作助手能收起到侧边）。
+ * 收起后正文区拿回 268px，「已保存」也不会再被压到。
+ */
+.cb-aside-fold {
+  margin-left: auto; flex: none; width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 4px; background: none;
+  color: var(--dsw-alias-label-secondary); cursor: pointer;
+  transition: background .12s, color .12s;
+}
+.cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.cb-aside-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
+
+.cb-aside-rail {
+  flex: none; width: 30px; min-height: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+  gap: 10px; padding: 12px 0;
+  border: 0; border-left: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1));
+  color: var(--dsw-alias-label-secondary); cursor: pointer;
+  transition: background .12s, color .12s;
+  box-sizing: border-box;
+}
+.cb-aside-rail:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.cb-aside-rail:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+/* 竖排标题（写作业竖排，长度可控） */
+.cb-aside-rail-t {
+  writing-mode: vertical-rl; text-orientation: upright;
+  font-size: 11px; letter-spacing: 1px; white-space: nowrap;
+}
 .cb-aside-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
 .cb-aside-h .cb-ic { color: var(--dsw-alias-label-secondary); }
 .cb-aside-n { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
