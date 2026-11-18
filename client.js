@@ -182,12 +182,12 @@ window.__ModuleLoader__.load({
         assistModel: '模型',
         assistModelPick: '选择模型',
         assistSkill: '选择技能',
-        assistSkillPick: '选择技能',
-        assistSkillPicked: '已选技能 ',
+        assistSkillSelect: '选择技能',
+        assistSkillSearch: '搜索技能',
+        assistSkillManage: '管理技能…',
+        assistSkillNoMatch: '没有匹配的技能',
+        assistSkillEmpty: '没有可手动调用的技能（都关了或只在模型侧）。',
         assistSkillEmpty: '没有可用技能',
-        assistSkillClear: '清空',
-        assistSkillManual: '手动',
-        assistSkillGroupOff: '已停用',
         assistModelLoading: '模型加载中…',
         assistModelEmpty: '没有可用模型',
         assistModelFailed: '模型切换失败：',
@@ -524,12 +524,12 @@ window.__ModuleLoader__.load({
         assistModel: 'Model',
         assistModelPick: 'Select model',
         assistSkill: 'Pick skill',
-        assistSkillPick: 'Pick skill',
-        assistSkillPicked: 'Skills ',
+        assistSkillSelect: 'Pick a skill',
+        assistSkillSearch: 'Search skills',
+        assistSkillManage: 'Manage skills…',
+        assistSkillNoMatch: 'No matching skills',
+        assistSkillEmpty: 'No user-invocable skills.',
         assistSkillEmpty: 'No skills',
-        assistSkillClear: 'Clear',
-        assistSkillManual: 'manual',
-        assistSkillGroupOff: 'off',
         assistModelLoading: 'Loading models…',
         assistModelEmpty: 'No models available',
         assistModelFailed: 'Model switch failed: ',
@@ -784,6 +784,18 @@ window.__ModuleLoader__.load({
      * （2026-11-18：一开始误放进 assistantApi 内部，组件里调就报
      *   「sleepMs is not defined」）
      */
+    /**
+     * 把一个技能插进草稿最前面（照抄 dsh-skill-workshop/client.js:2292）。
+     * 已经有这个 token 就不重复插。
+     */
+    function draftWithSkill(draft, name) {
+      const token = '/' + name
+      const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp('(^|\\s)' + escaped + '(\\s|$)').test(draft)) return draft
+      const rest = String(draft).trimStart()
+      return rest === '' ? token + ' ' : token + ' ' + rest
+    }
+
     const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
     /**
@@ -5867,11 +5879,11 @@ window.__ModuleLoader__.load({
         const modelBoxRef = useRef(null)
         /*
          * 技能选择（2026-11-18 大王要求）。
-         * skills 是 Host 读来的全部技能；pickedSkills 是用户勾的；
-         * 技能只在发送时拼进消息前缀由模型加载，不是常驻状态。
+         * skills 是 Host 读来的全部技能（只含 userInvocable）；
          */
-        const [skillGroups, setSkillGroups] = useState([])
-        const [pickedSkills, setPickedSkills] = useState([])
+        const [skills, setSkills] = useState([])
+        const [skillQuery, setSkillQuery] = useState('')
+        const [skillPlace, setSkillPlace] = useState(null)
         const [skillOpen, setSkillOpen] = useState(false)
         const skillBoxRef = useRef(null)
         /*
@@ -6142,16 +6154,12 @@ window.__ModuleLoader__.load({
                * 用户在输入框能打 /name 调用的那些。
                * 模型自动但用户不能调的，不在这里列（本面板是用户点名用的）。
                */
-              const raw = Array.isArray(data && data.groups) ? data.groups : []
-              const filtered = raw
-                .map((group) => ({
-                  ...group,
-                  skills: (Array.isArray(group.skills) ? group.skills : []).filter(
-                    (skill) => skill && skill.userInvocable === true,
-                  ),
-                }))
-                .filter((group) => group.skills.length > 0)
-              setSkillGroups(filtered)
+              /*
+               * 只留 invocation.userInvocable 的技能 —— 技能工坊自己的过滤
+               * 规则（client.js:2355）：用户在输入框能打 /name 调用的那些。
+               */
+              const flat = Array.isArray(data && data.flat) ? data.flat : []
+              setSkills(flat.filter((skill) => skill && skill.userInvocable === true))
             } catch {
               /* 读不到就当没有技能，不影响对话 */
             }
@@ -6159,7 +6167,58 @@ window.__ModuleLoader__.load({
           return () => { alive = false }
         }, [])
 
-        /* 技能面板：点外面 / Esc 关闭（和模型菜单同一套） */
+        /* 面板用 fixed 定位，开的时候量一下按钮位置（照抄技工坊 2368-2382） */
+        useEffect(() => {
+          const box = skillBoxRef.current && skillBoxRef.current.firstChild
+          if (!box || typeof box.getBoundingClientRect !== 'function') return undefined
+          const measure = () => {
+            const rect = box.getBoundingClientRect()
+            const width = 300
+            const below = rect.bottom + 6
+            const space = window.innerHeight - below
+            const flip = space < 260 && rect.top > 280
+            setSkillPlace({
+              top: flip ? undefined : below,
+              bottom: flip ? window.innerHeight - rect.top + 6 : undefined,
+              left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+            })
+          }
+          measure()
+          window.addEventListener('resize', measure)
+          window.addEventListener('scroll', measure, true)
+          return () => {
+            window.removeEventListener('resize', measure)
+            window.removeEventListener('scroll', measure, true)
+          }
+        }, [skillOpen])
+
+        /** 点一个技能：插进草稿最前面并关面板（和技工坊 pick() 一致） */
+        const useSkill = (skill) => {
+          if (!skill || typeof skill.name !== 'string') return
+          setDraft((prev) => draftWithSkill(prev, skill.name))
+          setSkillOpen(false)
+          setSkillQuery('')
+        }
+
+        /** 页脚「管理技能…」：切到技能工坊面板 */
+        const openSkillPanel = () => {
+          setSkillOpen(false)
+          try {
+            const layout = props.ctx && typeof props.ctx.get === 'function' ? props.ctx.get('layout') : undefined
+            if (layout && typeof layout.selectPanel === 'function') layout.selectPanel('skill-workshop')
+          } catch {
+            /* 没有面板能力的组合，保持原样 */
+          }
+        }
+
+        /* 搜索过滤：名称或描述命中（照抄技工坊 2415-2419） */
+        const skillNeedle = skillQuery.trim().toLowerCase()
+        const visibleSkills = skillNeedle === ''
+          ? skills
+          : skills.filter((skill) => skill.name.toLowerCase().includes(skillNeedle)
+              || String(skill.description).toLowerCase().includes(skillNeedle))
+
+        /* 点外面 / Esc 关闭面板 */
         useEffect(() => {
           if (!skillOpen) return undefined
           const onDown = (event) => {
@@ -6272,12 +6331,21 @@ window.__ModuleLoader__.load({
         const send = async () => {
           const raw = draft.trim()
           /*
-           * 勾了技能就在正文前加一句加载指令（2026-11-18）。
-           * 不走预设 —— 不勾就完全不影响；勾了模型会先调 skill 工具。
+           * 把开头的 /技能名 转成明确的加载指令（2026-11-18）。
+           * 本面板的输入框不是 DSH 对话输入框，斜杠命令不会自动解析，
+           * 所以在这里翻译成「先加载这些技能」交给模型调 skill 工具。
+           * 只认已加载的技能名，避免把正文里普通斜杠误当命令。
            */
-          const text = pickedSkills.length === 0
+          const knownNames = new Set(skills.map((skill) => skill.name))
+          const usedSkills = []
+          const bodyText = raw.replace(/(^|\s)\/([A-Za-z0-9][A-Za-z0-9._-]*)/g, (whole, lead, name) => {
+            if (!knownNames.has(name)) return whole
+            if (usedSkills.indexOf(name) < 0) usedSkills.push(name)
+            return lead
+          }).trim()
+          const text = usedSkills.length === 0
             ? raw
-            : '【先加载这些技能再回答：' + pickedSkills.join('、') + '】\n' + raw
+            : '【先加载这些技能再回答：' + usedSkills.join('、') + '】\n' + bodyText
           if (raw === '' || busy) return
           setBusy(true)
           setError('')
@@ -6517,7 +6585,11 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'cb-model-txt' }, modelLabel !== '' ? modelLabel : t('assistModelPick')),
                 h('span', { className: 'cb-model-caret' }, modelBusy ? '·' : '▾'),
               ),
-            /* 选择技能（2026-11-18）：和技能工坊输入框旁那个按钮一模一样 */
+            /*
+             * 选择技能（2026-11-18 第四次）：完全照抄技能工坊的 SkillPicker。
+             * 搜索框 + 平铺列表（名称 + 描述）+「管理技能…」页脚，
+             * 点一项把 /name 插进输入框，和输入框旁那个五角星行为一致。
+             */
             h(
               'div',
               { className: 'cb-skill', ref: skillBoxRef },
@@ -6527,20 +6599,13 @@ window.__ModuleLoader__.load({
                   type: 'button',
                   className: 'cb-skill-btn',
                   'aria-label': t('assistSkill'),
-                  title: pickedSkills.length === 0
-                    ? t('assistSkill')
-                    : t('assistSkillPicked') + pickedSkills.length,
+                  title: t('assistSkill'),
                   'aria-haspopup': 'dialog',
                   'aria-expanded': skillOpen ? 'true' : 'false',
-                  'data-open': skillOpen ? 'true' : 'false',
                   disabled: busy,
                   onMouseDown: (event) => event.preventDefault(),
                   onClick: () => setSkillOpen((open) => !open),
                 },
-                /*
-                 * 五角星图标：和技能工坊输入框旁那个按钮**同一份 path**
-                 * （dsh-skill-workshop/client.js:2484）。
-                 */
                 h('svg', {
                   viewBox: '0 0 16 16',
                   width: 14,
@@ -6555,67 +6620,62 @@ window.__ModuleLoader__.load({
                     strokeLinejoin: 'round',
                   }),
                 ),
-                /* 已选数量角标（技能工坊没有，但选了得看得见） */
-                pickedSkills.length > 0
-                  ? h('span', { className: 'cb-skill-count' }, pickedSkills.length)
-                  : null,
               ),
               skillOpen
                 ? h(
                   'div',
-                  { className: 'cb-model-menu cb-skill-menu' },
-                  skillGroups.length === 0
-                    ? h('div', { className: 'cb-model-empty' }, t('assistSkillEmpty'))
-                    : [
-                      /* 已选摘要 + 清空 */
-                      pickedSkills.length > 0
-                        ? h('div', { className: 'cb-skill-bar' },
-                          h('span', null, t('assistSkillPicked') + pickedSkills.length),
+                  {
+                    className: 'cb-skill-picker',
+                    role: 'dialog',
+                    'aria-label': t('assistSkill'),
+                    style: skillPlace === null
+                      ? { position: 'fixed', visibility: 'hidden', top: '0px', left: '0px', width: '300px' }
+                      : {
+                        position: 'fixed',
+                        top: skillPlace.top === undefined ? undefined : skillPlace.top + 'px',
+                        bottom: skillPlace.bottom === undefined ? undefined : skillPlace.bottom + 'px',
+                        left: skillPlace.left + 'px',
+                        width: '300px',
+                      },
+                  },
+                  /* 搜索框：自动聚焦，和技工坊一样 */
+                  h('header', { className: 'cb-skill-head' },
+                    h('input', {
+                      type: 'search',
+                      className: 'cb-skill-search',
+                      value: skillQuery,
+                      autoFocus: true,
+                      placeholder: t('assistSkillSearch'),
+                      'aria-label': t('assistSkillSearch'),
+                      onChange: (event) => setSkillQuery(event.target.value),
+                      onKeyDown: (event) => {
+                        if (event.key === 'Enter' && visibleSkills.length > 0) useSkill(visibleSkills[0])
+                      },
+                    }),
+                  ),
+                  skills.length === 0
+                    ? h('p', { className: 'cb-skill-note' }, t('assistSkillEmpty'))
+                    : visibleSkills.length === 0
+                      ? h('p', { className: 'cb-skill-note' }, t('assistSkillNoMatch'))
+                      : h('ul', { className: 'cb-skill-list' }, visibleSkills.map((skill) =>
+                        h('li', { key: skill.key },
                           h('button', {
                             type: 'button',
-                            className: 'cb-skill-clear',
-                            onClick: () => setPickedSkills([]),
-                          }, t('assistSkillClear')),
-                        )
-                        : null,
-                      /* 按组分列（结构和技能工坊一致） */
-                      ...skillGroups.map((group) =>
-                        h(
-                          'div',
-                          { key: group.id, className: 'cb-skill-group' },
-                          h('div', { className: 'cb-skill-gh' },
-                            h('span', null, group.name),
-                            group.off
-                              ? h('span', { className: 'cb-skill-tag' }, t('assistSkillGroupOff'))
-                              : null,
-                          ),
-                          group.skills.map((skill) =>
-                            h(
-                              'button',
-                              {
-                                key: skill.key,
-                                type: 'button',
-                                className: 'cb-model-item cb-skill-item',
-                                'data-on': pickedSkills.includes(skill.key) ? 'true' : 'false',
-                                title: skill.description,
-                                onClick: () => {
-                                  setPickedSkills((list) =>
-                                    list.includes(skill.key)
-                                      ? list.filter((x) => x !== skill.key)
-                                      : list.concat(skill.key),
-                                  )
-                                },
-                              },
-                              h('span', { className: 'cb-skill-name' }, skill.name),
-                              /* 只有用户能选的才算「手动」；模型自动的不用标 */
-                              skill.modelInvocable
-                                ? null
-                                : h('span', { className: 'cb-skill-tag' }, t('assistSkillManual')),
-                            ),
+                            className: 'cb-skill-item',
+                            onClick: () => useSkill(skill),
+                          },
+                            h('strong', null, skill.name),
+                            h('small', null, skill.description),
                           ),
                         ),
-                      ),
-                    ],
+                      )),
+                  h('footer', { className: 'cb-skill-foot' },
+                    h('button', {
+                      type: 'button',
+                      className: 'cb-skill-link',
+                      onClick: openSkillPanel,
+                    }, t('assistSkillManage')),
+                  ),
                 )
                 : null,
             ),
@@ -10863,7 +10923,12 @@ mark.df-hit[data-active="true"] {
  * 技能按钮（2026-11-18 第三次）：照抄技能工坊的 .ssPickerButton，
  * 26×26 五角星，透明底，hover 才显背景 —— 和输入框旁那个按钮一致。
  */
+/*
+ * 技能按钮与面板（2026-11-18 第四次）：照抄技能工坊的
+ * .ssPickerButton / .ssPicker / .ssSearch / .ssPickerItem / .ssLink。
+ */
 .cb-skill { position: relative; display: inline-flex; }
+/* 按钮：和输入框旁那个五角星同一尺寸与配色 */
 .cb-skill-btn {
   display: grid;
   width: 26px;
@@ -10882,59 +10947,87 @@ mark.df-hit[data-active="true"] {
   background: var(--dsw-alias-interactive-bg-hover);
 }
 .cb-skill-btn:disabled { opacity: .45; cursor: default; }
-/* 已选数量角标：右下角一个小圆点数字 */
-.cb-skill-count {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 50%;
-  background: var(--dsw-alias-state-business-primary);
-  color: var(--dsw-alias-label-inverse, #fff);
-  font-size: 10px;
-  line-height: 14px;
-  text-align: center;
-  pointer-events: none;
-}
 
-.cb-skill-menu { max-height: 420px; overflow-y: auto; min-width: 260px; }
-/* 技能分组标题（2026-11-18：结构对齐技能工坊） */
-.cb-skill-group { margin-bottom: 8px; }
-.cb-skill-gh {
-  display: flex; align-items: center; justify-content: space-between; gap: 6px;
-  padding: 4px 8px; font-size: 11px; font-weight: 600;
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
-  letter-spacing: .02em;
-}
-
-.cb-skill-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 6px 8px; margin-bottom: 4px;
-  font-size: 11px; color: var(--dsw-alias-label-secondary);
-  border-bottom: 1px solid var(--dsw-alias-border-l1);
-}
-.cb-skill-clear {
-  border: none; background: transparent; cursor: pointer; padding: 0 4px;
-  font-size: 11px; color: var(--dsw-alias-brand-primary);
-}
-.cb-skill-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  width: 100%; text-align: left;
-}
-.cb-skill-item[data-on="true"] {
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-brand-primary);
-  font-weight: 600;
-}
-.cb-skill-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-skill-tag {
-  flex: none; font-size: 10px; padding: 1px 5px;
+/* 面板：300px、圆角、阴影，和技工坊一致 */
+.cb-skill-picker {
+  z-index: 1000;
+  display: flex;
+  overflow: hidden;
+  flex-direction: column;
+  max-height: min(420px, 60vh);
+  border: .5px solid var(--dsw-alias-settings-card-stroke);
   border-radius: var(--dsw-radius-sm, 8px);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .2);
 }
+.cb-skill-head { flex: none; padding: 8px; border-bottom: .5px solid var(--dsw-alias-border-l2); }
+.cb-skill-search {
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  border: .5px solid var(--dsw-alias-border-l4);
+  border-radius: var(--dsw-radius-sm, 8px);
+  outline: 0;
+  padding: 0 9px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  font: inherit;
+  font-size: 12px;
+  line-height: 26px;
+  transition: border-color 120ms ease;
+}
+.cb-skill-search::placeholder { color: var(--dsw-alias-label-tertiary); }
+.cb-skill-search:focus { border-color: var(--dsw-alias-state-business-primary); }
+.cb-skill-list { min-height: 0; flex: 1; overflow-y: auto; margin: 0; padding: 4px; list-style: none; }
+.cb-skill-item {
+  display: grid;
+  width: 100%;
+  gap: 1px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 8px);
+  padding: 6px 8px;
+  color: var(--dsw-alias-label-primary);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.cb-skill-item:hover, .cb-skill-item:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  outline: none;
+}
+.cb-skill-item strong { font-size: 13px; font-weight: 500; }
+.cb-skill-item small {
+  overflow: hidden;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cb-skill-note {
+  margin: 0;
+  padding: 14px 12px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  text-align: center;
+}
+.cb-skill-foot { flex: none; padding: 6px 10px; border-top: .5px solid var(--dsw-alias-border-l2); }
+.cb-skill-link {
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 8px);
+  padding: 0 2px;
+  color: var(--dsw-alias-state-business-primary);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+.cb-skill-link:hover { text-decoration: underline; }
+
+
 
 .cb-model-menu { position: absolute; right: 0; left: auto; bottom: calc(100% + 8px); z-index: 60; width: 288px; max-height: 340px; overflow-y: auto; padding: 6px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 12px 34px rgba(0, 0, 0, .3); }
 .cb-model-menu::-webkit-scrollbar { width: 7px; }
