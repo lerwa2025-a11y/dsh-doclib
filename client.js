@@ -11319,10 +11319,11 @@ mark.df-hit[data-active="true"] {
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
-  opacity: 0;
+  opacity: .55;
   transition: opacity .12s ease, background .12s ease, color .12s ease;
 }
 .wbg-vol:hover .wbg-vol-add, .wbg-vol-add:focus-visible { opacity: 1; }
+.wbg-vol-add:active { opacity: 1; }
 .wbg-vol-add:hover {
   background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
   color: var(--dsw-alias-brand-primary);
