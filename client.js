@@ -5317,6 +5317,7 @@ window.__ModuleLoader__.load({
                     role: 'tab',
                     'aria-selected': tab === item.id ? 'true' : 'false',
                     'data-active': tab === item.id,
+                    'data-board': item.id,
                     className: 'wb-sw',
                     title: t(item.descKey),
                     onClick: () => {
@@ -9091,15 +9092,80 @@ window.__ModuleLoader__.load({
 .wb-header { gap: 12px; padding: 8px 16px; flex: none; border-bottom: 1px solid var(--dsw-alias-border-l1);
   /* 板块切换是 40px 圆+文字（较高），右侧动作是 32px；用 center 让右侧一排竖着对齐中线 */
   align-items: center; }
-.wb-switch { display: flex; align-items: flex-start; gap: 8px; flex: none; }
-.wb-sw { display: flex; flex-direction: column; align-items: center; gap: 4px; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; border-radius: 50%; }
-.wb-sw-icon { width: 40px; height: 40px; padding: 8px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-tertiary); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: background .15s, border-color .15s, color .15s; }
-.wb-sw-label { font-size: 10px; line-height: 1.3; /* 导航标签，必须可读（tertiary 4.11 < 4.5） */ color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-.wb-sw:hover .wb-sw-icon { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-secondary); }
-.wb-sw[data-active="true"] .wb-sw-icon { background: var(--dsw-alias-brand-primary); border-color: transparent; color: var(--dsw-alias-bg-base); }
-.wb-sw[data-active="true"] .wb-sw-label { color: var(--dsw-alias-label-primary); font-weight: 600; }
+/*
+ * 板块切换（2026-11-18 大王要求：做大 + 三个板块分色）。
+ *
+ * 尺寸：圆 48、图标内边距 11、标签 12.5px —— 原来 40/8/10 偏小。
+ * 配色：三个板块各一个强调色，全部取主题变量，不自造颜色：
+ *   素材库 蓝（brand-primary）· 文案台 琥珀（warn）· 写作台 绿（success）
+ * 未选中：彩色描边 + 淡彩图标；选中：实心 + 白图标。
+ */
+.wb-switch { display: flex; align-items: flex-start; gap: 10px; flex: none; }
+.wb-sw {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  /* 做宽：给标签留余量，三个按钮视觉等宽 */
+  min-width: 72px;
+  padding: 2px 8px;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  border-radius: 50%;
+  /* 每个板块的强调色，默认取品牌色，下面按时板覆盖 */
+  --wb-accent: var(--dsw-alias-brand-primary);
+}
+.wb-sw[data-board="copy"] { --wb-accent: var(--dsw-alias-state-warn-primary); }
+.wb-sw[data-board="write"] { --wb-accent: var(--dsw-alias-state-success-primary); }
+
+/* 图标圆：比原来大一圈（48），描边用板块色 */
+.wb-sw-icon {
+  width: 48px;
+  height: 48px;
+  padding: 11px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--wb-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--wb-accent) 10%, var(--dsw-alias-bg-layer-1));
+  color: var(--wb-accent);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: background .15s, border-color .15s, color .15s;
+}
+
+/* 标签：10 -> 12.5px，未选中用板块色（够亮但不刺眼） */
+.wb-sw-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  line-height: 1.25;
+  letter-spacing: .01em;
+  color: color-mix(in srgb, var(--wb-accent) 78%, var(--dsw-alias-label-primary));
+  white-space: nowrap;
+}
+
+/* hover：底色加深一档 */
+.wb-sw:hover .wb-sw-icon {
+  background: color-mix(in srgb, var(--wb-accent) 20%, var(--dsw-alias-bg-layer-1));
+  border-color: color-mix(in srgb, var(--wb-accent) 60%, transparent);
+}
+
+/* 选中：实心板块色 + 反白图标 + 标签同色加粗 */
+.wb-sw[data-active="true"] .wb-sw-icon {
+  background: var(--wb-accent);
+  border-color: transparent;
+  color: var(--dsw-alias-label-primary-inverted, var(--dsw-alias-bg-base));
+}
+.wb-sw[data-active="true"] .wb-sw-label {
+  color: var(--wb-accent);
+  font-weight: 700;
+}
 .wb-sw:focus-visible { outline: none; }
-.wb-sw:focus-visible .wb-sw-icon { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
+.wb-sw:focus-visible .wb-sw-icon { outline: 2px solid var(--wb-accent); outline-offset: 2px; }
 
 /* ── 顶栏动作按钮（打开文件夹 / 刷新 / 回收站）────────────────────────────
    照 .wb-sw 的规格：圆形 40px 图标 + 下方 10.5px 小字，
