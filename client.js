@@ -309,6 +309,7 @@ window.__ModuleLoader__.load({
         writeCh2: '那封信的落款',
         writeCh3: '旧码头的那场雨',
         writeCh4: '（待稿）',
+        writeBodyGroup: '正文',
         writeSettings: '设定',
         writeSettingCount: '4',
         writeSetChars: '人物小传',
@@ -633,6 +634,7 @@ window.__ModuleLoader__.load({
         writeCh2: 'The letter’s sign-off',
         writeCh3: 'That rain on the old pier',
         writeCh4: '(to be drafted)',
+        writeBodyGroup: 'Body',
         writeSettings: 'Setting',
         writeSettingCount: '4',
         writeSetChars: 'Character sheets',
@@ -7036,6 +7038,10 @@ window.__ModuleLoader__.load({
 
         /* 项目右键菜单（2026-11-18）：删除项目 */
         const [projMenu, setProjMenu] = useState(null)
+        /* 正文分组的展开态（2026-11-18 大王要求：卷上面加「正文」标题，可展开收起） */
+        const [bodyOpen, setBodyOpen] = useState(true)
+        /* 设定分组的展开态（2026-11-18：与正文分组保持一致，都可收起） */
+        const [settingOpen, setSettingOpen] = useState(true)
 
         /* 点外面 / 按 Esc 关项目右键菜单 */
         useEffect(() => {
@@ -7099,7 +7105,6 @@ window.__ModuleLoader__.load({
             ? h(
               'div',
               { className: 'wbg-projs' },
-              h('div', { className: 'wbg-projs-k' }, t('writeProjects')),
               projects.map((item) =>
                 h(
                   'button',
@@ -7167,7 +7172,34 @@ window.__ModuleLoader__.load({
                 )
               : null,
             // 卷 → 章 → 场景
-            volumes.map((vol, vi) => {
+            /*
+             * 「正文」分组头（2026-11-18 大王要求）：
+             * 样式照下面的「设定」——同样的 wbg-vol / wbg-vol-t / wbg-vol-n，
+             * 但这里可点、可展开收起（设定那组是静态的）。
+             */
+            project
+              ? h(
+                'div',
+                {
+                  className: 'wbg-vol',
+                  'data-open': bodyOpen ? 'true' : 'false',
+                  role: 'button',
+                  tabIndex: 0,
+                  title: t('writeBodyGroup'),
+                  onClick: () => setBodyOpen((open) => !open),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setBodyOpen((open) => !open)
+                    }
+                  },
+                },
+                h(WbgIcon, { name: bodyOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                h('span', { className: 'wbg-vol-t' }, t('writeBodyGroup')),
+                h('span', { className: 'wbg-vol-n' }, String(volumes.reduce((sum, v) => sum + (v.chapters || []).length, 0))),
+              )
+              : null,
+            bodyOpen ? volumes.map((vol, vi) => {
               const open = openVolumes[vi] !== false
               return h(
                 'div',
@@ -7176,6 +7208,8 @@ window.__ModuleLoader__.load({
                   'div',
                   {
                     className: 'wbg-vol',
+                    /* 层级：卷在「正文」分组之下，左缩进 8px 区分父子（2026-11-18） */
+                    style: { paddingLeft: '14px' },
                     'data-open': open,
                     role: 'button',
                     tabIndex: 0,
@@ -7214,7 +7248,7 @@ window.__ModuleLoader__.load({
                     )
                   : null,
               )
-            }),
+            }) : null,
             // 设定：人物 / 地点 / 情节线
             project
               ? h('div', { className: 'wbg-sep' })
@@ -7222,7 +7256,21 @@ window.__ModuleLoader__.load({
             project
               ? h(
                   'div',
-                  { className: 'wbg-vol', 'data-open': 'true' },
+                  {
+                    className: 'wbg-vol',
+                    'data-open': settingOpen ? 'true' : 'false',
+                    role: 'button',
+                    tabIndex: 0,
+                    title: t('writeSettings'),
+                    onClick: () => setSettingOpen((open) => !open),
+                    onKeyDown: (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSettingOpen((open) => !open)
+                      }
+                    },
+                  },
+                  h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
                   h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
                   h('span', { className: 'wbg-vol-n' }, String(
                     (settings['人物'] || []).length + (settings['地点'] || []).length + (settings['情节线'] || []).length,
@@ -7230,7 +7278,7 @@ window.__ModuleLoader__.load({
                 )
               : null,
             project
-              ? ['人物', '地点', '情节线'].map((kind) =>
+              ? (settingOpen ? ['人物', '地点', '情节线'].map((kind) =>
                   (settings[kind] || []).length === 0
                     ? null
                     : h(
@@ -7262,7 +7310,7 @@ window.__ModuleLoader__.load({
                           ),
                         ),
                       ),
-                )
+                ) : null)
               : null,
           ),
         )
