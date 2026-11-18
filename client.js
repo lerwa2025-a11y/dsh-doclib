@@ -4818,6 +4818,18 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           if (!memoDirtyRef.current) { memoDirtyRef.current = true; return }
           BOARD_MEMO.copy.expanded = expanded
         }, [expanded])
+        /*
+         * 把实际展开状态上报给父组件（2026-11-18）。
+         *
+         * 为什么必须上报：按钮原来按 `expandSignal.mode` 显示「全部收起/展开」，
+         * 那只是「下次点击要做什么」的瞬时命令，不是当前状态。
+         * 切板块回来时 expandSignal 重置成 mode='all'（显示「全部收起」），
+         * 而树的实际状态是从内存恢复的（可能全是收起的）—— 必然对不上。
+         * 所以按钮文案必须读这里的真实状态。
+         */
+        useEffect(() => {
+          if (typeof props.onExpandedChange === 'function') props.onExpandedChange(expanded)
+        }, [expanded])
         /* 合并版 effect 内部用 didInitRef / lastSignalRef，不再需要 autoExpandRef */
 
         /*
@@ -6937,6 +6949,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const activePath = props.activePath
         const sortBy = props.sortBy
         /* 加号下拉：新建分组 / 新建文案 */
+        /* 树的实际展开状态由父组件传入（见 CopyBoard 里的说明） */
+        const treeExpanded = props.treeExpanded || {}
         const [newOpen, setNewOpen] = useState(false)
         /* 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算） */
         const [newMenuPos, setNewMenuPos] = useState(null)
@@ -6957,6 +6971,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           document.addEventListener('mousedown', onDown)
           return () => document.removeEventListener('mousedown', onDown)
         }, [newOpen])
+        /* 只要有目录展开过，按钮就显示「全部收起」（点它收起全部） */
+        const hasAnyExpanded = Object.keys(treeExpanded).length > 0
+
 
         return h(
           'div',
@@ -7037,8 +7054,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onClick: () => {
               if (typeof props.onToggleExpand === 'function') props.onToggleExpand()
             },
-            title: props.allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll'),
-          }, props.allExpanded ? t('vaultCollapseAll') : t('vaultExpandAll')),
+            title: hasAnyExpanded ? t('vaultCollapseAll') : t('vaultExpandAll'),
+          }, hasAnyExpanded ? t('vaultCollapseAll') : t('vaultExpandAll')),
           h('div', { className: 'vp-sortwrap' },
             h('button', {
               type: 'button',
@@ -7074,6 +7091,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             nodes: tree,
             activePath,
             expandSignal: props.expandSignal,
+            onExpandedChange: (next) => { if (typeof props.onExpandedChange === 'function') props.onExpandedChange(next) },
             onPick: (node) => props.onPick(node.path),
             onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
             onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
@@ -7281,6 +7299,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [copySort, setCopySort] = useState('name')
         /* 需求4：初始 n=1 触发一次全展开 —— 否则按钮显示「全部收起」但树是收起的 */
         const [expandSignal, setExpandSignal] = useState({ n: 1, mode: 'all' })
+        /*
+         * 树的实际展开状态（2026-11-18）。
+         *
+         * 状态放这一层（CopyBoard），因为两个地方都要用：
+         *   · CopyList 要用它显示按钮文案（「全部展开」还是「全部收起」）
+         *   · toggleExpand 要用它决定下一步是展开还是收起
+         * 放 CopyList 会变成跨组件引用（toggleExpand 在 CopyBoard），会崩。
+         * 由 CopyTree 上报。
+         */
+        const [treeExpanded, setTreeExpanded] = useState({})
         /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
         const [treePrompt, setTreePrompt] = useState(null)
         const [doc, setDoc] = useState(null)
@@ -7741,7 +7769,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          */
         /* 全部展开/收起切换 */
         const toggleExpand = () => {
-          setExpandSignal((prev) => ({ n: prev.n + 1, mode: prev.mode === 'all' ? 'none' : 'all' }))
+          /*
+           * 按**当前实际状态**决定下一步（2026-11-18）：
+           * 原来按 prev.mode 取反 —— 但 mode 只是上次的命令，
+           * 切板块回来时它会被重置，和实际状态脱节，于是「点两下才对」。
+           */
+          setExpandSignal((prev) => ({ n: prev.n + 1, mode: Object.keys(treeExpanded).length > 0 ? 'none' : 'all' }))
         }
 
         const createGroup = () => {
@@ -7806,7 +7839,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             /* 排序 + 展开收起（2026-11-18） */
             sortBy: copySort,
             onSort: (id) => { setCopySort(id); void reload() },
-            allExpanded: expandSignal.mode === 'all',
+            treeExpanded,
+            onExpandedChange: setTreeExpanded,
             onToggleExpand: toggleExpand,
             expandSignal: expandSignal,
             /* 树视图（2026-11-18 左栏改树） */
