@@ -5352,6 +5352,9 @@ window.__ModuleLoader__.load({
         sparkle: ['M12 3v5M12 16v5M4.5 12h5M14.5 12h5', 'm7 7 2.5 2.5M14.5 14.5 17 17M17 7l-2.5 2.5M9.5 14.5 7 17'],
         checkCircle: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0', 'm8 12.5 2.6 2.6L16 9.5'],
         arrowUp: ['M12 19V5M6 11l6-6 6 6'],
+        /* 助手栏收起/展开箭头（2026-11-18 补：原来缺这两个 key，按钮渲染成空白）*/
+        chevronRight: ['m9 6 6 6-6 6'],
+        chevronLeft: ['m15 6-6 6 6 6'],
       }
 
       function CbIcon(props) {
@@ -9433,13 +9436,17 @@ mark.df-hit[data-active="true"] {
  * 收起后正文区拿回 268px，「已保存」也不会再被压到。
  */
 .cb-aside-fold {
+  /* 独占 margin-left: auto 定位到最右（2026-11-18）；
+     原来 .cb-status 也写了 auto，两者抢位把按钮挤没了 */
   margin-left: auto; flex: none; width: 22px; height: 22px;
   display: inline-flex; align-items: center; justify-content: center;
-  border: 0; border-radius: 4px; background: none;
+  /* 加边框 + 微底色（2026-11-18）：原来全透明，图标再缺失就彻底看不见 */
+  border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px;
+  background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-secondary); cursor: pointer;
-  transition: background .12s, color .12s;
+  transition: background .12s, color .12s, border-color .12s;
 }
-.cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
+.cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .cb-aside-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
 
 .cb-aside-rail {
@@ -9848,7 +9855,9 @@ mark.df-hit[data-active="true"] {
 .vp-sortdrop-clear { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
 /* ── 右栏助手：会话状态 + 真输入框（2026-11-17）────────────────────────── */
-.cb-status { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/* 状态文字不再抢 auto（2026-11-18）：让收起按钮独占最右位置，
+   否则两者都 margin-left:auto 会互相挤压，按钮被挤没 */
+.cb-status { margin-left: 8px; flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-status-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
 .cb-status-dot[data-running="true"] { background: var(--dsw-alias-state-success-primary); }
 .cb-sess { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
