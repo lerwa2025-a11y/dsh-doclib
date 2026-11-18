@@ -21,7 +21,7 @@ import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
 import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
-import { closeSession, closeSessionById, listSessions, openSession, sendToSession } from './studio-session.js'
+import { awaitReply, closeSession, modelCatalog, openSession, selectModel, sendToSession, sessionState } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
 import {
   clearOrder,
@@ -152,6 +152,7 @@ function humanizeError(error) {
  */
 export function apply(ctx) {
   ctx.inject(['webServer'], (webCtx) => {
+
     // ── 笔记库路由（前缀匹配，路径含 /dsh-notes/vault/…）──────────────────
     webCtx.effect(
       () =>
@@ -407,20 +408,16 @@ export function apply(ctx) {
               }
 
               /*
-               * 工作台「真会话」管理（2026-11-18 重写）。
+               * 工作台会话（2026-11-18 用 sessionController 重写，参考 ds-bot）。
                *
-               * 为什么放 Host：客户端的 sessions 服务根本没有 create()，
-               * 它只有 retain / scope / binding / fork，而 scope(id) 只能
-               * 借用「已 retained 的」——之前 client 里 hasSessionService 查 create，
-               * 恒为 false，于是永远报「当前环境没有会话服务」。
-               *
-               * 这里改用官方 Agent API（ctx.agents.create + agent.followup），
-               * 建出来的会话是**真正的活会话**，会自然出现在 DSH 会话面板里。
+               * 为什么不用 agents.create()：
+               *   那返回 AgentHandle，Agent 存活依赖 handle，切走/重启就接不上（R10 失败）。
+               * ds-bot 的做法是 ctx.sessionController.create() —— 建的是 DSH 持久化会话，
+               * 不绑任何 handle，天然出现在会话面板，重启后还在。
                */
               if (route === '/studio-session-open' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, await openSession(webCtx, {
-                  key: body && body.key,
                   root: body && body.root,
                   preset: body && body.preset,
                 }))
@@ -436,32 +433,51 @@ export function apply(ctx) {
                 return
               }
 
-              /*
-               * 关闭一个工作台会话 + 解绑。
-               *
-               * 大王：「绑定失效是 bug 才对」——所以删会话必须同时清绑定，
-               * 否则下次打开还会指向一个已经 dispose 的会话，又报错。
-               */
+              if (route === '/studio-session-await' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await awaitReply(webCtx, {
+                  sessionId: body && body.sessionId,
+                  timeoutMs: body && typeof body.timeoutMs === 'number' ? body.timeoutMs : 120000,
+                  afterSeq: body && typeof body.afterSeq === 'number' ? body.afterSeq : undefined,
+                }))
+                return
+              }
+
+              if (route === '/studio-session-model' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await selectModel(webCtx, {
+                  sessionId: body && body.sessionId,
+                  provider: body && body.provider,
+                  model: body && body.model,
+                }))
+                return
+              }
+
+              /* 全局模型列表：不需要会话（R7 先选模型） */
+              if (route === '/studio-model-catalog' && req.method === 'GET') {
+                sendJson(res, 200, await modelCatalog(webCtx))
+                return
+              }
+
+              /* 会话状态：运行中/空闲 */
+              if (route === '/studio-session-state' && req.method === 'GET') {
+                sendJson(res, 200, await sessionState(webCtx, { sessionId: query.get('session') || '' }))
+                return
+              }
+
+              /* 删除会话 = 归档（离开面板，可恢复） */
               if (route === '/studio-session-close' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                const byKey = body && typeof body.key === 'string' ? body.key : ''
-                const byId = body && typeof body.sessionId === 'string' ? body.sessionId : ''
-                let closed = { closed: false }
-                if (byKey !== '') closed = await closeSession(webCtx, byKey)
-                else if (byId !== '') closed = await closeSessionById(webCtx, byId)
-                /* 解绑：key 就是绑定键（root::board），直接清掉 */
+                const key = body && typeof body.key === 'string' ? body.key : ''
+                const sid = body && typeof body.sessionId === 'string' ? body.sessionId : ''
+                const closed = await closeSession(webCtx, { sessionId: sid })
+                /* 大王：「绑定失效是 bug」—— 删会话要同时清绑定 */
                 try {
-                  const keyToClear = byKey !== '' ? byKey : (body && typeof body.root === 'string' ? body.root : '')
-                  if (keyToClear !== '') await clearBinding(keyToClear)
+                  if (key !== '') await clearBinding(key)
                 } catch {
                   /* 解绑失败不影响关闭 */
                 }
                 sendJson(res, 200, closed)
-                return
-              }
-
-              if (route === '/studio-session-list' && req.method === 'GET') {
-                sendJson(res, 200, { sessions: listSessions() })
                 return
               }
 

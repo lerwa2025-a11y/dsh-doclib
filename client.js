@@ -5490,12 +5490,16 @@ window.__ModuleLoader__.load({
          *
          * root 传真实目录；key 用于 Host 侧按「库根 + 板块」持有 handle。
          */
+        /**
+         * 建一个工作台会话（2026-11-18 用 sessionController）。
+         *
+         * Host 侧调 ctx.sessionController.create() —— 建的是 DSH 持久化会话，
+         * 天然出现在会话面板，重启后还在（R5 / R10）。
+         */
         const createWorkbenchSession = async (root, board) => {
           if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
           const scope = await resolveScope(root, board)
-          const key = board ? root + '::' + board : root
           const data = await vaultApiPost('/studio-session-open', {
-            key,
             root,
             preset: scope.preset !== null ? scope.preset : '',
           })
@@ -5535,6 +5539,34 @@ window.__ModuleLoader__.load({
           sessions: sessionsOf,
           modelDirectory: modelDirectoryFor,
           hasModelService: () => !!modelsOf(),
+          /** 全局模型列表（2026-11-18 新增）。
+           *
+           * R7「先选模型再发第一句」的正解：不需要先有会话。
+           * Host 侧调 sessionController.modelCatalog()。
+           */
+          modelCatalog: async () => {
+            const data = await vaultApiGet('/studio-model-catalog')
+            return {
+              default: data && data.default ? data.default : undefined,
+              groups: Array.isArray(data && data.groups) ? data.groups : [],
+            }
+          },
+          /** 会话状态：running */
+          sessionState: async (id) => {
+            if (typeof id !== 'string' || id === '') return { running: false }
+            try {
+              const data = await vaultApiGet('/studio-session-state?session=' + encodeURIComponent(id))
+              return { running: !!(data && data.running) }
+            } catch {
+              return { running: false }
+            }
+          },
+          /** 选模型（会话级） */
+          selectModel: async (id, provider, model) => {
+            if (typeof id !== 'string' || id === '') throw new Error('no-session')
+            await vaultApiPost('/studio-session-model', { sessionId: id, provider, model })
+            return true
+          },
           /**
            * 能不能建会话。
            *
@@ -5628,6 +5660,7 @@ window.__ModuleLoader__.load({
            * 客户端 sessions 服务没有 create()，scope(id) 又只能借用已 retained 的，
            * 所以消息发送必须在 Host 侧做 —— 那边的 handle.agent.followup() 才是正路。
            */
+          /** 发一条消息（Host 侧 sessionController.prompt）。 */
           sendText: async (root, currentId, text) => {
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
             const realRoot = unscope(root)
@@ -5638,8 +5671,8 @@ window.__ModuleLoader__.load({
             try {
               await vaultApiPost('/studio-session-send', { sessionId: id, text })
             } catch (err) {
-              /* 会话已失效（被删 / 被 dispose）：重建一次再发 */
-              if (messageOf(err).includes('no-live-agent')) {
+              /* 会话失效：重建一次再发 */
+              if (messageOf(err).indexOf('session/not-found') >= 0) {
                 id = await createWorkbenchSession(realRoot, boardOf(root))
                 await vaultApiPost('/studio-session-send', { sessionId: id, text })
               } else {
@@ -5660,6 +5693,12 @@ window.__ModuleLoader__.load({
            * 返回 { id, text, empty }：text 为空表示助手这一轮没写出文字（被中断 / 只调了工具），
            * 由调用方决定怎么提示，不编假结果。
            */
+          /**
+           * 发一条消息并等这一轮回复正文（2026-11-18）。
+           *
+           * 分工：发 -> /studio-session-send，等 -> /studio-session-await。
+           * 后者内部用 sessionController.wait()，比轮询会话日志可靠。
+           */
           askOnce: async (root, currentId, text) => {
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
             const realRoot = unscope(root)
@@ -5667,27 +5706,23 @@ window.__ModuleLoader__.load({
             if (!(typeof id === 'string' && id !== '')) {
               id = await createWorkbenchSession(realRoot, boardOf(root))
             }
-            /* ① 分界 seq：之后新增的事件才算这一轮的 */
-            let sinceSeq = -1
+            /* ① 先取分界 seq，之后新增的才算这一轮的 */
+            let afterSeq
             try {
               const tail = await vaultApiGet('/ai-tail?session=' + encodeURIComponent(id))
-              if (tail && typeof tail.seq === 'number') sinceSeq = tail.seq
+              if (tail && typeof tail.seq === 'number') afterSeq = tail.seq
             } catch {
-              /* 拿不到分界就退回 -1（整段日志都算新的），仍能取到回复 */
+              /* 拿不到就整段算新 */
             }
-            /* ② 发消息（2026-11-18：走 Host 的 agent.followup） */
+            /* ② 发 */
             await vaultApiPost('/studio-session-send', { sessionId: id, text })
-            /* ③ 等回复（Host 侧轮询，最长 2 分钟） */
-            let reply = { text: '', empty: true }
-            try {
-              const got = await vaultApiPost('/ai-await', { sessionId: id, sinceSeq, timeoutMs: 120000 })
-              reply = { text: typeof got.text === 'string' ? got.text : '', empty: got.empty === true }
-            } catch (error) {
-              const raw = messageOf(error)
-              if (raw === 'timeout') throw new Error('ai-timeout')
-              throw error
-            }
-            return { id, text: reply.text, empty: reply.empty }
+            /* ③ 等回复 */
+            const got = await vaultApiPost('/studio-session-await', {
+              sessionId: id,
+              timeoutMs: 120000,
+              ...(afterSeq !== undefined ? { afterSeq } : {}),
+            })
+            return { id, text: got && typeof got.text === 'string' ? got.text : '', empty: !got || got.empty === true }
           },
 
           /** 跳到那个会话看完整对话（工作台里渲染不了对话流，这是唯一正路）。 */
@@ -5769,16 +5804,45 @@ window.__ModuleLoader__.load({
          */
         const [collapsed, setCollapsed] = useState(false)
 
-        // 换库根就重新读绑定：一个工作台一个会话
+        /*
+         * 读绑定恢复会话（2026-11-18 重写，修 R10）。
+         *
+         * 原来这里一进来就 setSessionId('')，造成两个问题：
+         *   ① 切板块回来先闪一下「还没建会话」，看着像要重新选
+         *   ② 如果读绑定失败（网络抖动/Host 未就绪），sessionId 就永久空了
+         *
+         * 现在：
+         *   · 不清空 —— 保留上一次的 sessionId，读到绑定再覆盖
+         *   · 读到空绑定 → 自动建一个并写回绑定（不用用户手动选）
+         *   · 读失败 → 保留原值 + 显示错误，绝不清空
+         */
         useEffect(() => {
           let alive = true
-          setSessionId('')
-          setTitle('')
-          setRunning(false)
-          setError('')
           if (scopeRoot === '') return () => { alive = false }
           void api.loadBinding(scopeRoot).then((id) => {
-            if (alive) setSessionId(id)
+            if (!alive) return
+            if (typeof id === 'string' && id !== '') {
+              /* 有绑定：直接用 */
+              setSessionId(id)
+              return
+            }
+            /* 没绑定：自动建一个并写回，用户不用手动选会话 */
+            void (async () => {
+              try {
+                const realRoot = unscope(scopeRoot)
+                const created = await createWorkbenchSession(realRoot, boardOf(scopeRoot))
+                if (!alive) return
+                await api.saveBinding(scopeRoot, created)
+                if (!alive) return
+                setSessionId(created)
+              } catch (err) {
+                if (!alive) return
+                setError(messageOf(err))
+              }
+            })()
+          }).catch((err) => {
+            /* 读绑定失败：保留现有 sessionId，只报错，不清空 */
+            if (alive) setError(messageOf(err))
           })
           return () => {
             alive = false
@@ -5804,20 +5868,46 @@ window.__ModuleLoader__.load({
           }
         }, [api, sessionId])
 
-        // 会话定了之后订阅它的模型目录：分组列表 + 当前选中都从这一个 store 读
+        /*
+         * 模型列表（2026-11-18 重写，解决 R7 先选模型）：
+         *
+         * 有会话 -> 用会话目录（能读到当前选中值）
+         * 没会话 -> 用全局 modelCatalog（不需要先建会话！）
+         *
+         * 之前的问题是：没会话就 setModels([])，所以点模型按钮什么都没有。
+         * 现在没会话也能列出全部可路由模型。
+         */
         useEffect(() => {
+          let alive = true
           if (sessionId === '') {
-            setModels([])
-            setModelLabel('')
-            return undefined
+            /* 没会话：走全局目录 */
+            void api.modelCatalog().then((value) => {
+              if (!alive) return
+              setModels(Array.isArray(value.groups) ? value.groups : [])
+              const def = value.default
+              if (def && typeof def.model === 'string') {
+                const flat = (value.groups || []).reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
+                const hit = flat.find((m) => m && m.id === def.model)
+                setModelLabel(hit && typeof hit.name === 'string' ? hit.name : def.model)
+              } else {
+                setModelLabel('')
+              }
+            }).catch(() => {
+              if (!alive) return
+              setModels([])
+              setModelLabel('')
+            })
+            return () => { alive = false }
           }
+          /* 有会话：订阅会话模型目录 */
           const directory = api.modelDirectory(sessionId)
           if (!directory || !directory.store) {
             setModels([])
             setModelLabel('')
-            return undefined
+            return () => { alive = false }
           }
           const read = () => {
+            if (!alive) return
             const snapshot = directory.store.getSnapshot()
             const groups = Array.isArray(snapshot.groups) ? snapshot.groups : []
             setModels(groups)
@@ -5832,9 +5922,9 @@ window.__ModuleLoader__.load({
           }
           read()
           const stop = typeof directory.store.subscribe === 'function' ? directory.store.subscribe(read) : undefined
-          /* 目录里的目录是懒加载的，这里主动拉一次；失败静默（read 里会保持空） */
           if (typeof directory.load === 'function') void directory.load().catch(() => {})
           return () => {
+            alive = false
             if (typeof stop === 'function') stop()
           }
         }, [api, sessionId])
@@ -5849,6 +5939,13 @@ window.__ModuleLoader__.load({
          * 没有全局模型列表 API。所以这里会话没好就先静默补建一次，
          * 不弹窗、不跳转 —— 侧栏挂载时已在预热，通常不用等。
          */
+        /**
+         * 打开模型菜单（2026-11-18 改，R7）：
+         *
+         * 不再为了选模型先建会话 —— 没会话时模型列表来自全局 modelCatalog，
+         * 已经由上面的 effect 填好了。这里直接开菜单。
+         * 选中的模型会先暂存，等发第一条消息时建好会话再落下去。
+         */
         const openModels = async () => {
           if (modelOpen) {
             setModelOpen(false)
@@ -5858,37 +5955,28 @@ window.__ModuleLoader__.load({
             setError(t('assistNeedWorkspace'))
             return
           }
-          if (sessionId === '') {
-            if (sessionBusy) return
-            setSessionBusy(true)
-            setError('')
-            try {
-              const id = await api.ensureSession(scopeRoot)
-              await api.saveBinding(scopeRoot, id)
-              setSessionId(id)
-            } catch (err) {
-              const raw = messageOf(err)
-              setError(raw === 'no-session-service' ? t('assistNoService') : t('assistSendFailed') + raw)
-              return
-            } finally {
-              setSessionBusy(false)
-            }
-          }
           setModelOpen(true)
         }
 
+        /**
+         * 选模型（2026-11-18 改）。
+         *
+         * 没会话：先存 pendingModelRef，等建好会话再落下去。
+         * 有会话：直接调 Host 的 selectModel。
+         */
         const pickModel = async (group, model) => {
-          const directory = api.modelDirectory(sessionId)
           setModelOpen(false)
-          if (!directory || typeof directory.select !== 'function') return
+          if (!group || typeof group.id !== 'string' || !model || typeof model.id !== 'string') return
+          const label = typeof model.name === 'string' ? model.name : model.id
+          setModelLabel(label)
+          if (sessionId === '') {
+            pendingModelRef.current = { provider: group.id, model: model.id }
+            return
+          }
           setModelBusy(true)
           setError('')
           try {
-            const result = await directory.select({ provider: group.id, model: model.id })
-            if (result && result.ok === false) {
-              const message = result.error && result.error.message ? result.error.message : t('assistModelFailed')
-              setError(t('assistModelFailed') + message)
-            }
+            await api.selectModel(sessionId, group.id, model.id)
           } catch (err) {
             setError(t('assistModelFailed') + messageOf(err))
           } finally {

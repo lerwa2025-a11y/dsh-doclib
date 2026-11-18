@@ -1,104 +1,76 @@
-// studio-session.js —— 工作台的「真会话」管理（Host 侧）
+// studio-session.js —— 工作台会话管理（Host 侧）
 //
-// 为什么需要它：
-//   之前客户端直接调 `ctx.get('sessions').create()` 和 `.scope(id)`，
-//   但用 Service 目录查证后发现 —— **客户端 sessions 服务根本没有 create()**，
-//   它只有 retain / scope / binding / fork，而且 scope(id) 只能「借用已 retained 的」。
-//   所以 `hasSessionService()` 恒为 false，一律报「当前环境没有会话服务」。
+// ⚠️ 2026-11-18 第 N 次重写：改用 sessionController，参考 ds-bot 的做法。
 //
-//   正确做法是走官方 Agent API（见 @deepseek-ai/dsh-agent README）：
-//     const handle = await ctx.agents.create({ sessionId, meta })
-//     handle.agent.followup({ content: [{type:'text',text}], source: {kind:'user'} })
-//   这样建出来的是**真正的活会话**，会自然出现在 DSH 的会话面板里。
+// 为什么推翻之前的 agents.create() 方案：
+//   agents.create() 返回 AgentHandle，Agent 的存活依赖 handle 不被 dispose。
+//   虽然 handle 存在模块级 Map 里，但 HTTP 请求作用域、进程重启、
+//   以及 DSH 内部的 factory 生命周期都会影响它 —— 切走再回来就接不上（R10 失败）。
 //
-// 本模块职责：
-//   · 为「库根 + 板块」建/复用 Agent，持有 handle
-//   · 把主人的消息塞进那个 Agent 的 inbox
-//   · 关闭/删除时释放 handle
-//   · 只读地报告某个会话的预设
+// ds-bot（host/agents.js:40）的做法才是对的：
+//     const { sessionId } = await ctx.sessionController.create({ workspaceId })
+//   会话是 DSH 的**持久化会话**，不绑任何 handle；
+//   发消息用 sessionController.prompt()，等回复用 wait()，
+//   选模型用 selectModel()，全局模型列表用 modelCatalog()。
+//
+// 这套 API 的好处：
+//   · 会话天然出现在 DSH 会话面板（R5）
+//   · 不需要自己管 Agent 生命周期（R10 稳）
+//   · modelCatalog() 不依赖会话（R7 先选模型成立）
 //
 // 全程不碰磁盘、不改任何文档。
-import { randomUUID } from 'node:crypto'
 
-/** 一个库根最好只对应一个活 Agent，键是「root::board」。 */
-const handles = new Map()
-
-/** 取 Host 的 agents 服务（可选服务，拿不到就明确报错）。 */
-function agentsOf(ctx) {
-  const service = typeof ctx.get === 'function' ? ctx.get('agents') : undefined
+/** 取 sessionController（可选服务，拿不到就明确报错）。 */
+function ctrlOf(ctx) {
+  const service = typeof ctx.get === 'function' ? ctx.get('sessionController') : undefined
   if (!service || typeof service.create !== 'function') return undefined
   return service
 }
 
-/** 取默认模型选择（可选；拿不到就让 loop 用配置默认）。 */
-function defaultModelOf(ctx) {
-  const service = typeof ctx.get === 'function' ? ctx.get('agentDefaultModel') : undefined
-  if (!service || typeof service.currentSelection !== 'function') return undefined
-  try {
-    const sel = service.currentSelection()
-    return sel && typeof sel.provider === 'string' && typeof sel.model === 'string' ? sel : undefined
-  } catch {
-    return undefined
-  }
-}
-
 /**
- * 建（或复用）一个工作台 Agent。
+ * 建一个工作台会话。
  *
  * @param ctx     插件上下文
- * @param options { key, root, preset }
- *   key   —— 绑定键（root::board）
- *   root  —— 真实库根（会话 cwd）
+ * @param options { root, preset }
+ *   root   —— 真实库根（会话 cwd）
  *   preset —— agent 预设 id（没有就不带）
- * @returns { sessionId, reused }
+ * @returns { sessionId }
  */
 export async function openSession(ctx, options) {
-  const key = options && typeof options.key === 'string' ? options.key : ''
   const root = options && typeof options.root === 'string' ? options.root : ''
   const preset = options && typeof options.preset === 'string' ? options.preset : ''
-  if (key === '') throw new Error('no-key')
   if (root === '') throw new Error('no-workspace')
 
-  const service = agentsOf(ctx)
-  if (!service) throw new Error('no-agent-service')
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl) throw new Error('no-session-controller')
 
-  /* 已持有：直接返回（顺便校验它还活着） */
-  const held = handles.get(key)
-  if (held) {
+  /*
+   * 优先用 workspaceId（会话归属工作区，打开时不必再选）；
+   * 拿不到就退回 cwd（按目录建）。两者 DSH 只认其一。
+   */
+  const request = {}
+  const workspaces = typeof ctx.get === 'function' ? ctx.get('workspaceRegistry') : undefined
+  if (workspaces && typeof workspaces.resolveByPath === 'function') {
     try {
-      const live = typeof service.get === 'function' ? service.get(held.sessionId) : undefined
-      if (live) return { sessionId: held.sessionId, reused: true }
+      const ws = await workspaces.resolveByPath(root)
+      if (ws && typeof ws.id === 'string' && ws.id !== '') request.workspaceId = ws.id
     } catch {
-      /* 查不到就当失效，重建 */
+      /* 解析失败就退回 cwd */
     }
-    await closeSession(ctx, key).catch(() => {})
   }
+  if (request.workspaceId === undefined) request.cwd = root
+  if (preset !== '') request.agentPreset = preset
 
-  const meta = { cwd: root }
-  if (preset !== '') meta.agentPreset = preset
-
-  const agentOptions = {}
-  const model = defaultModelOf(ctx)
-  if (model) {
-    agentOptions.provider = model.provider
-    agentOptions.model = model.model
-  }
-
-  const sessionId = 'session-' + randomUUID()
-  const handle = await service.create({
-    sessionId,
-    meta,
-    agentOptions: Object.keys(agentOptions).length > 0 ? agentOptions : undefined,
-  })
-  handles.set(key, { sessionId, handle, root })
-  return { sessionId, reused: false }
+  const value = await ctrl.create(request)
+  const sessionId = value && typeof value.sessionId === 'string' ? value.sessionId : ''
+  if (sessionId === '') throw new Error('session-create-failed')
+  return { sessionId }
 }
 
 /**
- * 把一条消息塞进已有 Agent。
+ * 往会话塞一条用户消息。
  *
- * 用 followup()：它把 user-role 消息排进 inbox 并唤醒 driver（下一轮）。
- * 不用 steer()：steer 是插当前步的，工作台场景要的是「新的一轮」。
+ * mode: 'queue' —— 排成下一轮（工作台场景要的就是这个）。
  */
 export async function sendToSession(ctx, options) {
   const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
@@ -106,61 +78,117 @@ export async function sendToSession(ctx, options) {
   if (sessionId === '') throw new Error('no-session')
   if (text.trim() === '') throw new Error('empty-text')
 
-  /* 先从「按 key 持有」里找，找不到再从 registry 里找活 agent */
-  let handle
-  for (const row of handles.values()) {
-    if (row.sessionId === sessionId) { handle = row.handle; break }
-  }
-  if (!handle) {
-    const service = agentsOf(ctx)
-    if (service && typeof service.get === 'function') {
-      const agent = service.get(sessionId)
-      if (agent && typeof agent.followup === 'function') {
-        await agent.followup({ content: [{ type: 'text', text }], source: { kind: 'user' } })
-        return { sessionId, ok: true, via: 'registry' }
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.prompt !== 'function') throw new Error('no-session-controller')
+
+  await ctrl.prompt({
+    requestId: 'dshdoclib-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+    sessionId,
+    mode: 'queue',
+    content: [{ type: 'text', text }],
+    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  })
+  return { sessionId, ok: true }
+}
+
+/**
+ * 等这一轮的助手回复。
+ *
+ * 用 wait()：它返回 reason（idle / input-required / timeout）和 output.records；
+ * 从 records 里抽最后一条 assistant/message 的 text 块。
+ *
+ * @returns { text, empty }
+ */
+export async function awaitReply(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  const timeoutMs = typeof options.timeoutMs === 'number' ? options.timeoutMs : 120000
+  const afterSeq = typeof options.afterSeq === 'number' ? options.afterSeq : undefined
+  if (sessionId === '') throw new Error('no-session')
+
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.wait !== 'function') throw new Error('no-session-controller')
+
+  const value = await ctrl.wait({
+    sessionId,
+    timeoutMs,
+    ...(afterSeq !== undefined ? { afterSeq } : {}),
+    maxMessages: 40,
+  })
+
+  const records = value && Array.isArray(value.output && value.output.records) ? value.output.records : []
+  let text = ''
+  for (const record of records) {
+    const ev = record && record.type === 'event' ? record.event : undefined
+    if (!ev || ev.type !== 'assistant/message') continue
+    const message = ev.data && ev.data.message ? ev.data.message : undefined
+    const content = message && Array.isArray(message.content) ? message.content : []
+    const parts = []
+    for (const block of content) {
+      if (block && block.type === 'text' && typeof block.text === 'string' && block.text !== '') {
+        parts.push(block.text)
       }
     }
-    throw new Error('no-live-agent')
+    const joined = parts.join('\n').trim()
+    if (joined !== '') text = joined
   }
 
-  await handle.agent.followup({ content: [{ type: 'text', text }], source: { kind: 'user' } })
-  return { sessionId, ok: true, via: 'handle' }
+  return { text, empty: text === '', reason: value && value.reason }
 }
 
-/** 关掉一个工作台 Agent（释放 handle；会话日志留在 DSH 里）。 */
-export async function closeSession(ctx, key) {
-  const row = handles.get(key)
-  if (!row) return { closed: false }
-  handles.delete(key)
-  try {
-    if (row.handle && typeof row.handle.dispose === 'function') await row.handle.dispose()
-  } catch {
-    /* dispose 失败不抛给界面 */
-  }
-  return { closed: true, sessionId: row.sessionId }
+/** 选模型（会话级）。 */
+export async function selectModel(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  const provider = options && typeof options.provider === 'string' ? options.provider : ''
+  const model = options && typeof options.model === 'string' ? options.model : ''
+  if (sessionId === '') throw new Error('no-session')
+  if (provider === '' || model === '') throw new Error('no-model')
+
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.selectModel !== 'function') throw new Error('no-session-controller')
+
+  const value = await ctrl.selectModel({ sessionId, provider, model })
+  return { selected: value && value.selected ? value.selected : { provider, model } }
 }
 
-/** 按会话 id 关（客户端只知道 sessionId 时用）。 */
-export async function closeSessionById(ctx, sessionId) {
-  for (const [key, row] of handles.entries()) {
-    if (row.sessionId === sessionId) return await closeSession(ctx, key)
+/**
+ * 全局模型列表（**不需要会话**）。
+ *
+ * 这是 R7「先选模型再发第一句」的正解：
+ * modelCatalog() 直接返回所有可路由模型和部署默认值。
+ */
+export async function modelCatalog(ctx) {
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.modelCatalog !== 'function') throw new Error('no-session-controller')
+  const value = await ctrl.modelCatalog()
+  return {
+    default: value && value.default ? value.default : undefined,
+    groups: Array.isArray(value && value.groups) ? value.groups : [],
+    failures: Array.isArray(value && value.failures) ? value.failures : [],
   }
-  return { closed: false }
 }
 
-/** 列出当前持有的工作台会话（给「会话管理」界面用）。 */
-export function listSessions() {
-  const out = []
-  for (const [key, row] of handles.entries()) {
-    out.push({ key, sessionId: row.sessionId, root: row.root })
+/** 读会话状态（运行中/空闲、队列、待输入）。 */
+export async function sessionState(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  if (sessionId === '') throw new Error('no-session')
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.state !== 'function') throw new Error('no-session-controller')
+  const value = await ctrl.state({ sessionId })
+  return {
+    running: value ? value.running === true : false,
+    active: value ? value.active === true : false,
+    queue: Array.isArray(value && value.queue) ? value.queue.length : 0,
   }
-  return out
 }
 
-/** 「关于这个 Agent 的作用域」：给客户端拿模型目录之类用。 */
-export function handleOf(sessionId) {
-  for (const row of handles.values()) {
-    if (row.sessionId === sessionId) return row.handle
-  }
-  return undefined
+/** 删除（归档）一个会话：离开会话面板，可恢复。 */
+export async function closeSession(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  if (sessionId === '') throw new Error('no-session')
+
+  const workspaces = typeof ctx.get === 'function' ? ctx.get('workspaceRegistry') : undefined
+  if (!workspaces || typeof workspaces.archiveSession !== 'function') throw new Error('no-workspace-registry')
+
+  await workspaces.archiveSession(sessionId)
+  return { closed: true, sessionId }
 }
