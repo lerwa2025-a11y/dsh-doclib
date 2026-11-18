@@ -23,6 +23,7 @@ import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
 import { awaitReply, closeSession, currentModel, modelCatalog, openSession, selectModel, sendToSession, sessionState, warmSession } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
+import { listSkills } from './skills-list.js'
 import {
   clearOrder,
   deleteToTrash,
@@ -473,6 +474,18 @@ export function apply(ctx) {
               /* 读会话当前用的模型（面板显示用，不用打开会话页） */
               if (route === '/studio-session-current-model' && req.method === 'GET') {
                 sendJson(res, 200, await currentModel(webCtx, { sessionId: query.get('session') || '' }))
+                return
+              }
+
+              /*
+               * 技能清单（2026-11-18）。
+               *
+               * 右栏「选择技能」按钮用：列出 $DSH_HOME/skills 下全部技能，
+               * 标出哪些是 disable-model-invocation（只能用户主动选）。
+               * 只读，不加载也不修改任何技能。
+               */
+              if (route === '/skills' && req.method === 'GET') {
+                sendJson(res, 200, await listSkills())
                 return
               }
 

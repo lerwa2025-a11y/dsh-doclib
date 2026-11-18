@@ -83,6 +83,17 @@
               # 写作助手能找回之前聊过的设定；文案助手能翻旧稿讨论。
               - id: tool-session-query
                 name: '@deepseek-ai/dsh-tool-session-query'
+              # ── 技能加载（2026-11-18 大王要「选择技能」按钮）──────
+              # skill-filesystem 提供技能来源，tool-skill 提供 skill 工具。
+              # customSkillDirs 照抄 standard 预设：让 DSH 自带的 dsh-doc 等
+              # 内置技能也可用；用户自己的技能在 $DSH_HOME/skills 由插件默认扫描。
+              - id: skill-filesystem
+                name: '@deepseek-ai/dsh-skill-filesystem'
+                config:
+                  customSkillDirs:
+                    - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
+              - id: tool-skill
+                name: '@deepseek-ai/dsh-tool-skill'
               - id: compaction
                 name: cordis:group
                 group: true
@@ -152,6 +163,17 @@
               # 写作助手能找回之前聊过的设定；文案助手能翻旧稿讨论。
               - id: tool-session-query
                 name: '@deepseek-ai/dsh-tool-session-query'
+              # ── 技能加载（2026-11-18 大王要「选择技能」按钮）──────
+              # skill-filesystem 提供技能来源，tool-skill 提供 skill 工具。
+              # customSkillDirs 照抄 standard 预设：让 DSH 自带的 dsh-doc 等
+              # 内置技能也可用；用户自己的技能在 $DSH_HOME/skills 由插件默认扫描。
+              - id: skill-filesystem
+                name: '@deepseek-ai/dsh-skill-filesystem'
+                config:
+                  customSkillDirs:
+                    - !!js process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('@deepseek-ai/dsh-agent-preset/package.json')), 'skills')
+              - id: tool-skill
+                name: '@deepseek-ai/dsh-tool-skill'
               - id: compaction
                 name: cordis:group
                 group: true
