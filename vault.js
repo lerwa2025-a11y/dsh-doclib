@@ -19,7 +19,17 @@ import { spawn } from 'node:child_process'
 const VAULT_META_NAME = 'vault.json'
 const TRASH_DIR_NAME = '.trash'
 const SNAPSHOT_DIR_NAME = '.snapshots'
-const SNAPSHOT_KEEP = 30
+const SNAPSHOT_KEEP = 10
+/*
+ * 不给音视频存历史版本（2026-11-19 大王要求）：
+ * 一个 5 分钟的录屏就几十上百 MB，快照目录会被瞬间撑爆，
+ * 而且这类文件天生不可编辑，回滚它没有意义。
+ */
+const MEDIA_EXTS = new Set([
+  '.mp4', '.m4v', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mpg', '.mpeg', '.ts', '.3gp',
+  '.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.opus', '.wma', '.aiff', '.ape',
+  '.psd', '.zip', '.7z', '.rar', '.gz', '.tar', '.iso',
+])
 const SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000
 const TREE_MAX_DEPTH = 8
 const TREE_MAX_ENTRIES = 3000
@@ -50,6 +60,11 @@ function metaPath() {
 
 export function isImageName(name) {
   return IMAGE_EXTS.has(extOf(name))
+}
+
+/** 音视频等大二进制：这类文件不存历史版本。 */
+export function isMediaName(name) {
+  return MEDIA_EXTS.has(extOf(name))
 }
 
 export function extOf(name) {
@@ -266,6 +281,8 @@ async function readAsText(absolute) {
 /** 自动快照：保存前把旧内容留一份；同一文件 5 分钟内最多一份，失败不影响保存。 */
 async function autoSnapshot(absolute, root, rel) {
   try {
+    /* 音视频不存（2026-11-19 大王要求），文本以外的二进制也一并跳过 */
+    if (isMediaName(rel)) return
     const info = await stat(absolute)
     if (!info.isFile() || info.size === 0 || info.size > TEXT_MAX_BYTES) return
     const dir = snapshotDirFor(root)
@@ -344,6 +361,21 @@ export async function writeText(root, rel, content, expectedMtime) {
       if (error.code === 'conflict') throw error
       /* 文件不存在则直接创建 */
     }
+  }
+  /*
+   * 没有改动就不存（2026-11-19 大王要求）：
+   * 内容与盘上一模一样时直接返回，既不拍快照也不写盘 ——
+   * 否则「打开看一眼再关掉」「误触保存」都会留下没意义的历史版本。
+   * 读不到就当有改动，按正常流程走，绝不因为判断失败而丢写入。
+   */
+  try {
+    const current = await readFile(absolute, "utf8")
+    if (current === content) {
+      const info = await stat(absolute)
+      return { mtime: info.mtimeMs, size: info.size, unchanged: true }
+    }
+  } catch {
+    /* 文件还不存在 / 读失败：当作有改动 */
   }
   await autoSnapshot(absolute, root, rel)
   await atomicWrite(absolute, content)
@@ -454,6 +486,8 @@ export async function snapshotFile(root, rel) {
   const absolute = safeResolve(root, rel)
   const info = await stat(absolute)
   if (!info.isFile()) throw new Error('只能给文件拍快照')
+  /* 音视频不存历史版本（2026-11-19 大王要求）：快照目录会被撑爆 */
+  if (isMediaName(rel)) throw new Error('音视频文件不存历史版本')
   if (info.size > TEXT_MAX_BYTES) throw new Error('文件超过 5MB，不拍快照')
   const dir = snapshotDirFor(root)
   await mkdir(dir, { recursive: true })

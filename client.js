@@ -57,10 +57,11 @@ window.__ModuleLoader__.load({
         vaultOpenFolder: '打开文件夹',
         vaultOpenFolderRoot: '库根',
         vaultHistory: '历史版本',
-        vaultHistoryEmpty: '还没有快照；点「拍快照」留一份',
+        vaultHistoryEmpty: '还没有历史版本；改动保存后会自动留一份（5 分钟内最多一份）',
         vaultSnapshotTaken: '已拍快照',
         vaultSnapshotRestored: '已从快照恢复',
         vaultRestore: '恢复这份',
+        vaultSnapshotRestoreConfirm: '用这份历史版本覆盖当前内容？当前内容会先自动存一份，可以再回来。',
         vaultFmtBold: '加粗（选中文字后点）',
         vaultCopyAll: '复制全文',
         vaultCopyPath: '复制路径',
@@ -435,10 +436,11 @@ window.__ModuleLoader__.load({
         vaultOpenFolder: 'Open folder',
         vaultOpenFolderRoot: 'library root',
         vaultHistory: 'History',
-        vaultHistoryEmpty: 'No snapshots yet — click “Snapshot” to keep one',
+        vaultHistoryEmpty: 'No versions yet — one is kept automatically after a change (at most one per 5 min)',
         vaultSnapshotTaken: 'Snapshot taken',
         vaultSnapshotRestored: 'Restored from snapshot',
         vaultRestore: 'Restore',
+        vaultSnapshotRestoreConfirm: 'Replace the current content with this version? The current one is saved first, so you can come back.',
         vaultFmtBold: 'Bold (select text first)',
         vaultCopyAll: 'Copy full text',
         vaultCopyPath: 'Copy path',
@@ -5194,6 +5196,48 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           props.onReader({ fontSize, font, line, bg })
         }, [ready, fontSize, font, line, bg])
 
+        /*
+         * 历史版本（2026-11-19 大王要求）：
+         * 文案区 / 写作区原来只有素材区能看历史版本，这里补上。
+         * 数据源是同一个接口 —— 保存前 Host 会自动把旧内容留一份（5 分钟内最多一份）。
+         */
+        const docPath = typeof props.docPath === 'string' ? props.docPath : ''
+        const [snaps, setSnaps] = useState([])
+        const [snapError, setSnapError] = useState('')
+
+        /* 展开「历史版本」时才去拉，不展开不发请求 */
+        useEffect(() => {
+          if (openMenu !== 'history') return undefined
+          if (docPath === '') {
+            setSnaps([])
+            return undefined
+          }
+          let alive = true
+          setSnapError('')
+          vaultApiGet('/snapshots?path=' + encodeURIComponent(docPath))
+            .then((data) => {
+              if (alive) setSnaps(Array.isArray(data.items) ? data.items : [])
+            })
+            .catch((err) => {
+              if (!alive) return
+              setSnaps([])
+              setSnapError(messageOf(err))
+            })
+          return () => { alive = false }
+        }, [openMenu, docPath])
+
+        /* 用某一份快照覆盖当前文件；先确认，成功后让父组件重读正文 */
+        const restoreSnap = async (name) => {
+          if (docPath === '') return
+          if (!window.confirm(t('vaultSnapshotRestoreConfirm'))) return
+          try {
+            await vaultApiPost('/snapshot-restore', { path: docPath, name })
+            if (typeof props.onRestored === 'function') await props.onRestored()
+          } catch (err) {
+            setSnapError(messageOf(err))
+          }
+        }
+
         /* 点工具栏外面收起下拉 */
         useEffect(() => {
           if (openMenu === '') return undefined
@@ -5341,6 +5385,31 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             },
             h(BoardIcon, { name: 'save', className: 'wb-ic' }),
           ),
+          hasDoc
+            ? drop(
+                'history',
+                '',
+                t('vaultHistory'),
+                snapError !== ''
+                  ? [{ id: '__err__', label: snapError }]
+                  : snaps.length === 0
+                    ? [{ id: '__empty__', label: t('vaultHistoryEmpty') }]
+                    : snaps.map((item) => ({
+                        id: item.name,
+                        label:
+                          String(item.stamp).replace('T', ' ').slice(5, 16) +
+                          ' · ' +
+                          Math.max(1, Math.round((item.size || 0) / 1024)) +
+                          ' KB',
+                      })),
+                '',
+                (id) => {
+                  if (id === '__empty__' || id === '__err__') return
+                  void restoreSnap(id)
+                },
+                'history',
+              )
+            : null,
         )
       }
       /**
@@ -7369,6 +7438,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCopy: () => props.onCopyAll(),
             onSave: () => props.onSaveNow(),
             onReader: (cfg) => props.onReader(cfg),
+            /* 历史版本（2026-11-19）：按当前稿件路径取快照列表 */
+            docPath: doc.path,
+            onRestored: () => props.onReloadDoc(doc.path),
           }),
           mode === 'edit'
             ? h('div', { className: 'cb-edit-wrap' }, props.editor)
@@ -7546,6 +7618,25 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             if (data.readOnly === true) setMode('read')
           } catch (err) {
             setDoc(null)
+            setError(t('copyLoadFailed') + messageOf(err))
+          }
+        }
+
+        /*
+         * 历史版本恢复后重读正文（2026-11-19）：
+         * 不用 pick() —— 那条路会重置 mode / activePath，
+         * 恢复完还停在阅读态、用户得再点一次编辑，体验很怪。
+         * 这里只把内容和 mtime 换掉，模式与选中都不动。
+         */
+        const reloadDoc = async (path) => {
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setDoc({ ...doc, path, text, mtime: data.mtime, readOnly: data.readOnly === true })
+            setDraft(text)
+            setSaveState('idle')
+            flash(t('vaultSnapshotRestored'))
+          } catch (err) {
             setError(t('copyLoadFailed') + messageOf(err))
           }
         }
@@ -8089,6 +8180,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCopyAll: () => void copyAll(),
             onFind: openFind,
             onSaveNow: () => void save(false),
+            /* 历史版本恢复后重读正文（2026-11-19）：不进 pick 以免重置 mode */
+            onReloadDoc: (path) => void reloadDoc(path),
             editor: h('div', {
               key: 'cb-edit-surface',
               ref: (node) => {
@@ -8865,6 +8958,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCopy: () => props.onCopyAll(),
             onSave: () => props.onSaveNow(),
             onReader: (cfg) => props.onReader(cfg),
+            /* 历史版本（2026-11-19）：按当前正文路径取快照列表 */
+            docPath: file.path,
+            onRestored: () => props.onReloadDoc(file.path),
           }),
           props.mode === 'edit'
             ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
@@ -9264,6 +9360,20 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             setDraft(text)
             setSaveState('idle')
             setError('')
+          } catch (err) {
+            setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
+
+        /* 历史版本恢复后重读正文（2026-11-19）：只换内容与 mtime，不动模式与选中。 */
+        const reloadDoc = async (path) => {
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setFile({ ...file, path, text, mtime: data.mtime, readOnly: data.readOnly === true })
+            setDraft(text)
+            setSaveState('idle')
+            flash(t('vaultSnapshotRestored'))
           } catch (err) {
             setError(t('writeLoadFailed') + messageOf(err))
           }
@@ -9785,6 +9895,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCopyAll: () => void copyAll(),
             onFind: openFind,
             onSaveNow: () => void save(false),
+            /* 历史版本恢复后重读正文（2026-11-19） */
+            onReloadDoc: (path) => void reloadDoc(path),
             editor: h('div', {
               key: 'wbg-edit-surface',
               ref: (node) => {
