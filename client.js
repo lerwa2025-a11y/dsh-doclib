@@ -300,6 +300,31 @@ window.__ModuleLoader__.load({
         writeNewProjectPrompt: '新项目名：',
         writeNewProjectDefault: '未命名项目',
         writeProjectCreated: '项目已建好',
+        /* 结构编辑：改名 / 加卷 / 加章 / 删卷 / 删章（2026-11-18 大王需求） */
+        writeRenameProject: '重命名项目',
+        writeRenameVolume: '重命名卷',
+        writeRenameChapter: '重命名章',
+        writeNewVolume: '新增卷',
+        writeNewChapter: '新增章',
+        writeProjectNamePrompt: '书名',
+        writeVolumeNamePrompt: '卷名',
+        writeChapterNamePrompt: '章名',
+        writeNewVolumeDefault: '新卷',
+        writeNewChapterDefault: '新章',
+        writeNameRequired: '名字不能为空',
+        writeProjectRenamed: '书名已改',
+        writeVolumeAdded: '已加一卷',
+        writeVolumeRenamed: '卷名已改',
+        writeVolumeDeleted: '卷已移入回收站',
+        writeChapterAdded: '已加一章',
+        writeChapterRenamed: '章名已改',
+        writeChapterDeleted: '章已移入回收站',
+        writeDeleteVolumeConfirm: '确定删除这一卷？',
+        writeDeleteVolumeSub: '这一卷下的所有章与正文文件都会移入回收站。',
+        writeDeleteChapterConfirm: '确定删除这一章？',
+        writeDeleteChapterSub: '这一章的正文文件会移入回收站，之后可以恢复。',
+        writeAddVolumeTip: '在最后追加一卷',
+        writeAddChapterTip: '给这一卷加一章',
         writeProjects: '项目',
         writeLoadFailed: '读取失败：',
         writeSaveFailed: '保存失败：',
@@ -640,6 +665,31 @@ window.__ModuleLoader__.load({
         writeDeleteFailed: 'Delete failed: ', 
         writeNewProjectPrompt: 'Project name:',
         writeNewProjectDefault: 'Untitled project',
+        /* Structure editing: rename / add / delete (2026-11-18) */
+        writeRenameProject: 'Rename project',
+        writeRenameVolume: 'Rename volume',
+        writeRenameChapter: 'Rename chapter',
+        writeNewVolume: 'New volume',
+        writeNewChapter: 'New chapter',
+        writeProjectNamePrompt: 'Book title',
+        writeVolumeNamePrompt: 'Volume name',
+        writeChapterNamePrompt: 'Chapter name',
+        writeNewVolumeDefault: 'New volume',
+        writeNewChapterDefault: 'New chapter',
+        writeNameRequired: 'Name cannot be empty',
+        writeProjectRenamed: 'Title changed',
+        writeVolumeAdded: 'Volume added',
+        writeVolumeRenamed: 'Volume renamed',
+        writeVolumeDeleted: 'Volume moved to trash',
+        writeChapterAdded: 'Chapter added',
+        writeChapterRenamed: 'Chapter renamed',
+        writeChapterDeleted: 'Chapter moved to trash',
+        writeDeleteVolumeConfirm: 'Delete this volume?',
+        writeDeleteVolumeSub: 'All chapters and body files in it will be moved to trash.',
+        writeDeleteChapterConfirm: 'Delete this chapter?',
+        writeDeleteChapterSub: 'Its body file will be moved to trash and can be restored.',
+        writeAddVolumeTip: 'Append a volume',
+        writeAddChapterTip: 'Add a chapter to this volume',
         writeProjectCreated: 'Project created',
         writeProjects: 'Projects',
         writeLoadFailed: 'Load failed: ',
@@ -8058,6 +8108,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
         /* 项目右键菜单（2026-11-18）：删除项目 */
         const [projMenu, setProjMenu] = useState(null)
+        /*
+         * 卷 / 章 的右键菜单（2026-11-18 大王要求：章上要能重命名和删除，卷同理）。
+         * 与 projMenu 分开存：两份菜单的定位与可用项都不一样，
+         * 合成一个 state 反而要塞 kind 分支到处判断。
+         */
+        const [nodeMenu, setNodeMenu] = useState(null)
         /* 正文分组的展开态（2026-11-18 大王要求：卷上面加「正文」标题，可展开收起） */
         const [bodyOpen, setBodyOpen] = useState(true)
         /* 设定分组的展开态（2026-11-18：与正文分组保持一致，都可收起） */
@@ -8079,6 +8135,22 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             document.removeEventListener('keydown', onKey)
           }
         }, [projMenu])
+        /* 点外面 / 按 Esc 关卷章右键菜单 */
+        useEffect(() => {
+          if (!nodeMenu) return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.vp-ctxmenu') !== null) return
+            setNodeMenu(null)
+          }
+          const onKey = (event) => { if (event.key === 'Escape') setNodeMenu(null) }
+          document.addEventListener('mousedown', onDown)
+          document.addEventListener('keydown', onKey)
+          return () => {
+            document.removeEventListener('mousedown', onDown)
+            document.removeEventListener('keydown', onKey)
+          }
+        }, [nodeMenu])
         const projects = Array.isArray(props.projects) ? props.projects : []
         const project = props.project
         const query = props.query
@@ -8154,6 +8226,43 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             )
             : null,
           /*
+           * 结构编辑输入条（2026-11-18）：改名 / 加卷 / 加章 共用一条。
+           * 和新建项目那条并列摆在标题行下面 —— 同一个道理，贴着发起点，不飘到屏幕底部。
+           */
+          props.editProj
+            ? h('div', { className: 'wbg-newproj-bar' },
+              h('span', { className: 'wbg-newproj-k' }, props.editProj.label + '：'),
+              h('input', {
+                className: 'wbg-newproj-input',
+                autoFocus: true,
+                value: props.editProj.draft,
+                placeholder: props.editProj.placeholder,
+                onChange: (event) => props.editProj.onDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    props.editProj.commit()
+                  } else if (event.key === 'Escape') {
+                    props.editProj.cancel()
+                  }
+                },
+              }),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-go',
+                onClick: () => props.editProj.commit(),
+              }, t('ok')),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-x',
+                onClick: () => props.editProj.cancel(),
+              }, t('cancel')),
+              props.editProj.tip !== ''
+                ? h('span', { className: 'wbg-newproj-tip' }, props.editProj.tip)
+                : null,
+            )
+            : null,
+          /*
          * 项目切换（2026-11-18 修）：
          * 只要有项目就显示，放在标题行下方固定位置 ——
          * 原来要 projects.length > 1 才出现，新建第一本书后没有切换入口；
@@ -8197,6 +8306,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 onContextMenu: (event) => event.preventDefault(),
               },
               h('div', { className: 'vp-ctxmenu-h' }, projMenu.item.name),
+              /* 改名（2026-11-18 大王要求）：只改 项目.md 里的「书名:」，磁盘目录不动 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const item = projMenu.item
+                  setProjMenu(null)
+                  if (typeof props.onRenameProject === 'function') props.onRenameProject(item)
+                },
+              }, t('writeRenameProject')),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -8204,6 +8323,45 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                   const item = projMenu.item
                   setProjMenu(null)
                   if (typeof props.onDeleteProject === 'function') props.onDeleteProject(item)
+                },
+              }, t('vaultDelete')),
+            )
+            : null,
+          /* 卷 / 章 右键菜单（2026-11-18）：重命名 + 删除 */
+          nodeMenu
+            ? h(
+              'div',
+              {
+                className: 'vp-ctxmenu',
+                style: { left: nodeMenu.x + 'px', top: nodeMenu.y + 'px' },
+                onMouseDown: (event) => event.stopPropagation(),
+                onContextMenu: (event) => event.preventDefault(),
+              },
+              h('div', { className: 'vp-ctxmenu-h' }, nodeMenu.title),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const menu = nodeMenu
+                  setNodeMenu(null)
+                  if (menu.kind === 'volume') {
+                    if (typeof props.onRenameVolume === 'function') props.onRenameVolume(menu.vi, menu.title)
+                  } else if (typeof props.onRenameChapter === 'function') {
+                    props.onRenameChapter(menu.vi, menu.ci, menu.title)
+                  }
+                },
+              }, t(nodeMenu.kind === 'volume' ? 'writeRenameVolume' : 'writeRenameChapter')),
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item vp-ctxmenu-danger',
+                onClick: () => {
+                  const menu = nodeMenu
+                  setNodeMenu(null)
+                  if (menu.kind === 'volume') {
+                    if (typeof props.onDeleteVolume === 'function') props.onDeleteVolume(menu.vi, menu.title)
+                  } else if (typeof props.onDeleteChapter === 'function') {
+                    props.onDeleteChapter(menu.vi, menu.ci, menu.title)
+                  }
                 },
               }, t('vaultDelete')),
             )
@@ -8273,6 +8431,18 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     role: 'button',
                     tabIndex: 0,
                     onClick: () => props.onToggleVolume(vi),
+                    /* 右键改卷名 / 删卷（2026-11-18 大王要求） */
+                    onContextMenu: (event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      setNodeMenu({
+                        kind: 'volume',
+                        vi,
+                        title: vol.title !== '' ? vol.title : t('writeUntitledVolume'),
+                        x: event.clientX,
+                        y: event.clientY,
+                      })
+                    },
                     onKeyDown: (event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
                         event.preventDefault()
@@ -8283,6 +8453,35 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                   h(WbgIcon, { name: open ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
                   h('span', { className: 'wbg-vol-t' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
                   h('span', { className: 'wbg-vol-n' }, String((vol.chapters || []).length)),
+                  /*
+                   * 卷行右侧两个 ＋（2026-11-18 大王定案）：
+                   *   ＋卷 = 在整个项目最后追加一卷
+                   *   ＋章 = 给这一卷加一章（会真建空正文文件）
+                   * 章行上不放入口，只在右键菜单里给重命名 / 删除。
+                   * stopPropagation：不然点 ＋ 会把卷一起折叠起来。
+                   */
+                  h('button', {
+                    type: 'button',
+                    className: 'wbg-vol-add',
+                    title: t('writeAddVolumeTip'),
+                    'aria-label': t('writeAddVolumeTip'),
+                    onClick: (event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (typeof props.onAddVolume === 'function') props.onAddVolume()
+                    },
+                  }, '＋'),
+                  h('button', {
+                    type: 'button',
+                    className: 'wbg-vol-add',
+                    title: t('writeAddChapterTip'),
+                    'aria-label': t('writeAddChapterTip'),
+                    onClick: (event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      if (typeof props.onAddChapter === 'function') props.onAddChapter(vi)
+                    },
+                  }, '＋'),
                 ),
                 open
                   ? (vol.chapters || []).map((ch, ci) =>
@@ -8298,6 +8497,18 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                           title: ch.file ? ch.file : t('writeNoBodyYet'),
                           onClick: () => {
                             if (ch.file) props.onOpenChapter(ch)
+                          },
+                          onContextMenu: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setNodeMenu({
+                              kind: 'chapter',
+                              vi,
+                              ci,
+                              title: ch.title !== '' ? ch.title : t('writeUntitledChapter'),
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
                           },
                         },
                         h('span', { className: 'wbg-ch-n' }, ('0' + (ci + 1)).slice(-2)),
@@ -8610,6 +8821,18 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         /* 新建项目的自绘输入条（不用 window.prompt：Electron 不支持） */
         const [newProjectOpen, setNewProjectOpen] = useState(false)
         const [projectDraft, setProjectDraft] = useState('')
+        /*
+         * 结构编辑输入条（2026-11-18 大王需求：项目/卷/章 都要能改名，卷章要能加）。
+         *
+         * 复用「新建项目」那套输入条形态：editPrompt 描述要做什么，editDraft 存正在打的字。
+         * kind 取值：
+         *   'rename-project' | 'rename-volume' | 'rename-chapter'
+         *   'new-volume' | 'new-chapter'
+         * 同一时刻只会有一个输入条，所以共用一个 state 就够。
+         */
+        const [editPrompt, setEditPrompt] = useState(null)
+        const [editDraft, setEditDraft] = useState('')
+        const [editTip, setEditTip] = useState('')
 
         const editorRef = useRef(null)
         const composing = useRef(false)
@@ -8683,6 +8906,58 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             }
             await reloadProjects()
             flash(t('writeProjectDeleted'))
+          } catch (err) {
+            flash(t('writeDeleteFailed') + messageOf(err))
+          }
+        }
+
+        /*
+         * 删卷 / 删章（2026-11-18 大王要求：章上要有删除）。
+         * 与删项目不同 —— 这里只从 项目.md 摘掉结构行，并把对应正文文件丢进回收站，
+         * 不做整目录删除；走的是 Host 的 /write-del-volume 与 /write-del-chapter。
+         * 用 window.confirm 与删项目保持一致（工作台里其它危险操作都是这个做法）。
+         */
+        const deleteVolume = async (vi, title) => {
+          if (!project || !Number.isInteger(vi)) return
+          const name = title !== '' && title !== undefined ? title : t('writeUntitledVolume')
+          if (!window.confirm(
+            t('writeDeleteVolumeConfirm') + name + '？\n' + t('writeDeleteVolumeSub'),
+          )) return
+          try {
+            await vaultApiPost('/write-del-volume', { path: project.path, volumeIndex: vi })
+            await loadProject(project.path)
+            await reloadProjects()
+            flash(t('writeVolumeDeleted'))
+          } catch (err) {
+            flash(t('writeDeleteFailed') + messageOf(err))
+          }
+        }
+
+        const deleteChapter = async (vi, ci, title) => {
+          if (!project || !Number.isInteger(vi) || !Number.isInteger(ci)) return
+          const name = title !== '' && title !== undefined ? title : t('writeUntitledChapter')
+          if (!window.confirm(
+            t('writeDeleteChapterConfirm') + name + '？\n' + t('writeDeleteChapterSub'),
+          )) return
+          try {
+            await vaultApiPost('/write-del-chapter', {
+              path: project.path,
+              volumeIndex: vi,
+              chapterIndex: ci,
+            })
+            /* 删的正好是当前打开的这一章 → 清空右栏，别继续显示已删的内容 */
+            if (file && activeFile !== '') {
+              const kept = project.volumes && project.volumes[vi]
+              const row = kept && kept.chapters ? kept.chapters[ci] : null
+              if (row && row.file && activeFile.indexOf(row.file) >= 0) {
+                setFile(null)
+                setActiveFile('')
+                setDraft('')
+              }
+            }
+            await loadProject(project.path)
+            await reloadProjects()
+            flash(t('writeChapterDeleted'))
           } catch (err) {
             flash(t('writeDeleteFailed') + messageOf(err))
           }
@@ -9085,6 +9360,107 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           }
         }
 
+        /*
+         * ── 结构编辑动作（2026-11-18 大王需求）─────────────────────
+         *
+         * 五个入口都只做一件事：把「要改什么」放进 editPrompt，让左栏画出输入条。
+         * 真正落盘在 commitEdit —— 一处写盘，五处复用。
+         */
+        const openEdit = (kind, payload, value) => {
+          setEditTip('')
+          setEditPrompt({ kind, ...payload })
+          setEditDraft(value === undefined || value === null ? '' : String(value))
+        }
+
+        const closeEdit = () => {
+          setEditPrompt(null)
+          setEditDraft('')
+          setEditTip('')
+        }
+
+        /* 输入框的占位提示：改名时空着不合适，直接用默认名当提示 */
+        const editPlaceholderOf = () => {
+          if (!editPrompt) return ''
+          if (editPrompt.kind === 'rename-project') return t('writeProjectNamePrompt')
+          if (editPrompt.kind === 'rename-volume') return t('writeVolumeNamePrompt')
+          if (editPrompt.kind === 'rename-chapter') return t('writeChapterNamePrompt')
+          if (editPrompt.kind === 'new-volume') return t('writeNewVolumeDefault')
+          if (editPrompt.kind === 'new-chapter') return t('writeNewChapterDefault')
+          return ''
+        }
+
+        const editLabelOf = () => {
+          if (!editPrompt) return ''
+          if (editPrompt.kind === 'rename-project') return t('writeRenameProject')
+          if (editPrompt.kind === 'rename-volume') return t('writeRenameVolume')
+          if (editPrompt.kind === 'rename-chapter') return t('writeRenameChapter')
+          if (editPrompt.kind === 'new-volume') return t('writeNewVolume')
+          if (editPrompt.kind === 'new-chapter') return t('writeNewChapter')
+          return ''
+        }
+
+        /*
+         * 提交。改名类必须有值；新建类允许空（走默认名）。
+         * 成功后一律重新 loadProject —— 卷章结构可能整体重排（补写 项目.md 时），
+         * 局部 patch 状态容易和磁盘不一致。
+         */
+        const commitEdit = async () => {
+          if (!editPrompt || !project) return
+          const kind = editPrompt.kind
+          /*
+           * 改名项目的目标路径以「右键点中的那本书」为准，不用当前打开的那本 ——
+           * 用户可以在没切过去的情况下直接改别的项目名。
+           */
+          const targetPath = kind === 'rename-project'
+            ? String(editPrompt.path || project.path)
+            : project.path
+          const typed = String(editDraft).trim()
+          if (kind.indexOf('rename-') === 0 && typed === '') {
+            setEditTip(t('writeNameRequired'))
+            return
+          }
+          try {
+            if (kind === 'rename-project') {
+              await vaultApiPost('/write-rename-project', { path: targetPath, name: typed })
+              await loadProject(project.path)
+              await reloadProjects()
+              flash(t('writeProjectRenamed'))
+            } else if (kind === 'new-volume') {
+              const afterIndex = Number.isInteger(editPrompt.after) ? editPrompt.after : -1
+              await vaultApiPost('/write-add-volume', { path: project.path, afterIndex })
+              await loadProject(project.path)
+              flash(t('writeVolumeAdded'))
+            } else if (kind === 'rename-volume') {
+              await vaultApiPost('/write-rename-volume', {
+                path: project.path,
+                index: editPrompt.index,
+                name: typed,
+              })
+              await loadProject(project.path)
+              flash(t('writeVolumeRenamed'))
+            } else if (kind === 'new-chapter') {
+              await vaultApiPost('/write-add-chapter', {
+                path: project.path,
+                volumeIndex: editPrompt.volumeIndex,
+              })
+              await loadProject(project.path)
+              flash(t('writeChapterAdded'))
+            } else if (kind === 'rename-chapter') {
+              await vaultApiPost('/write-rename-chapter', {
+                path: project.path,
+                volumeIndex: editPrompt.volumeIndex,
+                chapterIndex: editPrompt.chapterIndex,
+                name: typed,
+              })
+              await loadProject(project.path)
+              flash(t('writeChapterRenamed'))
+            }
+            closeEdit()
+          } catch (err) {
+            setEditTip(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
         // 搜索过滤：项目名
         const q = query.trim().toLowerCase()
         const filteredProjects = q === ''
@@ -9113,6 +9489,29 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
             onDeleteProject: (item) => void deleteProject(item),
+            /* 结构编辑（2026-11-18）：项目改名 / 加卷 / 改卷名 / 加章 / 改章名 */
+            onRenameProject: (item) => openEdit('rename-project', { path: item.path, item }, item.name),
+            onAddVolume: () => openEdit('new-volume', { after: -1 }, ''),
+            onRenameVolume: (index, title) => openEdit('rename-volume', { index }, title),
+            onAddChapter: (volumeIndex) => openEdit('new-chapter', { volumeIndex }, ''),
+            onRenameChapter: (volumeIndex, chapterIndex, title) =>
+              openEdit('rename-chapter', { volumeIndex, chapterIndex }, title),
+            /* 删卷 / 删章（2026-11-18）：入口只在右键菜单里 */
+            onDeleteVolume: (index, title) => void deleteVolume(index, title),
+            onDeleteChapter: (volumeIndex, chapterIndex, title) =>
+              void deleteChapter(volumeIndex, chapterIndex, title),
+            /* 结构编辑输入条（与新建项目那条并列，同一时刻只画一个） */
+            editProj: editPrompt
+              ? {
+                label: editLabelOf(),
+                placeholder: editPlaceholderOf(),
+                draft: editDraft,
+                tip: editTip,
+                onDraft: setEditDraft,
+                commit: () => void commitEdit(),
+                cancel: closeEdit,
+              }
+              : null,
             /* 新建项目输入条（2026-11-18）：状态仍在 Board 里，传下去让左栏贴着标题行画 */
             newProj: newProjectOpen
               ? {
@@ -10888,6 +11287,36 @@ mark.df-hit[data-active="true"] {
 .wbg-newproj-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .wbg-newproj-go:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .wbg-newproj-x:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+/* 结构编辑输入条的错误提示：占满一行，红字，别把输入框挤变形 */
+.wbg-newproj-tip { flex: 1 1 100%; font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
+/*
+ * 卷行右侧的两个 ＋（2026-11-18 大王要求：卷标题后面加添加卷的符号）。
+ * 平时淡着不抢眼，鼠标移到卷行或按钮上才亮起来；
+ * 章行没有这个入口 —— 章只给右键菜单。
+ */
+.wbg-vol-add {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, background .12s ease, color .12s ease;
+}
+.wbg-vol:hover .wbg-vol-add, .wbg-vol-add:focus-visible { opacity: 1; }
+.wbg-vol-add:hover {
+  background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2));
+  color: var(--dsw-alias-brand-primary);
+}
 
 /* 轻提示 */
 .wbg-toast { position: absolute; left: 50%; bottom: 56px; transform: translateX(-50%); z-index: 70; max-width: 70%; padding: 6px 12px; border-radius: 8px; background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-primary); font-size: 12px; line-height: 1.4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); pointer-events: none; }

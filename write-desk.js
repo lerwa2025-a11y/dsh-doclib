@@ -19,6 +19,7 @@
 //   3. 零元数据是正常状态，不报错
 import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
+import { deleteToTrash } from './vault.js'
 
 /** 写作台在库根下的目录名。 */
 export const WRITE_DIR = '写作'
@@ -117,7 +118,24 @@ function parseProjectStructure(text) {
         volume = { title: '', chapters: [] }
         volumes.push(volume)
       }
-      chapter = { title: h2[1].trim(), scenes: [] }
+      /*
+       * 章标题允许带正文文件名：`## 第1章 | 0001-第1章.md`
+       * 前面是给人看的标题，竖线后面是给程序看的文件。
+       * 不带竖线就是老写法，仍然按顺序对位（见下面 readWriteProject）。
+       */
+      const raw = h2[1].trim()
+      const bar = raw.lastIndexOf('|')
+      let title = raw
+      let file = ''
+      if (bar > 0) {
+        const tail = raw.slice(bar + 1).trim()
+        if (/\.md$/i.test(tail)) {
+          title = raw.slice(0, bar).trim()
+          file = tail
+        }
+      }
+      chapter = { title, scenes: [] }
+      if (file !== '') chapter.file = file
       volume.chapters.push(chapter)
       continue
     }
@@ -263,15 +281,30 @@ export async function readWriteProject(root, projectRel) {
       })),
     }]
   } else if (volumes.length > 0) {
-    // 结构有了，把正文文件按序号挂到章上（顺序对位，不强求文件名一致）
+    /*
+     * 结构有了，把正文文件按序号挂到章上（顺序对位，不强求文件名一致）。
+     *
+     * 2026-11-18 修：原来 cursor 只在对位成功时 ++，而「已经带竖线文件名」的章
+     * 直接 continue 掉 —— 于是它后面那些没写文件名的章全从同一个 cursor 取值，
+     * 出现两个章挂同一个正文文件（暗号：列表里两章点开是同一篇）。
+     * 现在先把显式声明的文件收进 claimed，对位时跳过它们再往下走。
+     */
+    const claimed = new Set()
+    for (const volume of volumes) {
+      for (const chapter of volume.chapters) {
+        if (chapter.file) claimed.add(chapter.file)
+      }
+    }
     let cursor = 0
     for (const volume of volumes) {
       for (const chapter of volume.chapters) {
         if (chapter.file) continue
+        while (cursor < bodies.length && claimed.has(bodies[cursor].name)) cursor += 1
         const row = bodies[cursor]
         if (row) {
           chapter.file = row.name
           chapter.words = row.words
+          claimed.add(row.name)
           cursor += 1
         }
       }
@@ -347,4 +380,378 @@ export async function createWriteProject(root, nameInput) {
   ].join('\n')
   await writeFile(join(projectAbsolute, PROJECT_FILE), template, 'utf8')
   return { name, path: `${WRITE_DIR}/${name}` }
+}
+/* ══════════════════════════════════════════════════════════════════════
+   结构编辑（2026-11-18 大王需求）
+
+   大王定的三条规矩：
+     1. 项目改名**只改显示名**（书名），磁盘上的目录名不动 ——
+        因为目录一动，正文/设定里的相对路径、回收站记录、外部编辑器
+        打开的标签全跟着变，风险远大于收益。
+     2. 新增**章**要在 正文\ 里真建一个空文件，点开就能写；
+        新增**卷**只是分组，不建目录。
+     3. 卷名/章名可以改。
+
+   实现要点：所有操作都是「读 项目.md 全文 → 改某几行 → 整份写回」。
+   不做行内字符串替换（容易撞名），也不引 YAML 依赖。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** 中文小数字：1 → 一，12 → 十二，20 → 二十。只管 1~99，够用了。 */
+function cnNum(n) {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const v = Math.max(1, Math.min(99, Math.floor(n)))
+  if (v < 10) return digits[v]
+  if (v === 10) return '十'
+  if (v < 20) return '十' + digits[v - 10]
+  const tens = Math.floor(v / 10)
+  const ones = v % 10
+  return digits[tens] + '十' + (ones === 0 ? '' : digits[ones])
+}
+
+/** 目录名/文件名清洗：去掉 Windows 保留字符，限长。 */
+function safeTitle(input, fallback) {
+  const raw = String(input === undefined || input === null ? '' : input).trim()
+  const cleaned = raw.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80)
+  return cleaned === '' ? fallback : cleaned
+}
+
+/** 读 项目.md 原文；不存在返回空串。 */
+async function readProjectFile(base) {
+  try {
+    const info = await stat(join(base, PROJECT_FILE))
+    if (!info.isFile()) return ''
+    return await readFile(join(base, PROJECT_FILE), 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** 写回 项目.md。统一 LF —— 项目.md 是我们自己生成的，不混 CRLF。 */
+async function writeProjectFile(base, text) {
+  await writeFile(join(base, PROJECT_FILE), text, 'utf8')
+}
+
+/** 判断某行是不是卷标题（`# x`，但不吃 `## x`）。 */
+function isVolumeLine(line) { return /^#\s+\S/.test(line) }
+/** 判断某行是不是章标题。 */
+function isChapterLine(line) { return /^##\s+\S/.test(line) }
+
+/** 第 vi 个卷标题所在行号；找不到返回 -1。 */
+function volumeLineIndex(lines, vi) {
+  let seen = -1
+  for (let i = 0; i < lines.length; i++) {
+    if (!isVolumeLine(lines[i])) continue
+    seen += 1
+    if (seen === vi) return i
+  }
+  return -1
+}
+
+/** 第 vi 卷里第 ci 章所在行号；找不到返回 -1。 */
+function chapterLineIndex(lines, vi, ci) {
+  const start = volumeLineIndex(lines, vi)
+  if (start < 0) return -1
+  let seen = -1
+  for (let i = start + 1; i < lines.length; i++) {
+    if (isVolumeLine(lines[i])) break
+    if (!isChapterLine(lines[i])) continue
+    seen += 1
+    if (seen === ci) return i
+  }
+  return -1
+}
+
+/** 从章标题行取出「标题 + 竖线后的文件名」。 */
+function splitChapterLine(line) {
+  const m = /^##\s+(.*)$/.exec(line)
+  const raw = m ? m[1].trim() : ''
+  const bar = raw.lastIndexOf('|')
+  if (bar > 0) {
+    const tail = raw.slice(bar + 1).trim()
+    if (/\.md$/i.test(tail)) return { title: raw.slice(0, bar).trim(), file: tail }
+  }
+  return { title: raw, file: '' }
+}
+
+/** 卷标题行 → 纯标题。 */
+function volumeTitleOf(line) {
+  const m = /^#\s+(.*)$/.exec(line)
+  return m ? m[1].trim() : ''
+}
+
+/**
+ * 把 front-matter 里的某个键设成新值。
+ * 没有 front-matter 就造一个；有但没有这个键就补在最前面。
+ */
+function setFrontMatter(text, key, value) {
+  const normalized = text.replace(/\r\n/g, '\n')
+  const line = key + ': ' + value
+  if (!normalized.startsWith('---')) {
+    return '---\n' + line + '\n---\n\n' + normalized.replace(/^\n+/, '')
+  }
+  const end = normalized.indexOf('\n---', 3)
+  if (end < 0) return '---\n' + line + '\n---\n\n' + normalized.slice(3).replace(/^\n+/, '')
+  const head = normalized.slice(0, end).split('\n')
+  // head[0] 是 '---'，之后是键值行
+  const keyRe = new RegExp('^\\s*' + key + '\\s*:')
+  let replaced = false
+  for (let i = 1; i < head.length; i++) {
+    if (keyRe.test(head[i])) { head[i] = line; replaced = true; break }
+  }
+  if (!replaced) head.splice(1, 0, line)
+  return head.join('\n') + normalized.slice(end)
+}
+
+/** 取 项目.md 里的结构行（去 front-matter），返回正文行数组。 */
+function structureLinesOf(text) {
+  const normalized = String(text).replace(/\r\n/g, '\n')
+  if (!normalized.startsWith('---')) return normalized.split('\n')
+  const end = normalized.indexOf('\n---', 3)
+  if (end < 0) return normalized.split('\n')
+  const bodyStart = normalized.indexOf('\n', end + 1)
+  if (bodyStart < 0) return ['']
+  return normalized.slice(bodyStart + 1).split('\n')
+}
+
+/** 把「结构行」拼回完整文件（前面补 front-matter）。 */
+function joinProjectText(frontSource, structureLines) {
+  const normalized = String(frontSource).replace(/\r\n/g, '\n')
+  let head = ''
+  if (normalized.startsWith('---')) {
+    const end = normalized.indexOf('\n---', 3)
+    if (end >= 0) {
+      const bodyStart = normalized.indexOf('\n', end + 1)
+      head = bodyStart < 0 ? normalized + '\n' : normalized.slice(0, bodyStart + 1)
+    }
+  }
+  return head + structureLines.join('\n')
+}
+
+/** 删掉尾部多余空行，保证「以单个换行结尾」。 */
+function tidyTail(lines) {
+  const out = lines.slice()
+  while (out.length > 0 && out[out.length - 1].trim() === '') out.pop()
+  out.push('')
+  return out
+}
+
+/**
+ * 项目.md 里一条结构都没有、但盘上已有正文时：
+ * 先把现在的卷章写进 项目.md，再按行号改。
+ * 不这么做的话，「给第 1 卷加章」找不到可插入的位置。
+ */
+function materializeIfEmpty(text, volumes) {
+  const lines = structureLinesOf(text)
+  if (lines.some((line) => isVolumeLine(line))) return text
+  if (!Array.isArray(volumes) || volumes.length === 0) return text
+  const built = []
+  for (const vol of volumes) {
+    built.push('# ' + (vol.title !== '' ? vol.title : '未命名卷'))
+    built.push('')
+    for (const ch of (vol.chapters || [])) {
+      built.push('## ' + (ch.title !== '' ? ch.title : '未命名章'))
+      built.push('')
+    }
+  }
+  return joinProjectText(text, tidyTail(built))
+}
+
+/** 把项目路径解析成绝对目录，并校验它在 写作\ 下。 */
+async function projectDir(root, projectRel) {
+  if (typeof root !== 'string' || root.trim() === '') throw new Error('还没有设置笔记库文件夹')
+  const rel = String(projectRel === undefined || projectRel === null ? '' : projectRel)
+    .replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  if (!rel.startsWith(WRITE_DIR + '/')) throw new Error('不是写作台项目路径')
+  const base = safeChild(root, rel)
+  const info = await stat(base)
+  if (!info.isDirectory()) throw new Error('项目不存在')
+  return base
+}
+
+/** 1) 改项目显示名：只动 书名:，不碰目录名。 */
+export async function renameWriteProject(root, projectRel, title) {
+  const base = await projectDir(root, projectRel)
+  const name = safeTitle(title, '')
+  if (name === '') throw new Error('项目名不能为空')
+  const text = await readProjectFile(base)
+  await writeProjectFile(base, setFrontMatter(text, '书名', name))
+  return { ok: true, title: name, path: String(projectRel).replaceAll('\\', '/') }
+}
+
+/** 2) 新增卷。afterIndex 是「插在第几卷之后」，-1 表示追加到最后。 */
+export async function addWriteVolume(root, projectRel, afterIndex) {
+  const base = await projectDir(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
+  const lines = structureLinesOf(text)
+  const volumes = parseProjectStructure(text)
+  const at = Number.isInteger(afterIndex) ? afterIndex : -1
+  const title = '第' + cnNum(volumes.length + 1) + '卷'
+  if (at < 0 || at >= volumes.length) {
+    const out = tidyTail(lines)
+    out.pop()
+    out.push('# ' + title, '')
+    await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
+  } else {
+    // 插在「第 at 卷」这一段之后：找到 at 卷里最后一个结构行
+    const start = volumeLineIndex(lines, at)
+    const next = volumeLineIndex(lines, at + 1)
+    const end = next < 0 ? lines.length : next
+    let insertAt = end
+    for (let i = end - 1; i > start; i--) {
+      if (lines[i].trim() !== '') { insertAt = i + 1; break }
+    }
+    const out = lines.slice()
+    out.splice(insertAt, 0, '', '# ' + title, '')
+    await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
+  }
+  return { ok: true, title }
+}
+
+/** 3) 改卷名。index 从 0 开始。 */
+export async function renameWriteVolume(root, projectRel, index, title) {
+  const base = await projectDir(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
+  const lines = structureLinesOf(text)
+  const at = volumeLineIndex(lines, Number(index))
+  if (at < 0) throw new Error('找不到这一卷')
+  const name = safeTitle(title, '')
+  if (name === '') throw new Error('卷名不能为空')
+  const out = lines.slice()
+  out[at] = '# ' + name
+  await writeProjectFile(base, joinProjectText(text, out))
+  return { ok: true, title: name }
+}
+
+/** 4) 新增章：写进 项目.md + 在 正文\ 建一个空文件。 */
+export async function addWriteChapter(root, projectRel, volumeIndex) {
+  const base = await projectDir(root, projectRel)
+  const current = await readWriteProject(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), current.volumes)
+  const lines = structureLinesOf(text)
+  const volumes = parseProjectStructure(text)
+  const vi = Number.isInteger(volumeIndex) ? volumeIndex : 0
+  const vol = volumes[vi]
+  if (!vol) throw new Error('找不到这一卷')
+
+  // 章序号：本卷已有章数 + 1
+  const ordinal = (vol.chapters || []).length + 1
+  const chapterTitle = '第' + cnNum(ordinal) + '章'
+
+  // 正文文件序号：盘上已有文件里最大的数字前缀 + 1
+  const bodyDir = join(base, BODY_DIR)
+  await mkdir(bodyDir, { recursive: true })
+  const bodies = await listMd(bodyDir)
+  let next = bodies.length + 1
+  for (const row of bodies) {
+    const m = /^(\d{1,4})[-_.\s]/.exec(row.name)
+    if (m) next = Math.max(next, parseInt(m[1], 10) + 1)
+  }
+  const fileName = String(next).padStart(4, '0') + '-' + safeTitle(chapterTitle, '未命名章') + '.md'
+  const bodyAbsolute = join(bodyDir, fileName)
+  // 'wx' = 已存在就报错，绝不覆盖别人的正文
+  await writeFile(bodyAbsolute, '', { encoding: 'utf8', flag: 'wx' })
+
+  // 插到本卷最后一个结构行之后
+  const start = volumeLineIndex(lines, vi)
+  const nextVol = volumeLineIndex(lines, vi + 1)
+  const end = nextVol < 0 ? lines.length : nextVol
+  let insertAt = end
+  for (let i = end - 1; i > start; i--) {
+    if (lines[i].trim() !== '') { insertAt = i + 1; break }
+  }
+  const out = lines.slice()
+  out.splice(insertAt, 0, '', '## ' + chapterTitle + ' | ' + fileName, '')
+  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
+  return { ok: true, title: chapterTitle, file: fileName }
+}
+
+/** 5) 改章名。保留竖线后面的正文文件名。 */
+export async function renameWriteChapter(root, projectRel, volumeIndex, chapterIndex, title) {
+  const base = await projectDir(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
+  const lines = structureLinesOf(text)
+  const at = chapterLineIndex(lines, Number(volumeIndex), Number(chapterIndex))
+  if (at < 0) throw new Error('找不到这一章')
+  const name = safeTitle(title, '')
+  if (name === '') throw new Error('章名不能为空')
+  const { file } = splitChapterLine(lines[at])
+  const out = lines.slice()
+  out[at] = '## ' + name + (file === '' ? '' : ' | ' + file)
+  await writeProjectFile(base, joinProjectText(text, out))
+  return { ok: true, title: name, file }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   删除（2026-11-18 大王要求：章要能删，卷同理）
+
+   两个都走回收站，不直接 rm：
+     · 结构行删掉（卷还连带删掉它下面的所有章与场景）
+     · 对应的正文 .md 一起丢进 .trash —— 否则结构没了、文件还躺在 正文\ 里，
+       下次「按文件名前缀推」会把它当成一章又冒出来
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** 把项目里的某个相对路径丢进回收站；路径为空或失败都静默跳过。 */
+async function trashOne(root, projectRel, relPath) {
+  const rel = String(relPath === undefined || relPath === null ? '' : relPath)
+    .replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  if (rel === '') return
+  const projectRel2 = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  try {
+    await deleteToTrash(root, projectRel2 + '/' + rel)
+  } catch {
+    /* 回收站都进不去就别拦着删结构了，用户要的是删掉 */
+  }
+}
+
+/**
+ * 删章：结构行 + 该章的场景行 + 正文文件。
+ * volumeIndex / chapterIndex 都从 0 开始。
+ */
+export async function deleteWriteChapter(root, projectRel, volumeIndex, chapterIndex) {
+  const base = await projectDir(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
+  const lines = structureLinesOf(text)
+  const vi = Number(volumeIndex)
+  const ci = Number(chapterIndex)
+  const at = chapterLineIndex(lines, vi, ci)
+  if (at < 0) throw new Error('找不到这一章')
+  const { title, file } = splitChapterLine(lines[at])
+
+  // 这一章的作用域：从标题行到下一个卷/章标题之前
+  let end = lines.length
+  for (let i = at + 1; i < lines.length; i++) {
+    if (isVolumeLine(lines[i]) || isChapterLine(lines[i])) { end = i; break }
+  }
+  const out = lines.slice(0, at).concat(lines.slice(end))
+  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
+  await trashOne(root, projectRel, BODY_DIR + '/' + file)
+  return { ok: true, title }
+}
+
+/**
+ * 删卷：整卷的结构行（含所有章与场景）+ 卷内所有正文文件。
+ */
+export async function deleteWriteVolume(root, projectRel, volumeIndex) {
+  const base = await projectDir(root, projectRel)
+  const current = await readWriteProject(root, projectRel)
+  const text = materializeIfEmpty(await readProjectFile(base), current.volumes)
+  const lines = structureLinesOf(text)
+  const vi = Number(volumeIndex)
+  const start = volumeLineIndex(lines, vi)
+  if (start < 0) throw new Error('找不到这一卷')
+
+  // 先把正文文件名收齐，再删行 —— 顺序反了就拿不到 file 了
+  const files = []
+  let end = lines.length
+  for (let i = start + 1; i < lines.length; i++) {
+    if (isVolumeLine(lines[i])) { end = i; break }
+    if (!isChapterLine(lines[i])) continue
+    const { file } = splitChapterLine(lines[i])
+    if (file !== '') files.push(file)
+  }
+  const title = volumeTitleOf(lines[start])
+  const out = lines.slice(0, start).concat(lines.slice(end))
+  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
+  for (const file of files) await trashOne(root, projectRel, BODY_DIR + '/' + file)
+  return { ok: true, title, chapters: files.length }
 }

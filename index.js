@@ -18,7 +18,18 @@ import {
 import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook.js'
 import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
-import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
+import {
+  addWriteChapter,
+  addWriteVolume,
+  createWriteProject,
+  deleteWriteChapter,
+  deleteWriteVolume,
+  listWriteProjects,
+  readWriteProject,
+  renameWriteChapter,
+  renameWriteProject,
+  renameWriteVolume,
+} from './write-desk.js'
 import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
 import { awaitReply, closeSession, currentModel, modelCatalog, openSession, selectModel, sendToSession, sessionState, warmSession } from './studio-session.js'
@@ -332,6 +343,88 @@ export function apply(ctx) {
               if (route === '/write-new' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, { ok: true, ...(await createWriteProject(root, body && body.name)) })
+                return
+              }
+
+              /*
+               * 写作台的结构编辑（2026-11-18 大王要求）：
+               *   项目改名 / 加卷 / 改卷名 / 加章 / 改章名
+               *
+               * 改名只动 项目.md 的「书名:」，**不改磁盘目录名** ——
+               * 目录一动，正文里的相对链接、回收站记录、外部编辑器
+               * 打开的标签全跟着变，风险远大于收益（大王选的方案）。
+               *
+               * 加章会真在 正文\ 建一个空 .md；加卷只改结构不建目录。
+               */
+              if (route === '/write-rename-project' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameWriteProject(root, body && body.path, body && body.name)),
+                })
+                return
+              }
+              if (route === '/write-add-volume' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await addWriteVolume(root, body && body.path, body && body.afterIndex)),
+                })
+                return
+              }
+              if (route === '/write-rename-volume' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameWriteVolume(root, body && body.path, body && body.index, body && body.name)),
+                })
+                return
+              }
+              if (route === '/write-add-chapter' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await addWriteChapter(root, body && body.path, body && body.volumeIndex)),
+                })
+                return
+              }
+              if (route === '/write-rename-chapter' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameWriteChapter(
+                    root,
+                    body && body.path,
+                    body && body.volumeIndex,
+                    body && body.chapterIndex,
+                    body && body.name,
+                  )),
+                })
+                return
+              }
+              /*
+               * 删卷 / 删章（2026-11-18 大王要求）。
+               * 都走回收站（.trash\)，正文文件一起进去 —— 误删能找回。
+               */
+              if (route === '/write-del-volume' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await deleteWriteVolume(root, body && body.path, body && body.volumeIndex)),
+                })
+                return
+              }
+              if (route === '/write-del-chapter' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await deleteWriteChapter(
+                    root,
+                    body && body.path,
+                    body && body.volumeIndex,
+                    body && body.chapterIndex,
+                  )),
+                })
                 return
               }
               /*
