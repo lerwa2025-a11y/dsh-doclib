@@ -4829,7 +4829,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             walk(nodes)
           }
           setExpanded(next)
-        }, [expandSignal.n, expandSignal.mode])
+          /* 依赖加 nodes.length：树数据到达后要重跑，否则 n 不变永远展不开 */
+        }, [expandSignal.n, expandSignal.mode, nodes.length])
 
         /*
          * 首次自动全展开（2026-11-18 需求4）。
@@ -6606,21 +6607,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               }, confirmSess === 'new'
                 ? t('assistConfirmNew')
                 : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
-              /* 删除这个会话（2026-11-18 大王要求：会话要能删） */
-              sessionId !== ''
-                ? h('button', {
-                  type: 'button',
-                  className: 'cb-sess-btn cb-sess-btn-danger',
-                  disabled: deletingSess,
-                  onClick: () => {
-                    if (confirmSess !== 'archive') { askConfirm('archive'); return }
-                    setConfirmSess('')
-                    void deleteSession()
-                  },
-                }, deletingSess
-                  ? t('assistDeleting')
-                  : (confirmSess === 'archive' ? t('assistConfirmArchive') : t('assistDeleteSession')))
-                : null,
+              /*
+               * 归档按钮已移除（2026-11-18 大王决定）：
+               * 「我把文案区的会话归档了也没同步归档，算了不要归档功能了，
+               *   我自己去会话里管理。」
+               * 会话的归档/删除统一去 DSH 会话面板操作，助手这里只管打开和新建。
+               */
             ),
           ),
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
@@ -7270,7 +7262,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [readerCfg, setReaderCfg] = useState({ fontSize: 14, font: '', line: 1.85, bg: '' })
         /* 排序 + 展开收起（2026-11-18） */
         const [copySort, setCopySort] = useState('name')
-        const [expandSignal, setExpandSignal] = useState({ n: 0, mode: 'all' })
+        /* 需求4：初始 n=1 触发一次全展开 —— 否则按钮显示「全部收起」但树是收起的 */
+        const [expandSignal, setExpandSignal] = useState({ n: 1, mode: 'all' })
         /* 树操作的自绘输入条（2026-11-18）：{ kind, node, value } 或 null */
         const [treePrompt, setTreePrompt] = useState(null)
         const [doc, setDoc] = useState(null)
