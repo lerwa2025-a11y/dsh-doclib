@@ -8098,6 +8098,44 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             }, '＋'),
           ),
           /*
+           * 新建项目输入条（2026-11-18 改）：
+           * 原来它挂在 WritingBoard 上、position:absolute + bottom:52px，
+           * 但没有定位祖先 —— 于是贴到整个窗口底部、水平居中，
+           * 离这里点的 ＋ 太远，大王根本注意不到。
+           * 现在直接跟在标题行后面走文档流：贴着点击处，不依赖任何坐标测量，
+           * 窗口缩放 / 左栏拖宽 / 列表滚动都不会跑位。
+           */
+          props.newProj
+            ? h('div', { className: 'wbg-newproj-bar' },
+              h('span', { className: 'wbg-newproj-k' }, t('writeNewProjectPrompt')),
+              h('input', {
+                className: 'wbg-newproj-input',
+                autoFocus: true,
+                value: props.newProj.draft,
+                placeholder: t('writeNewProjectDefault'),
+                onChange: (event) => props.newProj.onDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    props.newProj.commit()
+                  } else if (event.key === 'Escape') {
+                    props.newProj.cancel()
+                  }
+                },
+              }),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-go',
+                onClick: () => props.newProj.commit(),
+              }, t('ok')),
+              h('button', {
+                type: 'button',
+                className: 'wbg-newproj-x',
+                onClick: () => props.newProj.cancel(),
+              }, t('cancel')),
+            )
+            : null,
+          /*
          * 项目切换（2026-11-18 修）：
          * 只要有项目就显示，放在标题行下方固定位置 ——
          * 原来要 projects.length > 1 才出现，新建第一本书后没有切换入口；
@@ -9057,6 +9095,15 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
             onDeleteProject: (item) => void deleteProject(item),
+            /* 新建项目输入条（2026-11-18）：状态仍在 Board 里，传下去让左栏贴着标题行画 */
+            newProj: newProjectOpen
+              ? {
+                draft: projectDraft,
+                onDraft: setProjectDraft,
+                commit: () => void commitNewProject(),
+                cancel: () => setNewProjectOpen(false),
+              }
+              : null,
             style: { width: listW + 'px' },
           }),
           /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
@@ -9141,37 +9188,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             ? h(WritingOutline, { t, project, onClose: () => setOutlineOpen(false) })
             : null,
           /* 浮动加号已移除：挪进上面的「项目」标题行 */
-          /* 新建项目的输入条：照素材库 vp-deletebar 的做法，回车提交、Esc 取消 */
-          newProjectOpen
-            ? h('div', { className: 'wbg-newproj-bar' },
-              h('span', { className: 'wbg-newproj-k' }, t('writeNewProjectPrompt')),
-              h('input', {
-                className: 'wbg-newproj-input',
-                autoFocus: true,
-                value: projectDraft,
-                placeholder: t('writeNewProjectDefault'),
-                onChange: (event) => setProjectDraft(event.target.value),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void commitNewProject()
-                  } else if (event.key === 'Escape') {
-                    setNewProjectOpen(false)
-                  }
-                },
-              }),
-              h('button', {
-                type: 'button',
-                className: 'wbg-newproj-go',
-                onClick: () => void commitNewProject(),
-              }, t('ok')),
-              h('button', {
-                type: 'button',
-                className: 'wbg-newproj-x',
-                onClick: () => setNewProjectOpen(false),
-              }, t('cancel')),
-            )
-            : null,
+          /* 新建项目输入条已挪进左栏 WritingList（贴着「项目 ＋」显示，2026-11-18） */
           notice !== '' ? h('div', { className: 'wbg-toast' }, notice) : null,
           h(BoardAssistant, {
             t,
@@ -9566,7 +9583,11 @@ body.dsh-resizing, body.dsh-resizing * {
      「不管当前主题是什么，白就是白、黑就是黑」且**不写死任何 hex** 的办法：
      Canvas 与 CanvasText 由 color-scheme 决定，配对由浏览器保证可读。 */
 .dn-reader {
-  --dn-reader-paper: var(--dsw-alias-bg-layer-1, #fff);
+  /* 2026-11-18 大王要求：默认纸面与左右两栏一致。
+     原来取 bg-layer-1，亮色下是纯白 #ffffff，而侧栏是 bg-module-platform #f5f6f7，
+     中栏比侧栏亮一档，看着「差得太远」。改成和侧栏同一个令牌，
+     亮/深两套主题都由主题自己翻转，构造上必然一致。 */
+  --dn-reader-paper: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1, #fff));
   --dn-reader-ink: var(--dsw-alias-label-primary, #1a1a1a);
   --dn-reader-accent: var(--dsw-alias-brand-primary, #4c8dff);
   --dn-reader-soft: color-mix(in srgb, var(--dn-reader-ink) 7%, transparent);
@@ -10837,9 +10858,13 @@ mark.df-hit[data-active="true"] {
 .wbg-newproj:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 
 /* 新建项目输入条：照素材库 vp-deletebar 的做法（不用 window.prompt —— Electron 没有） */
-.wbg-newproj-bar { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); z-index: 72; display: flex; align-items: center; gap: 8px; max-width: 78%; padding: 8px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .32); }
-.wbg-newproj-k { flex: none; font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
-.wbg-newproj-input { flex: 1; min-width: 140px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; }
+/* 新建项目输入条（2026-11-18 改）：
+   原来是 position:absolute + left:50% + bottom:52px 的浮层，但没有定位祖先，
+   结果贴到整个窗口底部，离点击处太远。现在走正常文档流，紧跟「项目 ＋」标题行。
+   左栏最窄 160px，所以改成两行：第一行标签，第二行 输入框 + 确定 + 取消。 */
+.wbg-newproj-bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 12px 8px; padding: 7px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-1); box-shadow: 0 4px 14px rgba(0, 0, 0, .22); }
+.wbg-newproj-k { flex: 1 1 100%; font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; }
+.wbg-newproj-input { flex: 1 1 0; min-width: 0; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; }
 .wbg-newproj-input:focus { border-color: var(--dsw-alias-brand-primary); }
 .wbg-newproj-go, .wbg-newproj-x { flex: none; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; cursor: pointer; }
 .wbg-newproj-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
