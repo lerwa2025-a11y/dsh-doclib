@@ -1493,7 +1493,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
        * x/y 是视口坐标，菜单用 position: fixed 定位，避免被树面板的 overflow 裁掉。
        */
       const [ctxMenu, setCtxMenu] = useState(null)
-      const [creating, setCreating] = useState(null)
+      /*
+       * 原地改名的目标（2026-11-19）：新建完立刻改名时，setSelected 还没生效，
+       * commitRename 拿 selected 会拿到旧值或 null。这里记住真正要改的那一项。
+       */
+      const renameTargetRef = useRef(null)
       const [renaming, setRenaming] = useState(false)
       const [renameDraft, setRenameDraft] = useState('')
       const [renameError, setRenameError] = useState('')
@@ -2519,7 +2523,30 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
        */
       const MATERIAL_ROOT = '素材'
 
-      const askCreate = (kind) => {
+      /** 某个目录下已用的名字（给新建项取不撞车的默认名）。dirPath 为空时取顶层。 */
+      const namesInDir = (dirPath) => {
+        const out = new Set()
+        const walk = (nodes) => {
+          for (const node of nodes) {
+            if (dirPath === '') { out.add(node.name); continue }
+            if (node.path === dirPath) {
+              for (const child of node.children || []) out.add(child.name)
+              return
+            }
+            if (node.type === 'dir' && Array.isArray(node.children)) walk(node.children)
+          }
+        }
+        walk(tree)
+        return out
+      }
+
+      /**
+       * 新建文件 / 文件夹（2026-11-19 大王要求）：
+       * 不再弹底部输入条 —— 直接用默认名建出来，然后跳到标题处原地命名。
+       * 用户按 Esc 就保留默认名，等于「建好了没改名」。
+       */
+      const askCreate = async (kind) => {
+        if (root === '') { setError(t('assistNeedWorkspace')); return }
         // 选中的是文件夹 → 建在它里面；选中的是文件 → 建在它所在目录；
         // 没选 → 建在素材库根（不能是库根，库根不在三库内会被守卫拒）。
         const dir = selected
@@ -2529,23 +2556,31 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               ? selected.path.slice(0, selected.path.lastIndexOf('/'))
               : MATERIAL_ROOT
           : MATERIAL_ROOT
-        setCreating({ kind, dir, name: '' })
-      }
-
-      const commitCreate = async () => {
-        if (!creating) return
-        const name = creating.name.trim()
-        if (name === '') {
-          setCreating(null)
-          return
-        }
-        const path = creating.dir === '' ? name : `${creating.dir}/${name}`
+        const isDir = kind === 'dir'
+        const ext = isDir ? '' : '.md'
+        const base = isDir ? t('vaultNewDir') : t('vaultNewFile')
+        const taken = namesInDir(dir)
+        let name = base
+        let n = 2
+        while (taken.has(name + ext)) { name = base + ' ' + n; n += 1 }
+        const path = dir === '' ? name + ext : `${dir}/${name}${ext}`
         try {
-          if (creating.kind === 'dir') await vaultApiPost('/mkdir', { path })
+          if (isDir) await vaultApiPost('/mkdir', { path })
           else await vaultApiPost('/newfile', { path })
-          setCreating(null)
           await reloadTree()
-          if (creating.kind === 'file') openFile({ path, name, image: false })
+          /* 父目录展开，否则新建的东西在树上看不见 */
+          if (dir !== '') setExpanded((prev) => ({ ...prev, [dir]: true }))
+          const entry = { path, name: name + ext, type: isDir ? 'dir' : 'file', image: false }
+          setConfirmDelete(false)
+          setMoveOpen(false)
+          setCtxMenu(null)
+          if (isDir) {
+            setSelected(entry)
+            setExpanded((prev) => ({ ...prev, [path]: true }))
+          } else {
+            await openFile(entry)
+          }
+          startRename(entry)
         } catch (err) {
           setError(messageOf(err))
         }
@@ -2590,6 +2625,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           return
         }
         renameGuard.current = { cancelled: false, done: false }
+        renameTargetRef.current = target
         setRenameDraft(splitExt(target.name, target.type === 'dir').base)
         setRenameError('')
         setRenaming(true)
@@ -2597,27 +2633,36 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
       const commitRename = async () => {
         /* 三个固定库不可改名 —— 它们的位置被整套数据模型依赖 */
-        if (selected && isFixedLib(selected.path)) { setRenaming(false); return }
-        if (!selected) return
+        const target = renameTargetRef.current || selected
+        if (target && isFixedLib(target.path)) { setRenaming(false); return }
+        if (!target) return
         if (renameGuard.current.done) return
         renameGuard.current.done = true
-        const { base, ext } = splitExt(selected.name, selected.type === 'dir')
+        const { base, ext } = splitExt(target.name, target.type === 'dir')
         const typed = renameDraft.trim()
         // 用户输入里若自己带了后缀就不再重复加
         const finalBase = typed.endsWith(ext) && ext !== '' ? typed.slice(0, typed.length - ext.length) : typed
         const name = `${finalBase}${ext}`
-        if (name === '' || name === selected.name) {
+        if (name === '' || name === target.name) {
           setRenaming(false)
           return
         }
         try {
-          await vaultApiPost('/rename', { path: selected.path, name })
+          await vaultApiPost('/rename', { path: target.path, name })
           setRenaming(false)
-          setSelected(null)
-          setDoc(null)
-          setDraft('')
           await reloadTree()
           setImageTick((tick) => tick + 1)
+          /*
+           * 改名成功后选中改后的那一项（2026-11-19）：
+           * 原来这里 setSelected(null)，新建后立刻改名就会把右侧清空，
+           * 用户刚看到标题就没了。
+           */
+          const parent = target.path.includes('/')
+            ? target.path.slice(0, target.path.lastIndexOf('/') + 1)
+            : ''
+          const renamed = { path: parent + name, name, type: target.type, image: target.image === true }
+          if (renamed.type === 'dir') setSelected(renamed)
+          else await openFile(renamed)
         } catch (err) {
           renameGuard.current.done = false
           setRenameError('')
@@ -3297,13 +3342,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               { className: 'vp-empty-quick' },
               h(
                 'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => askCreate('file') },
+                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('file') },
                 h('span', { className: 'vp-qcard-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic-lg' })),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewFile')),
               ),
               h(
                 'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => askCreate('dir') },
+                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('dir') },
                 h('span', { className: 'vp-qcard-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic-lg' })),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewDir')),
               ),
@@ -3769,33 +3814,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               ),
             )
           : null,
-        creating
-          ? h(
-              'div',
-              { className: 'vp-deletebar' },
-              h('input', {
-                className: 'vp-name-input',
-                autoFocus: true,
-                placeholder: t('vaultNamePlaceholder'),
-                value: creating.name,
-                onChange: (event) => setCreating({ ...creating, name: event.target.value }),
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    void commitCreate()
-                  } else if (event.key === 'Escape') {
-                    setCreating(null)
-                  }
-                },
-                onBlur: () => void commitCreate(),
-              }),
-              h(
-                'span',
-                { className: 'vp-hint' },
-                `${creating.kind === 'dir' ? t('vaultNewDir') : t('vaultNewFile')} → ${creating.dir || MATERIAL_ROOT}/`,
-              ),
-            )
-          : null,
         moveOpen && selected
           ? h(
               Fragment,
@@ -3975,7 +3993,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     {
                       type: 'button',
                       className: 'vp-newdrop-item',
-                      onClick: () => { setNewMenuOpen(false); askCreate('file') },
+                      onClick: () => { setNewMenuOpen(false); void askCreate('file') },
                     },
                     h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
                     h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
@@ -3985,7 +4003,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     {
                       type: 'button',
                       className: 'vp-newdrop-item',
-                      onClick: () => { setNewMenuOpen(false); askCreate('dir') },
+                      onClick: () => { setNewMenuOpen(false); void askCreate('dir') },
                     },
                     h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
                     h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
@@ -4625,7 +4643,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
        * 但文案台点开只落到库根，还得自己再点进「文案」，跟直觉不符，所以改成跟随。
        */
       const BOARD_FOLDER = {
-        vault: '',
+        /*
+         * 素材区原来写空串（= 库根），2026-11-19 大王指出不对：
+         * 素材区左栏显示的就是 素材\ 里面的东西（顶层「素材」节点已摊平），
+         * 打开文件夹却开到它的上一层 工作台\，用户看不到刚建的东西。
+         * 三个板块现在统一：各自开到自己那一层库目录。
+         */
+        vault: '素材',
         copy: '文案',
         write: '写作',
         trash: '.trash',
@@ -7011,7 +7035,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       // 左栏：搜索 + 按状态分组 + 真实稿件
       function CopyList(props) {
         const t = props.t
-        const tree = Array.isArray(props.tree) ? props.tree : []
+        const rawTree = Array.isArray(props.tree) ? props.tree : []
+        /*
+         * 摊平「文案」这一层（2026-11-19 大王要求）：
+         * 文案\ 对文案区来说就是库本身，不是库里的一个分组。
+         * 判据与素材库 flatTree 一致：顶层只有一个节点、是目录、且 library === name。
+         * 注意 path 不动（还是「文案/xxx」），否则路径守卫会拒。
+         */
+        const tree = rawTree.length === 1 && rawTree[0].type === 'dir' && rawTree[0].library === rawTree[0].name
+          ? (Array.isArray(rawTree[0].children) ? rawTree[0].children : [])
+          : rawTree
         const query = props.query
         const setQuery = props.onQuery
         const activePath = props.activePath
@@ -7586,10 +7619,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           if (typed === '' || (node && typed === node.name)) { setTreePrompt(null); return }
           setTreePrompt(null)
           try {
-            if (kind === 'group') {
-              await vaultApiPost('/mkdir', { path: '文案/' + typed })
-              flash(t('vaultNewDir') + ' ' + t('vaultSaved'))
-            } else if (kind === 'rename') {
+            if (kind === 'rename') {
               await vaultApiPost('/rename', { path: node.path, name: typed })
               flash(t('vaultRenamed'))
             } else {
@@ -7864,7 +7894,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         // 新建稿件：写进 文案\，命名不撞车
         /*
          * 新建分组 = 在 文案\ 下真的建一个文件夹（2026-11-18 大王要求）。
-         * 用自绘输入条（ Electron 没有 window.prompt），复用 treePrompt。
+         * 2026-11-19 起不再弹输入条：直接用默认名建，然后跳树上原地命名。
          */
         /* 全部展开/收起切换 */
         const toggleExpand = () => {
@@ -7876,9 +7906,34 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           setExpandSignal((prev) => ({ n: prev.n + 1, mode: Object.keys(treeExpanded).length > 0 ? 'none' : 'all' }))
         }
 
-        const createGroup = () => {
+        /** 文案区摊平后的顶层名字（新建分组取名要避开它们）。 */
+        const topNames = () => {
+          const raw = copyTree
+          const flat = raw.length === 1 && raw[0].type === 'dir' && raw[0].library === raw[0].name
+            ? (Array.isArray(raw[0].children) ? raw[0].children : [])
+            : raw
+          return new Set(flat.map((node) => node.name))
+        }
+
+        /*
+         * 新建分组（2026-11-19 大王要求）：不再弹输入条，
+         * 直接用默认名建出来，然后跳到树上那一行原地命名。
+         */
+        const createGroup = async () => {
           if (root === '') { flash(t('assistNeedWorkspace')); return }
-          setTreePrompt({ kind: 'group', node: null, value: '' })
+          const base = t('vaultNewDir')
+          const taken = topNames()
+          let name = base
+          let n = 2
+          while (taken.has(name)) { name = base + ' ' + n; n += 1 }
+          const path = '文案/' + name
+          try {
+            await vaultApiPost('/mkdir', { path })
+            await reload()
+            renameNode({ path, name, type: 'dir' })
+          } catch (err) {
+            setError(t('copySaveFailed') + messageOf(err))
+          }
         }
 
         const createDraft = async () => {
@@ -7901,6 +7956,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             await reload()
             await pick(path)
             setMode('edit')
+            /* 新建完直接进原地命名（2026-11-19 大王要求，不再弹底部输入条） */
+            renameNode({ path, name: name + '.md', type: 'file' })
           } catch (err) {
             setError(t('copySaveFailed') + messageOf(err))
           }
@@ -7979,7 +8036,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             treePrompt && treePrompt.kind !== 'rename'
               ? h('div', { className: 'cb-prompt-bar' },
                 h('span', { className: 'cb-prompt-k' },
-                  treePrompt.kind === 'rename' ? t('vaultRename') : (treePrompt.kind === 'group' ? t('vaultNewDir') : t('vaultMoveTo')),
+                  treePrompt.kind === 'rename' ? t('vaultRename') : t('vaultMoveTo'),
                 ),
                 h('input', {
                   className: 'cb-prompt-input',
@@ -9489,7 +9546,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          * ⚠️ 这里**不能**用 window.prompt —— DSH 是 Electron，渲染进程没有 prompt，
          * 调用会直接返回 null 且不弹窗，表现就是「点了没反应」（2026-11-17 实际踩到）。
          * 所以改成自绘输入条：先点按钮把 newProjectOpen 打开，用户填名字回车再提交。
-         * 素材库的「新建文件/文件夹」用的是同一套做法（vp-deletebar + vp-name-input）。
+         * 素材库的「新建文件/文件夹」2026-11-19 起改成直接建 + 原地命名，不再弹任何输入条。
          */
         const openNewProject = () => {
           if (root === '') {
@@ -10148,7 +10205,6 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-pick .vp-hint { max-width: 460px; }
 .vp-pick-input { width: 100%; max-width: 460px; box-sizing: border-box; padding: 8px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; outline: none; }
 .vp-pick-input:focus { border-color: var(--dsw-alias-brand-primary); }
-.vp-name-input { flex: 1 1 240px; min-width: 0; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; outline: none; }
 
 
 /* ══════════════════════════════════════════════════════════════════════════
