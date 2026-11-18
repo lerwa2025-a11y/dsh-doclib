@@ -8414,6 +8414,21 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 h(WbgIcon, { name: bodyOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
                 h('span', { className: 'wbg-vol-t' }, t('writeBodyGroup')),
                 h('span', { className: 'wbg-vol-n' }, String(volumes.reduce((sum, v) => sum + (v.chapters || []).length, 0))),
+                /*
+                 * 「正文」标题行右侧的 ＋ = 在整个项目最后追加一卷（2026-11-18 大王改定）。
+                 * 分区标题本身是折叠按钮，所以必须 stopPropagation，否则点 ＋ 会把整区收起来。
+                 */
+                h('button', {
+                  type: 'button',
+                  className: 'wbg-vol-add',
+                  title: t('writeAddVolumeTip'),
+                  'aria-label': t('writeAddVolumeTip'),
+                  onClick: (event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (typeof props.onAddVolume === 'function') props.onAddVolume()
+                  },
+                }, '＋'),
               )
               : null,
             bodyOpen ? volumes.map((vol, vi) => {
@@ -8454,23 +8469,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                   h('span', { className: 'wbg-vol-t' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
                   h('span', { className: 'wbg-vol-n' }, String((vol.chapters || []).length)),
                   /*
-                   * 卷行右侧两个 ＋（2026-11-18 大王定案）：
-                   *   ＋卷 = 在整个项目最后追加一卷
-                   *   ＋章 = 给这一卷加一章（会真建空正文文件）
-                   * 章行上不放入口，只在右键菜单里给重命名 / 删除。
+                   * 卷行右侧只留一个 ＋ = 给这一卷加一章（2026-11-18 大王改定）。
+                   * 「新建卷」的入口移到了「正文」分区标题行右边 —— 加一卷是项目级操作，
+                   * 混在每一行的卷标题后面既重复又容易点错。
+                   * 章行不放入口，只在右键菜单里给重命名 / 删除。
                    * stopPropagation：不然点 ＋ 会把卷一起折叠起来。
                    */
-                  h('button', {
-                    type: 'button',
-                    className: 'wbg-vol-add',
-                    title: t('writeAddVolumeTip'),
-                    'aria-label': t('writeAddVolumeTip'),
-                    onClick: (event) => {
-                      event.preventDefault()
-                      event.stopPropagation()
-                      if (typeof props.onAddVolume === 'function') props.onAddVolume()
-                    },
-                  }, '＋'),
                   h('button', {
                     type: 'button',
                     className: 'wbg-vol-add',
@@ -11300,8 +11304,10 @@ mark.df-hit[data-active="true"] {
 /* 结构编辑输入条的错误提示：占满一行，红字，别把输入框挤变形 */
 .wbg-newproj-tip { flex: 1 1 100%; font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
 /*
- * 卷行右侧的两个 ＋（2026-11-18 大王要求：卷标题后面加添加卷的符号）。
- * 平时淡着不抢眼，鼠标移到卷行或按钮上才亮起来；
+ * 写作区左栏的 ＋ 按钮（2026-11-18 大王改定布局）：
+ *   「正文」分区标题行右侧 1 个 = 新建卷（项目级操作，加在最后）
+ *   每一卷行右侧 1 个          = 给这一卷新建章（会真建空正文文件）
+ * 平时淡着不抢眼（0.55，触屏没有 hover 也看得见），移上去才亮起来；
  * 章行没有这个入口 —— 章只给右键菜单。
  */
 .wbg-vol-add {
