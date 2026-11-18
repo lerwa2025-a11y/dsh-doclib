@@ -5919,55 +5919,67 @@ window.__ModuleLoader__.load({
         }, [api, sessionId])
 
         /*
-         * 模型列表（2026-11-18 重写，解决 R7 先选模型）：
+         * 模型列表（2026-11-18 第三次修，找到真因了）。
          *
-         * 有会话 -> 用会话目录（能读到当前选中值）
-         * 没会话 -> 用全局 modelCatalog（不需要先建会话！）
+         * ── 之前的坑 ──
+         * 写成「有会话 -> 会话目录 / 没会话 -> 全局 catalog」。
+         * 但 loadBinding 现在会自动建会话，于是 sessionId 很快就非空，
+         * 一走「有会话」分支就去拿 api.modelDirectory(sessionId) ——
+         * 客户端的 sessions 服务没有可用的 list/modelDirectory，
+         * 拿不到就 setModels([]) 直接返回，**列表永远是空的**。
+         * 而 Host 的 /studio-model-catalog 明明返回 9 组 21 个模型（实测）。
          *
-         * 之前的问题是：没会话就 setModels([])，所以点模型按钮什么都没有。
-         * 现在没会话也能列出全部可路由模型。
+         * ── 现在 ──
+         * 全局 catalog 是**主路径**：它不依赖会话，永远能拿到全部模型。
+         * 会话目录只在「真能拿到」时用来补当前选中的模型名。
+         * 拿不到目录绝不清空列表。
          */
         useEffect(() => {
           let alive = true
-          if (sessionId === '') {
-            /* 没会话：走全局目录 */
+
+          /* ① 主路径：全局 catalog（不依赖会话，一定可用） */
+          const loadGlobal = () => {
             void api.modelCatalog().then((value) => {
               if (!alive) return
-              setModels(Array.isArray(value.groups) ? value.groups : [])
+              const groups = Array.isArray(value.groups) ? value.groups : []
+              if (groups.length === 0) return
+              setModels(groups)
               const def = value.default
               if (def && typeof def.model === 'string') {
-                const flat = (value.groups || []).reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
+                const flat = groups.reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
                 const hit = flat.find((m) => m && m.id === def.model)
-                setModelLabel(hit && typeof hit.name === 'string' ? hit.name : def.model)
-              } else {
-                setModelLabel('')
+                setModelLabel((prev) => (prev !== '' ? prev : (hit && typeof hit.name === 'string' ? hit.name : def.model)))
               }
             }).catch(() => {
-              if (!alive) return
-              setModels([])
-              setModelLabel('')
+              /* 全局都拿不到才真的没救；保持现状不清空 */
             })
-            return () => { alive = false }
           }
-          /* 有会话：订阅会话模型目录 */
+          loadGlobal()
+
+          /* ② 有会话时，再尝试用会话目录补「当前选中」的名字 */
+          if (sessionId === '') return () => { alive = false }
+
           const directory = api.modelDirectory(sessionId)
-          if (!directory || !directory.store) {
-            setModels([])
-            setModelLabel('')
-            return () => { alive = false }
-          }
+          if (!directory || !directory.store) return () => { alive = false }
+
           const read = () => {
             if (!alive) return
-            const snapshot = directory.store.getSnapshot()
-            const groups = Array.isArray(snapshot.groups) ? snapshot.groups : []
-            setModels(groups)
-            const current = snapshot.current
+            let snapshot
+            try {
+              snapshot = directory.store.getSnapshot()
+            } catch {
+              return
+            }
+            const groups = Array.isArray(snapshot && snapshot.groups) ? snapshot.groups : []
+            /* 会话目录有数据才覆盖；空的不动全局结果 */
+            if (groups.length > 0) setModels(groups)
+            const current = snapshot && snapshot.current
             if (current && typeof current.model === 'string') {
-              const flat = groups.reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
+              const source = groups.length > 0 ? groups : []
+              const flat = source.reduce((all, g) => all.concat(Array.isArray(g.models) ? g.models : []), [])
               const hit = flat.find((m) => m && m.id === current.model)
-              setModelLabel(hit && typeof hit.name === 'string' ? hit.name : current.model)
-            } else {
-              setModelLabel('')
+              const label = hit && typeof hit.name === 'string' ? hit.name : current.model
+              if (label !== '') setModelLabel(label)
             }
           }
           read()
