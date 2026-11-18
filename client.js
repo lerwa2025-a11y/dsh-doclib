@@ -7147,15 +7147,8 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
-            h(CopyToolbar, {
-              t,
-              mode,
-              disabled: props.disabled === true,
-              aiBusy: props.aiBusy === true,
-              onFormat: props.onFormat,
-              onAssist: props.onAssist,
-              onCopyMp: props.onCopyMp,
-            }),
+          /* 文案台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
+             阅读按钮由下面的 ReaderBar 独占一行方框 */
           ),
           /*
            * ── 阅读栏（2026-11-18 照搬素材库 .vpb-bar）──────────────────
@@ -8333,15 +8326,8 @@ window.__ModuleLoader__.load({
                 ),
               ),
             ),
-            h(WritingToolbar, {
-              t,
-              mode: props.mode,
-              disabled: false,
-              aiBusy: props.aiBusy === true,
-              onFormat: props.onFormat,
-              onAssist: props.onAssist,
-              onTimeline: props.onTimeline,
-            }),
+          /* 写作台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
+             阅读按钮由下面的 ReaderBar 独占一行方框 */
           ),
           /* 阅读栏（2026-11-18 照搬素材库 .vpb-bar）：与文案台、素材库三条工具条同构 */
           h(ReaderBar, {
@@ -10862,14 +10848,27 @@ mark.df-hit[data-active="true"] {
  *   · min-width: 0 + 可收缩项 —— 窄窗口先省略字数/状态，按钮组不压缩
  *   · 隐藏滚动条 —— 极窄时仍可横向滚动，但不显示滚动条
  */
+/*
+ * 阅读栏（2026-11-18 需求6）：
+ * 原来是一条裸行，格式工具条才是那个方框。
+ * 现在格式按钮全去掉，阅读按钮独占一行，所以给它补上方框样式。
+ * flex-wrap 让窄面板时按钮换行而不是溢出。
+ */
 .vpb-bar {
-  position: relative; display: flex; align-items: center; gap: 2px 6px; flex: none;
-  width: fit-content; max-width: 100%; min-width: 0;
-  padding: 2px 0; margin: 2px 0 8px;
-  border: 0; border-radius: 0; background: transparent;
-  /* 窄时换行而不是横向滚动（2026-11-18）：滚动会让控件藏在可视区外，
-     看着就是「字超出阅读栏」。换行则整组下移，每个控件都完整。 */
-  white-space: normal; flex-wrap: wrap; overflow: visible;
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  flex: none;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  margin: 12px 0 0;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-layer-1);
   box-sizing: border-box;
 }
 /*
