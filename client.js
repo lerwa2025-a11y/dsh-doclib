@@ -159,6 +159,8 @@ window.__ModuleLoader__.load({
         assistOpen: '打开会话',
         /* 助手栏收起（2026-11-18 大王要求：写作助手能收起到侧边） */
         assistCollapse: '收起助手',
+        assistYou: '我',
+        assistAi: '助手',
         assistHistoryLoading: '读取对话中…',
         assistHistoryEmpty: '还没有对话。问一句试试，或点上面的「打开会话」。',
         assistHistoryMore: '只显示最近 80 条，更早的请点「打开会话」查看。',
@@ -492,6 +494,8 @@ window.__ModuleLoader__.load({
         assistRunning: 'Running',
         assistOpen: 'Open session',
         assistCollapse: 'Collapse assistant',
+        assistYou: 'You',
+        assistAi: 'Assistant',
         assistHistoryLoading: 'Loading conversation…',
         assistHistoryEmpty: 'No messages yet. Ask something, or open the session.',
         assistHistoryMore: 'Showing the latest 80 messages. Open the session for older ones.',
@@ -5409,6 +5413,17 @@ window.__ModuleLoader__.load({
         const scopeCache = { root: '', workspaceId: '', preset: null }
 
         /**
+         * 绑定键可能带板块后缀（root::copy / root::write），
+         * 但真正建会话时 DSH 要的是**真实目录**，后缀必须剥掉。
+         * 会话隔离靠绑定键区分，不靠假路径。
+         */
+        const unscope = (key) => {
+          if (typeof key !== 'string') return ''
+          const at = key.indexOf('::')
+          return at < 0 ? key : key.slice(0, at)
+        }
+
+        /**
          * 解析工作台会话该落在哪个工作区、用哪个预设。
          *
          * 大王的要求是「打开会话默认就是资料库那个工作区，不该再选」——
@@ -5520,6 +5535,8 @@ window.__ModuleLoader__.load({
             const service = sessionsOf()
             if (!service) throw new Error('no-session-service')
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            /* 建会话要用真实目录（剥掉板块后缀），绑定键仍用原值 */
+            const realRoot = unscope(root)
             const existing = await (async () => {
               try {
                 const data = await vaultApiGet('/studio-binding?root=' + encodeURIComponent(root))
@@ -5529,7 +5546,7 @@ window.__ModuleLoader__.load({
               }
             })()
             if (sessionUsable(service, existing)) return existing
-            return await createWorkbenchSession(root)
+            return await createWorkbenchSession(realRoot)
           },
 
           /**
@@ -5543,9 +5560,10 @@ window.__ModuleLoader__.load({
             if (!service) throw new Error('no-session-service')
             /* 空 cwd 会让 Host 去 mkdir '' —— 宁可在这里拦住，也不把一个看不懂的报错甩给用户 */
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            const realRoot = unscope(root)
             let id = currentId
             if (!sessionUsable(service, id)) {
-              id = await createWorkbenchSession(root)
+              id = await createWorkbenchSession(realRoot)
             }
             const scope = service.scope(id)
             const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
@@ -5569,9 +5587,10 @@ window.__ModuleLoader__.load({
             const service = sessionsOf()
             if (!service) throw new Error('no-session-service')
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
+            const realRoot = unscope(root)
             let id = currentId
             if (!sessionUsable(service, id)) {
-              id = await createWorkbenchSession(root)
+              id = await createWorkbenchSession(realRoot)
             }
             /* ① 分界 seq：之后新增的事件才算这一轮的 */
             let sinceSeq = -1
@@ -5637,6 +5656,14 @@ window.__ModuleLoader__.load({
         const t = props.t
         const ctx = props.ctx
         const root = typeof props.root === 'string' ? props.root : ''
+        /*
+         * 会话隔离（2026-11-18 大王要求）：
+         * 文案台和写作台原来共用同一个会话，对话混在一起。
+         * 给每个板块一个独立 scope：绑定键 = root + "::" + 板块标记，
+         * 于是各板块各自建会话、各自读历史，互不干扰。
+         */
+        const boardKey = typeof props.boardKey === 'string' && props.boardKey !== '' ? props.boardKey : 'main'
+        const scopeRoot = root === '' ? '' : root + '::' + boardKey
         const api = useMemo(() => assistantApi(ctx), [ctx])
         const [sessionId, setSessionId] = useState('')
         const [title, setTitle] = useState('')
@@ -5669,14 +5696,14 @@ window.__ModuleLoader__.load({
           setTitle('')
           setRunning(false)
           setError('')
-          if (root === '') return () => { alive = false }
-          void api.loadBinding(root).then((id) => {
+          if (scopeRoot === '') return () => { alive = false }
+          void api.loadBinding(scopeRoot).then((id) => {
             if (alive) setSessionId(id)
           })
           return () => {
             alive = false
           }
-        }, [api, root])
+        }, [api, scopeRoot])
 
         // 订阅会话列表：拿 displayTitle 与 running（运行中/空闲）
         useEffect(() => {
@@ -5739,13 +5766,13 @@ window.__ModuleLoader__.load({
             return
           }
           if (sessionId === '') {
-            if (root === '') {
+            if (scopeRoot === '') {
               setError(t('assistNeedWorkspace'))
               return
             }
             try {
-              const id = await api.ensureSession(root)
-              await api.saveBinding(root, id)
+              const id = await api.ensureSession(scopeRoot)
+              await api.saveBinding(scopeRoot, id)
               setSessionId(id)
             } catch (err) {
               const raw = messageOf(err)
@@ -5815,10 +5842,10 @@ window.__ModuleLoader__.load({
           setError('')
           try {
             if (!api.hasSessionService()) throw new Error('no-session-service')
-            const id = await api.sendText(root, sessionId, text)
+            const id = await api.sendText(scopeRoot, sessionId, text)
             if (id !== sessionId) {
               setSessionId(id)
-              await api.saveBinding(root, id)
+              await api.saveBinding(scopeRoot, id)
             }
             setDraft('')
             /* 发完立刻刷一次记录，让用户看到自己发的内容 */
@@ -5836,7 +5863,7 @@ window.__ModuleLoader__.load({
         }
 
         const startFresh = async () => {
-          await api.unbind(root)
+          await api.unbind(scopeRoot)
           setSessionId('')
           setTitle('')
           setRunning(false)
@@ -5922,6 +5949,7 @@ window.__ModuleLoader__.load({
                   key: index,
                   className: msg.role === 'user' ? 'cb-msg cb-msg-user' : 'cb-msg cb-msg-ai',
                 },
+                h('div', { className: 'cb-msg-who' }, msg.role === 'user' ? t('assistYou') : t('assistAi')),
                 h('div', { className: 'cb-msg-text' }, msg.text),
               ),
             ),
@@ -7070,6 +7098,8 @@ window.__ModuleLoader__.load({
             t,
             ctx: props.ctx,
             root,
+            /* 板块标记：让文案台用自己独立的会话（2026-11-18 隔离） */
+            boardKey: 'copy',
             titleKey: 'copyAssistant',
             placeholderKey: 'copyAssistantInput',
             tasks: [],
@@ -8276,6 +8306,8 @@ window.__ModuleLoader__.load({
             t,
             ctx: props.ctx,
             root,
+            /* 板块标记：让写作台用自己独立的会话（2026-11-18 隔离） */
+            boardKey: 'write',
             titleKey: 'writeAssistant',
             placeholderKey: 'writeInput',
             tasks: [],
@@ -10046,6 +10078,12 @@ mark.df-hit[data-active="true"] {
 }
 .cb-chat-empty .cb-ic { flex: none; margin-top: 2px; color: var(--dsw-alias-brand-primary); }
 .cb-msg { display: flex; flex-direction: column; gap: 2px; }
+/* 发送者标签：对话式界面里一眼看清谁说的（2026-11-18） */
+.cb-msg-who {
+  font-size: 10px; line-height: 1.4; padding: 0 2px;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+}
+.cb-msg-user .cb-msg-who { text-align: right; }
 .cb-msg-text {
   padding: 8px 10px; border-radius: 8px;
   font-size: 12px; line-height: 1.7;
