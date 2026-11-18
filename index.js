@@ -21,7 +21,7 @@ import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
 import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
-import { awaitReply, closeSession, modelCatalog, openSession, selectModel, sendToSession, sessionState } from './studio-session.js'
+import { awaitReply, closeSession, currentModel, modelCatalog, openSession, selectModel, sendToSession, sessionState, warmSession } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
 import {
   clearOrder,
@@ -450,6 +450,29 @@ export function apply(ctx) {
                   provider: body && body.provider,
                   model: body && body.model,
                 }))
+                return
+              }
+
+              /*
+               * 激活会话（2026-11-18 关键）。
+               *
+               * ds-bot 的做法：发消息前先 sessionController.resolveAgent() 把 Agent 拉起来。
+               * 不激活直接 prompt，Agent 发完一轮就休眠 —— 用户必须去会话页点一次
+               * 才能再对话（「跳来跳去」的根因）。
+               *
+               * 客户端在面板挂载 / 切回板块时调这个，把会话预热好。
+               */
+              if (route === '/studio-session-warm' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await warmSession(webCtx, {
+                  sessionId: body && body.sessionId,
+                }))
+                return
+              }
+
+              /* 读会话当前用的模型（面板显示用，不用打开会话页） */
+              if (route === '/studio-session-current-model' && req.method === 'GET') {
+                sendJson(res, 200, await currentModel(webCtx, { sessionId: query.get('session') || '' }))
                 return
               }
 

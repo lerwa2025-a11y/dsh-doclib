@@ -5544,6 +5544,34 @@ window.__ModuleLoader__.load({
            * R7「先选模型再发第一句」的正解：不需要先有会话。
            * Host 侧调 sessionController.modelCatalog()。
            */
+          /**
+           * 激活会话（2026-11-18 关键）。
+           *
+           * 照抄 ds-bot：发消息前先让 Host 做 resolveAgent，把 Agent 拉起来。
+           * 不激活的话 Agent 发完一轮就休眠，用户得去会话页点一下才能再对话。
+           */
+          warmSession: async (id) => {
+            if (typeof id !== 'string' || id === '') return { activated: false }
+            try {
+              return await vaultApiPost('/studio-session-warm', { sessionId: id })
+            } catch {
+              /* 激活失败不阻断，发送时还会再试 */
+              return { activated: false }
+            }
+          },
+          /** 读会话当前模型（面板显示用） */
+          currentModel: async (id) => {
+            if (typeof id !== 'string' || id === '') return { provider: '', model: '' }
+            try {
+              const data = await vaultApiGet('/studio-session-current-model?session=' + encodeURIComponent(id))
+              return {
+                provider: data && typeof data.provider === 'string' ? data.provider : '',
+                model: data && typeof data.model === 'string' ? data.model : '',
+              }
+            } catch {
+              return { provider: '', model: '' }
+            }
+          },
           modelCatalog: async () => {
             const data = await vaultApiGet('/studio-model-catalog')
             return {
@@ -5849,6 +5877,28 @@ window.__ModuleLoader__.load({
           }
         }, [api, scopeRoot])
 
+        /*
+         * 会话就绪后自动激活（2026-11-18 关键，照抄 ds-bot）。
+         *
+         * 大王反馈：切到别的板块再回来，必须先点「打开会话」才能对话。
+         * 原因是会话的 Agent 处于休眠态 —— prompt 能接受，但回复不会来。
+         * ds-bot 每次发消息前都 resolveAgent 一遍，我们在这里做：
+         * sessionId 一确定就在后台预热，用户点发送时 Agent 已经活了。
+         *
+         * 依赖 sessionId，所以「切板块回来」「F5 刷新」「选会话」都会触发。
+         */
+        useEffect(() => {
+          if (sessionId === '') return undefined
+          let alive = true
+          void api.warmSession(sessionId).then((value) => {
+            if (!alive) return
+            /* 激活成功后再拉一次历史，确保记录是最新的 */
+            if (value && value.activated === true) void loadHistory(sessionId)
+          })
+          return () => { alive = false }
+        }, [api, sessionId])
+
+        // 订阅会话列表：拿 displayTitle 与 running（运行中/空闲）
         // 订阅会话列表：拿 displayTitle 与 running（运行中/空闲）
         useEffect(() => {
           if (sessionId === '') return undefined

@@ -1,22 +1,34 @@
 // studio-session.js —— 工作台会话管理（Host 侧）
 //
-// ⚠️ 2026-11-18 第 N 次重写：改用 sessionController，参考 ds-bot 的做法。
+// 2026-11-18 最终方案：sessionController + 显式激活会话（照抄 ds-bot）。
 //
-// 为什么推翻之前的 agents.create() 方案：
-//   agents.create() 返回 AgentHandle，Agent 的存活依赖 handle 不被 dispose。
-//   虽然 handle 存在模块级 Map 里，但 HTTP 请求作用域、进程重启、
-//   以及 DSH 内部的 factory 生命周期都会影响它 —— 切走再回来就接不上（R10 失败）。
+// ── 演进过程（别走回头路）──────────────────────────────────
+//   ✗ agents.create() + AgentHandle
+//       handle 一失效会话就接不上（切走/刷新/重启全废）
 //
-// ds-bot（host/agents.js:40）的做法才是对的：
-//     const { sessionId } = await ctx.sessionController.create({ workspaceId })
-//   会话是 DSH 的**持久化会话**，不绑任何 handle；
-//   发消息用 sessionController.prompt()，等回复用 wait()，
-//   选模型用 selectModel()，全局模型列表用 modelCatalog()。
+//   ✗ sessionController.prompt() 裸调
+//       官方文档说 prompt 会「after explicitly resuming its Session」，
+//       但实测 resume 出来的 Agent 发完一轮就休眠：
+//       用户必须在 DSH 会话页点一次会话把它彻底激活，回来才能用。
+//       这就是大王说的「跳来跳去」。
 //
-// 这套 API 的好处：
-//   · 会话天然出现在 DSH 会话面板（R5）
-//   · 不需要自己管 Agent 生命周期（R10 稳）
-//   · modelCatalog() 不依赖会话（R7 先选模型成立）
+//   ✓ sessionController + resolveAgent() 显式激活
+//       ds-bot 的做法（src/host/delivery.js:11 + capabilities.js:423）：
+//           const r = await ctx.sessionController.resolveAgent(sessionId)
+//           if ('error' in r) throw ...
+//           const agent = r.agent            // 活 Agent
+//           trackAgent(agent)                // 持 WeakRef 防回收
+//       然后再 prompt / selectModel。这样不需要任何跳转。
+//
+// ── 关键 API（Service 目录查证）──────────────────────────
+//   resolveAgent(sessionId) -> { agent } | { error }   ← 激活会话
+//   prompt(request, signal)                             ← 发消息（signal 必传）
+//   wait(request, signal)                               ← 等回复（signal 必传）
+//   selectModel(request)                                ← 选模型
+//   modelCatalog()                                      ← 全局模型列表（不需会话）
+//   state(request, signal)                              ← 会话状态（signal 必传）
+//   create({ workspaceId/cwd, agentPreset })            ← 建会话
+//   workspaceRegistry.archiveSession(sessionId)         ← 删除
 //
 // 全程不碰磁盘、不改任何文档。
 
@@ -25,6 +37,46 @@ function ctrlOf(ctx) {
   const service = typeof ctx.get === 'function' ? ctx.get('sessionController') : undefined
   if (!service || typeof service.create !== 'function') return undefined
   return service
+}
+
+/**
+ * 活 Agent 的缓存：sessionId -> WeakRef<Agent>。
+ *
+ * 为什么必须持有：
+ *   不持有时 Agent 可能被回收，下次还得重新 resolve（慢，且偶发失败）。
+ *   ds-bot 用 WeakRef 而不是强引用，避免插件长期占住内存。
+ *   这里照抄，并在 Agent 卸载时清掉。
+ */
+const liveAgents = new Map()
+
+/**
+ * 激活一个会话，返回活 Agent。
+ *
+ * 这是「不用跳转就能对话」的关键：先让 DSH 把会话的 Agent 拉起来，
+ * 之后 prompt / selectModel 直接作用在活 Agent 上。
+ *
+ * @returns { agent, reused }
+ */
+async function activateSession(ctx, sessionId) {
+  const ctrl = ctrlOf(ctx)
+  if (!ctrl || typeof ctrl.resolveAgent !== 'function') throw new Error('no-session-controller')
+
+  /* 已缓存且还活着：直接用 */
+  const cached = liveAgents.get(sessionId)
+  const alive = cached && typeof cached.deref === 'function' ? cached.deref() : undefined
+  if (alive) return { agent: alive, reused: true }
+
+  /* 否则让 DSH 解析/恢复这个会话 */
+  const resolved = await ctrl.resolveAgent(sessionId)
+  if (resolved && resolved.error) {
+    const code = resolved.error.code || 'session/unavailable'
+    throw new Error(code)
+  }
+  const agent = resolved && resolved.agent
+  if (!agent) throw new Error('session/unavailable')
+
+  liveAgents.set(sessionId, new WeakRef(agent))
+  return { agent, reused: false }
 }
 
 /**
@@ -80,6 +132,15 @@ export async function sendToSession(ctx, options) {
 
   const ctrl = ctrlOf(ctx)
   if (!ctrl || typeof ctrl.prompt !== 'function') throw new Error('no-session-controller')
+
+  /*
+   * 🔑 先激活会话（2026-11-18 关键修复，照抄 ds-bot）。
+   *
+   * 不激活就直接 prompt，Agent 发完一轮就休眠 ——
+   * 用户必须去 DSH 会话页点一次会话才能再对话（「跳来跳去」的根因）。
+   * resolveAgent 把 Agent 拉起来并缓存，之后同一会话直接可用。
+   */
+  await activateSession(ctx, sessionId)
 
   /*
    * ⚠️ signal 是必传参数。
@@ -149,7 +210,12 @@ export async function awaitReply(ctx, options) {
   return { text, empty: text === '', reason: value && value.reason }
 }
 
-/** 选模型（会话级）。 */
+/**
+ * 选模型（会话级）。
+ *
+ * 注意：selectModel 的官方描述是「after explicitly resuming the Session」，
+ * 所以这里也要先 activateSession 一次，保证选中的模型真的落到活 Agent 上。
+ */
 export async function selectModel(ctx, options) {
   const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
   const provider = options && typeof options.provider === 'string' ? options.provider : ''
@@ -160,8 +226,46 @@ export async function selectModel(ctx, options) {
   const ctrl = ctrlOf(ctx)
   if (!ctrl || typeof ctrl.selectModel !== 'function') throw new Error('no-session-controller')
 
+  /* 先激活（同 sendToSession：不激活则模型选择落不到活 Agent 上） */
+  await activateSession(ctx, sessionId)
+
   const value = await ctrl.selectModel({ sessionId, provider, model })
   return { selected: value && value.selected ? value.selected : { provider, model } }
+}
+
+/**
+ * 显式激活一个会话（给客户端「打开会话」用，也可用于预热）。
+ *
+ * 客户端可以在面板挂载时调这个，把 Agent 提前拉起来，
+ * 用户点发送时就不用等 resolve。
+ */
+export async function warmSession(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  if (sessionId === '') throw new Error('no-session')
+  const { reused } = await activateSession(ctx, sessionId)
+  return { sessionId, activated: true, reused }
+}
+
+/**
+ * 读会话当前用的模型（从活 Agent 的 model.current()）。
+ *
+ * 用来在面板上显示「当前模型」——不用先打开会话页。
+ */
+export async function currentModel(ctx, options) {
+  const sessionId = options && typeof options.sessionId === 'string' ? options.sessionId : ''
+  if (sessionId === '') throw new Error('no-session')
+  const { agent } = await activateSession(ctx, sessionId)
+  try {
+    const model = agent && agent.model
+    if (!model || typeof model.current !== 'function') return { provider: '', model: '' }
+    const sel = model.current()
+    return {
+      provider: sel && typeof sel.provider === 'string' ? sel.provider : '',
+      model: sel && typeof sel.model === 'string' ? sel.model : '',
+    }
+  } catch {
+    return { provider: '', model: '' }
+  }
 }
 
 /**
