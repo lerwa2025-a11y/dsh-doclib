@@ -9405,14 +9405,23 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          * 局部 patch 状态容易和磁盘不一致。
          */
         const commitEdit = async () => {
-          if (!editPrompt || !project) return
+          if (!editPrompt) return
           const kind = editPrompt.kind
+          /*
+           * 只有「改项目名」能脱离当前打开的项目干活 —— 它认的是右键点中的那本。
+           * 其余四种卷/章操作都要有已打开的项目才有落点；
+           * 这里显式判一次并关掉输入条，别留一个点了没反应的输入条在界面上。
+           */
+          if (kind !== 'rename-project' && !project) {
+            closeEdit()
+            return
+          }
           /*
            * 改名项目的目标路径以「右键点中的那本书」为准，不用当前打开的那本 ——
            * 用户可以在没切过去的情况下直接改别的项目名。
            */
           const targetPath = kind === 'rename-project'
-            ? String(editPrompt.path || project.path)
+            ? String(editPrompt.path || (project ? project.path : ''))
             : project.path
           const typed = String(editDraft).trim()
           if (kind.indexOf('rename-') === 0 && typed === '') {
@@ -9422,7 +9431,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           try {
             if (kind === 'rename-project') {
               await vaultApiPost('/write-rename-project', { path: targetPath, name: typed })
-              await loadProject(project.path)
+              /* 改的是当前打开那本才需要重读结构；改别人只刷列表 */
+              if (project && project.path === targetPath) await loadProject(targetPath)
               await reloadProjects()
               flash(t('writeProjectRenamed'))
             } else if (kind === 'new-volume') {
