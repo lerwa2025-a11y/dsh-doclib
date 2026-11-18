@@ -3967,7 +3967,14 @@ window.__ModuleLoader__.load({
           h(
             'div',
             {
-              className: 'vp-doccol',
+              className: 'dn-reader vp-doccol',
+              /*
+               * 2026-11-18：纸面上移到整个文档列（包住工具条 + 正文）。
+               * 原来 .dn-reader 只包正文，工具条和标题行露出 bg-base，
+               * 暗色下与正文纸面深浅不同 —— 和文案台同样的毛病。
+               */
+              'data-rt-bg': readerBg,
+              'data-rf-font': readerFont,
               /*
                * 容器查询的宿主：CSS 里用 @container (min-width: 720px) 判断
                * 「这个文档列够不够宽」。够宽就平铺阅读设置，不够宽就收进 Aa。
@@ -8474,6 +8481,13 @@ window.__ModuleLoader__.load({
 
 /* 阅读面板本体：撑满并留出圆角，滚动条在 .vp-read 上（原有行为不变） */
 .dn-reader { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 8px; }
+/*
+ * 内层 .dn-reader（素材库正文那层）不再画纸面：
+ * 纸面已由外层 .vp-doccol.dn-reader 提供（2026-11-18）。
+ * 双层 ::before 会叠加出偏色，且 z-index 容易打架。
+ */
+.dn-reader .dn-reader::before { display: none; }
+.dn-reader .dn-reader { border-radius: 0; }
 
 /* ── 工具栏控件 ────────────────────────────────────────────────────────────
    工具栏自身也带一点磨砂，但同样遵守「只挂 ::before，不挂元素本身」。 */
@@ -9336,7 +9350,12 @@ mark.df-hit[data-active="true"] {
 /* （原 .vp-libfoot 左栏底部工具条已取消：📂 挪到顶栏，左栏底部不再有工具条） */
 .vp-iconbtn[data-on="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
 .vp-splitter { flex: 0 0 4px; }
-.vp-doccol { background: var(--dsw-alias-bg-base); }
+/*
+ * 素材库文档列 = 纸面宿主（2026-11-18 与文案台统一）：
+ * 背景透明（纸面由 .dn-reader::before 画），无圆角。
+ * 原来是 bg-base，暗色下与正文纸面(35,35,36)深浅不同，看着是两块。
+ */
+.vp-doccol { background: transparent; border-radius: 0; }
 .vp-editor { border: 0; border-radius: 0; background: transparent; }
 .vp-doc { /* 缩小四周留白，让编辑/阅读区变大（2026-11-18 大王要求） */ padding: 12px 24px 16px; box-sizing: border-box; overflow: hidden; }
 .vp-docfoot { box-sizing: border-box; }
