@@ -271,18 +271,64 @@ export async function currentModel(ctx, options) {
 /**
  * 全局模型列表（**不需要会话**）。
  *
- * 这是 R7「先选模型再发第一句」的正解：
- * modelCatalog() 直接返回所有可路由模型和部署默认值。
+ * ⚠️ 2026-11-18 修正：原来调 sessionController.modelCatalog() —— 它返回空。
+ * ds-bot 根本不是这么拿的（src/host/models.js:176-189）：
+ *
+ *     for (const provider of ctx.llm.listProviders()) {
+ *       let models = await ctx.llm.listModels(provider.id)
+ *       ...
+ *     }
+ *
+ * **ctx.llm 才是模型列表的正确来源**，与任何会话无关。
+ * 返回结构保持 { default, groups }，客户端不用改。
  */
 export async function modelCatalog(ctx) {
-  const ctrl = ctrlOf(ctx)
-  if (!ctrl || typeof ctrl.modelCatalog !== 'function') throw new Error('no-session-controller')
-  const value = await ctrl.modelCatalog()
-  return {
-    default: value && value.default ? value.default : undefined,
-    groups: Array.isArray(value && value.groups) ? value.groups : [],
-    failures: Array.isArray(value && value.failures) ? value.failures : [],
+  const llm = typeof ctx.get === 'function' ? ctx.get('llm') : undefined
+  if (!llm || typeof llm.listProviders !== 'function') throw new Error('no-llm-service')
+
+  const providers = llm.listProviders()
+  const rows = Array.isArray(providers) ? providers : []
+
+  const groups = []
+  for (const provider of rows) {
+    const id = provider && typeof provider.id === 'string' ? provider.id : ''
+    if (id === '') continue
+    let models = []
+    try {
+      models = await llm.listModels(id)
+    } catch {
+      /* 单个 provider 拉不到就跳过，不拖垮整个列表 */
+      continue
+    }
+    const list = (Array.isArray(models) ? models : [])
+      .map((model) => ({
+        id: model && typeof model.id === 'string' ? model.id : '',
+        name: model && typeof model.name === 'string' ? model.name : (model && typeof model.id === 'string' ? model.id : ''),
+      }))
+      .filter((model) => model.id !== '')
+    if (list.length === 0) continue
+    groups.push({
+      id,
+      name: provider && typeof provider.name === 'string' ? provider.name : id,
+      models: list,
+    })
   }
+
+  /* 部署默认模型（可能不在列表里也要告诉上层） */
+  let def
+  try {
+    const service = typeof ctx.get === 'function' ? ctx.get('agentDefaultModel') : undefined
+    if (service && typeof service.currentSelection === 'function') {
+      const sel = service.currentSelection()
+      if (sel && typeof sel.provider === 'string' && typeof sel.model === 'string') {
+        def = { provider: sel.provider, model: sel.model }
+      }
+    }
+  } catch {
+    /* 拿不到默认值不影响列表 */
+  }
+
+  return { default: def, groups, failures: [] }
 }
 
 /** 读会话状态（运行中/空闲、队列、待输入）。 */

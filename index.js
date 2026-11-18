@@ -476,6 +476,41 @@ export function apply(ctx) {
                 return
               }
 
+              /*
+               * 模型列表诊断（临时，2026-11-18）：
+               * 排查「没有可用模型」到底卡在哪一环 ——
+               *   llm 服务拿不到？listProviders 空？listModels 抛错？
+               */
+              if (route === '/studio-model-diagnose' && req.method === 'GET') {
+                const out = { steps: [] }
+                try {
+                  const llm = typeof webCtx.get === 'function' ? webCtx.get('llm') : undefined
+                  out.steps.push({ step: 'get llm', ok: !!llm, type: typeof llm })
+                  if (llm && typeof llm.listProviders === 'function') {
+                    const providers = llm.listProviders()
+                    out.providerCount = Array.isArray(providers) ? providers.length : 0
+                    out.providers = []
+                    for (const p of (Array.isArray(providers) ? providers : [])) {
+                      const row = { id: p && p.id, name: p && p.name, models: 0, error: null }
+                      try {
+                        const models = await llm.listModels(p.id)
+                        row.models = Array.isArray(models) ? models.length : 0
+                        row.sample = (Array.isArray(models) ? models : []).slice(0, 3).map((m) => ({ id: m.id, name: m.name }))
+                      } catch (err) {
+                        row.error = String(err && err.message ? err.message : err)
+                      }
+                      out.providers.push(row)
+                    }
+                  } else {
+                    out.steps.push({ step: 'listProviders', ok: false })
+                  }
+                } catch (err) {
+                  out.fatal = String(err && err.message ? err.message : err)
+                }
+                sendJson(res, 200, out)
+                return
+              }
+
               /* 全局模型列表：不需要会话（R7 先选模型） */
               if (route === '/studio-model-catalog' && req.method === 'GET') {
                 sendJson(res, 200, await modelCatalog(webCtx))
