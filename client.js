@@ -6474,7 +6474,7 @@ window.__ModuleLoader__.load({
 
         return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', style: props.style },
           h('div', { className: 'cb-aside-h' },
-            h(CbIcon, { name: 'sparkle', small: true }),
+            h('span', { className: 'cb-aside-ic' }, h(CbIcon, { name: 'sparkle', small: true })),
             h('span', null, t(props.titleKey)),
             /* 收起到侧边（2026-11-18） */
             h(
@@ -10415,7 +10415,30 @@ mark.df-hit[data-active="true"] {
   writing-mode: vertical-rl; text-orientation: upright;
   font-size: 11px; letter-spacing: 1px; white-space: nowrap;
 }
-.cb-aside-h { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); }
+/*
+ * 助手标题行（2026-11-18 美化）：
+ * 图标套一个品牌色圆角底座，标题与状态之间的层次更清楚。
+ */
+.cb-aside-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--dsw-alias-label-primary);
+}
+.cb-aside-ic {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-brand-primary);
+}
+.cb-aside-ic .cb-ic { width: 14px; height: 14px; }
+.cb-aside-h > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-aside-h .cb-ic { color: var(--dsw-alias-label-secondary); }
 .cb-aside-n { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-task-card { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
@@ -10448,7 +10471,7 @@ mark.df-hit[data-active="true"] {
   box-sizing: border-box;
 }
 .cb-input > .cb-ic { color: var(--dsw-alias-brand-primary); }
-.cb-send { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
+.cb-send { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); transition: opacity .15s, transform .1s; }
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
 .vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; /* 2026-11-18：原来 overflow:hidden 会把「新建」下拉裁掉（大王截图：被阅读栏遮住）。
@@ -10888,10 +10911,36 @@ mark.df-hit[data-active="true"] {
 /* ── 右栏助手：会话状态 + 真输入框（2026-11-17）────────────────────────── */
 /* 状态文字不再抢 auto（2026-11-18）：让收起按钮独占最右位置，
    否则两者都 margin-left:auto 会互相挤压，按钮被挤没 */
-.cb-status { margin-left: 8px; flex: none; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/* 状态胶囊（2026-11-18）：灰底小胶囊，和截图一致 */
+.cb-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-2);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  white-space: nowrap;
+}
 .cb-status-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
 .cb-status-dot[data-running="true"] { background: var(--dsw-alias-state-success-primary); }
-.cb-sess { flex: none; display: flex; flex-direction: column; gap: 6px; padding: 8px 8px 8px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); }
+/*
+ * 会话区（2026-11-18 美化）：
+ * 原来一整块 bg-layer-2 深色方块显得很重，改成细边框 + 透明底的轻卡片。
+ */
+.cb-sess {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 9px 10px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: transparent;
+}
 .cb-sess-k { font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-sess-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-sess-btns { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -10909,7 +10958,22 @@ mark.df-hit[data-active="true"] {
 }
 .cb-sess-btn-danger:disabled { opacity: .5; cursor: default; }
 
-.cb-sess-btn { height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
+.cb-sess-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
 /*
@@ -10943,24 +11007,33 @@ mark.df-hit[data-active="true"] {
 }
 .cb-msg-user .cb-msg-who { text-align: right; }
 .cb-msg-text {
-  padding: 8px 10px; border-radius: 8px;
-  font-size: 12px; line-height: 1.7;
-  white-space: pre-wrap; overflow-wrap: anywhere;
-  max-width: 100%; box-sizing: border-box;
+  padding: 8px 11px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  font-size: 12px;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* 留一点余量，气泡不顶满，读起来更像对话 */
+  max-width: 90%;
+  box-sizing: border-box;
 }
-/* 用户消息：靠右、品牌色淡底 */
+/*
+ * 用户消息：靠右、实心品牌色、反白字（2026-11-18 美化）。
+ * 原来是 14% 淡底，在暗色主题下几乎看不出是用户说的，
+ * 换成实心后一眼能区分谁说的。
+ */
 .cb-msg-user { align-items: flex-end; }
 .cb-msg-user .cb-msg-text {
-  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
-  color: var(--dsw-alias-label-primary);
-  border-bottom-right-radius: 2px;
+  background: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary-inverted, var(--dsw-alias-bg-base));
+  border-bottom-right-radius: 4px;
 }
 /* 助手消息：靠左、中性底 */
 .cb-msg-ai { align-items: flex-start; }
 .cb-msg-ai .cb-msg-text {
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
-  border-bottom-left-radius: 2px;
+  border-bottom-left-radius: 4px;
 }
 .cb-input-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; padding: 0; }
 .cb-input-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
