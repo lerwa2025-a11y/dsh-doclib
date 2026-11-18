@@ -1426,11 +1426,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       const [sortBy, setSortBy] = useState('name')
       /** 排序下拉是否展开。 */
       const [sortOpen, setSortOpen] = useState(false)
-        const [expanded, setExpanded] = useState(() => BOARD_MEMO.copy.expanded || {})
-        /* 需求5：树展开状态写回内存 */
-        useEffect(() => { BOARD_MEMO.copy.expanded = expanded }, [expanded])
-        /* 需求4（2026-11-18）：首次加载自动全展开，只做一次 */
-        const autoExpandRef = useRef(false)
+      const [expanded, setExpanded] = useState(() => BOARD_MEMO.vault.expanded || {})
+      /* 需求5：素材区树展开状态写回内存 */
+      useEffect(() => { BOARD_MEMO.vault.expanded = expanded }, [expanded])
       const [selected, setSelected] = useState(null)
       const [doc, setDoc] = useState(null) // { path, title, text, mtime, dirty }
       const [draft, setDraft] = useState('')
@@ -4808,9 +4806,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const t = props.t
         const nodes = Array.isArray(props.nodes) ? props.nodes : []
         const activePath = typeof props.activePath === 'string' ? props.activePath : ''
-      const [expanded, setExpanded] = useState(() => BOARD_MEMO.vault.expanded || {})
-      /* 需求5：素材区树展开状态写回内存 */
-      useEffect(() => { BOARD_MEMO.vault.expanded = expanded }, [expanded])
+        const [expanded, setExpanded] = useState(() => BOARD_MEMO.copy.expanded || {})
+        /* 需求5：文案区树展开状态写回内存 */
+        useEffect(() => { BOARD_MEMO.copy.expanded = expanded }, [expanded])
+        /* 需求4：首次自动全展开只做一次（原来这行缺失，导致 ReferenceError 黑屏） */
+        const autoExpandRef = useRef(false)
 
         /* 全部展开/收起信号（2026-11-18）：外部改这个 prop 就重设展开状态 */
         const expandSignal = props.expandSignal || { n: 0, mode: 'all' }
@@ -5915,6 +5915,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [modelOpen, setModelOpen] = useState(false)
         /* 模型菜单容器（2026-11-18：点外面要能关掉） */
         const modelBoxRef = useRef(null)
+        /*
+         * 待落地的模型选择（2026-11-18）：
+         * 没会话时点模型只暂存在这里，等建好会话再真正 select。
+         * ⚠️ 原来 pickModel 里用了 pendingModelRef.current，但从未定义它 ——
+         *    没会话时选模型会 ReferenceError。
+         */
+        const pendingModelRef = useRef(null)
         /*
          * 技能选择（2026-11-18 大王要求）。
          * skills 是 Host 读来的全部技能（只含 userInvocable）；
