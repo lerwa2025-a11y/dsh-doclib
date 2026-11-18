@@ -1123,6 +1123,944 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       return blocks
     }
 
+    /* ══ [t10b · 编辑态实时预览] 共享绘制层：──────────────────────────────────
+     * 2026-11-19 大王要求「编辑态要和阅读态一个样子，只有当前行显示 md 符号」。
+     *
+     * 为什么放在这里：本层与 renderVaultMarkdown 共用同一套 md 正则，
+     * 两处必须一起改，放隔壁才不容易脱节。
+     *
+     * 三条不能违反的契约（t10 段头注释）：
+     *   ① draft 永远是 string；② 绝不 md↔HTML 互转；③ DOM 里除 <br> 外只多 span/strong/em/code，
+     *      它们全部只承载「显示」，符号始终留在 .md-mark 里，靠 CSS 决定看不看得见。
+     *      → 因此 editorToText(editorDom) === draft 这条不变量永远成立，存盘内容不变。
+     *
+     * 关键实测结论（推翻了几版想当然的做法，改之前请先读 helper 里的注释）：
+     *   · 全局光标偏移绝不能用 Range.toString()（<br> 不产生字符，误差逐行累积）；
+     *   · .md-line 必须 display:block + 所有 <br> display:none；
+     *   · 空行/空壳行高度只能靠 min-height，:empty::after 对「内容全在 display:none 里」的行无效；
+     *   · Enter / 多行粘贴 / 跨行删除 / 撤销 必须自己接管，否则浏览器会把结构搞坏。
+     */
+    /*
+     * 编辑态实时预览（Live Preview）——共享绘制层。
+     *
+     * 大王 2026-11-19 要求（原话）：
+     *   「不编辑那一行的时候就隐藏符号，选择那一行就显示出来，同时保留效果，
+     *     删掉符号也同步取消效果」
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 一、唯一不变量（必须永远成立）
+     * ══════════════════════════════════════════════════════════════════════
+     *       editorToText(编辑区 DOM) === draft        // 逐字符相等
+     *
+     * editorToText 是既有的纯文本 walker（三处各一份，本次一个字都不改）：
+     *   TEXT 累加 · BR → "\n" · DIV/P 前后补 "\n" · 其余递归。
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 二、为什么这样做（三条约束来自 client.js 里 t10 契约 §4.3）
+     * ══════════════════════════════════════════════════════════════════════
+     *   1. draft 必须还是 string —— 防抖/saveDoc/Ctrl+S/onBlur/按钮 disabled 全依赖它。
+     *   2. 严禁 md↔HTML 互转 —— 这里只做「md 字符串 → 展示结构」的正向一次性渲染，
+     *      反向永远走 editorToText 的纯文本逆转，不产生任何富文本序列化。
+     *   3. 符号**不删**，包进 .md-mark，只靠 CSS 隐藏。
+     *      → textContent 里符号一直都在 → 不变量天然成立。
+     *      → 用户删掉符号（比如删掉 **），下一次渲染自然就没有 <strong> 了，
+     *        「删掉符号也同步取消效果」自动满足，不需要额外逻辑。
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 三、结构（实测确定，改之前请先读 probe-*.js 的结论）
+     * ══════════════════════════════════════════════════════════════════════
+     *   <span class="md-line" data-line="0" data-kind="h2" data-active="false">
+     *     <span class="md-mark">## </span>内容<span class="md-mark">**</span><strong>粗</strong><span class="md-mark">**</span>
+     *   </span>
+     *   <br>
+     *   <span class="md-line" data-line="1" …>…</span>
+     *
+     *   · 所有 .md-line 都是 display:block，所有 <br> 都是 display:none。
+     *     实测（probe-allblock.js）：block + 隐藏 br 时行距均匀（27px/行）、
+     *     标题/引用/列表能画满宽（w=600），不变量全 true。
+     *     —— 若沿用「inline + br 可见」，标题画不出满宽底边框；
+     *        若「block + br 可见」，视觉上每行之间会多一个空行（实测 tops [23,47,109]）。
+     *     —— <br> display:none 不影响 editorToText：它读 nodeName，不看 CSS。
+     *   · 空行必须靠 .md-line { min-height: 1.85em } 撑住，绝不能用
+     *     .md-line:empty::after{content:"\00a0"} —— 实测（评审 Q7）：
+     *       真空行           :empty::after → 27.75px  ✅
+     *       只有符号的行(## ) :empty::after → 0px      ❌ 整行塌陷、点不到，
+     *                          此时行内唯一的内容是 display:none 的 .md-mark，
+     *                          行不是 :empty，伪元素根本不生成。
+     *     min-height 一行 CSS 同时治好两种行（实测均为 27.75px）。
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 四、重画时机（性能 + 光标稳定的关键）
+     * ══════════════════════════════════════════════════════════════════════
+     *   光标换行（点/方向键）→ mdSetActiveLine 只改 data-active 属性，不重画，光标纹丝不动
+     *   普通字符输入        → 不重画（当前行本来就显示原始 md，无需渲染）
+     *   行数变了/粘贴/撤销  → mdPaintEditor 全量重画 + 按全局字符偏移还原光标
+     *   失焦                → mdPaintEditor(…, -1)，全部收成预览
+     *   输入法组合结束      → 一律重画（浏览器可能已经破坏了 .md-line 结构）
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 五、必须接管的三件事（实测：不接管会丢换行 / 粘贴错乱）
+     * ══════════════════════════════════════════════════════════════════════
+     *   ① Enter：浏览器会把一行拆成两个**相邻 span 且不插 <br>**，
+     *      editorToText 读出来是两个 span 直接相连 → 换行丢失。
+     *   ② 多行粘贴：execCommand('insertText') 带 \n 会拆成多个行、还多出空行。
+     *   ③ Ctrl+Z：全量重画会让原生 undo 栈失效，必须自己维护。
+     *   入口函数：mdKeyDown / mdPasteInto / mdUndoRedo（在本文件末尾）。
+     *   另外 mdRepaintLine 负责「活动行内删掉符号后效果立刻消失」。
+     *
+     * ══════════════════════════════════════════════════════════════════════
+     * 六、配套 CSS（必须一起加，否则行会塌陷 / 符号挡不住）
+     * ══════════════════════════════════════════════════════════════════════
+     *   .md-mark                      { display: none; }
+     *   .md-line[data-active="true"] .md-mark { display: inline; }
+     *   .md-line                      { display: block; min-height: 1.85em; }
+     *   .md-line:empty::after         { display: none; }   ← 不要用 content:"\00a0"
+     *   <br>                          { display: none; }
+     *   .md-line[data-kind^="h"]      { font-weight: 700; }  + 各级字号沿用阅读态
+     *   .md-strong { font-weight: 700 } · .md-em { font-style: italic } · .md-code { 等宽 + 底色 }
+     * 注意 .md-line 与 .md-mark 的 display 必须成对改：只改一个会导致
+     * 「符号显示了但行塌了」或「行正常但符号还藏着」。
+     */
+
+    /** 一行开头的块级标记。捕获组 1 就是原始符号文本（含行尾空格）。 */
+    const MD_HEAD_PATTERN = /^(#{1,6}[ \t]+|[ \t]*>[ \t]?|[ \t]*[-*][ \t]+\[[ xX]\][ \t]+|[ \t]*[-*][ \t]+|[ \t]*\d+[.、][ \t]+)/
+    /** 行内标记：代码、加粗、斜体。与阅读态 vaultInlineNodes 的正则保持一致。 */
+    const MD_INLINE_PATTERN = /(`[^`\n]+`|\*\*[^*\n]+\*\*|\*[^*\s\n][^*\n]*\*)/g
+    /** 超过这个行数就不做预览渲染（纯文本模式），防大文档卡顿。 */
+    const MD_PREVIEW_LINE_LIMIT = 2000
+
+    /** 造一个「符号」span：文本照留，靠 CSS 决定看不看得见。 */
+    function mdMarkNode(text) {
+      const mark = document.createElement('span')
+      mark.className = 'md-mark'
+      mark.textContent = text
+      return mark
+    }
+
+    /** 把一段带行内标记的纯文本铺进 parent：符号进 .md-mark，效果进语义标签。 */
+    function mdInlineInto(parent, text) {
+      MD_INLINE_PATTERN.lastIndex = 0
+      let index = 0
+      let match
+      while ((match = MD_INLINE_PATTERN.exec(text)) !== null) {
+        if (match.index > index) parent.appendChild(document.createTextNode(text.slice(index, match.index)))
+        const token = match[0]
+        if (token.charAt(0) === '`') {
+          parent.appendChild(mdMarkNode('`'))
+          const code = document.createElement('code')
+          code.className = 'md-code'
+          code.textContent = token.slice(1, -1)
+          parent.appendChild(code)
+          parent.appendChild(mdMarkNode('`'))
+        } else if (token.slice(0, 2) === '**') {
+          parent.appendChild(mdMarkNode('**'))
+          const strong = document.createElement('strong')
+          strong.className = 'md-strong'
+          strong.textContent = token.slice(2, -2)
+          parent.appendChild(strong)
+          parent.appendChild(mdMarkNode('**'))
+        } else {
+          parent.appendChild(mdMarkNode('*'))
+          const em = document.createElement('em')
+          em.className = 'md-em'
+          em.textContent = token.slice(1, -1)
+          parent.appendChild(em)
+          parent.appendChild(mdMarkNode('*'))
+        }
+        index = match.index + token.length
+      }
+      if (index < text.length) parent.appendChild(document.createTextNode(text.slice(index)))
+    }
+
+    /** 造一行的展示节点。active 只管 CSS 显示符号，不影响 DOM 里有没有符号。 */
+    function mdLineNode(raw, index, active) {
+      const span = document.createElement('span')
+      span.className = 'md-line'
+      span.setAttribute('data-line', String(index))
+      span.setAttribute('data-active', active ? 'true' : 'false')
+      const head = MD_HEAD_PATTERN.exec(raw)
+      let body = raw
+      if (head) {
+        const markText = head[1]
+        body = raw.slice(markText.length)
+        const trimmed = markText.trim()
+        if (trimmed.charAt(0) === '#') {
+          const level = trimmed.replace(/[^#]/g, '').length
+          span.setAttribute('data-kind', 'h' + Math.min(Math.max(level, 1), 6))
+        } else if (trimmed.charAt(0) === '>') {
+          span.setAttribute('data-kind', 'quote')
+        } else if (/\[[ xX]\]/.test(markText)) {
+          span.setAttribute('data-kind', 'todo')
+          if (/\[[xX]\]/.test(markText)) span.setAttribute('data-done', 'true')
+        } else if (/^[-*]/.test(trimmed)) {
+          span.setAttribute('data-kind', 'ul')
+        } else {
+          span.setAttribute('data-kind', 'ol')
+        }
+        span.appendChild(mdMarkNode(markText))
+      } else {
+        span.setAttribute('data-kind', 'p')
+      }
+      mdInlineInto(span, body)
+      return span
+    }
+
+    /** 找到某个节点所属的 .md-line（不含 editor 自身）。 */
+    function mdLineElementOf(editor, container) {
+      let node = container && container.nodeType === 3 ? container.parentNode : container
+      while (node && node !== editor) {
+        if (node.nodeType === 1 && node.classList && node.classList.contains('md-line')) return node
+        node = node.parentNode
+      }
+      return null
+    }
+
+    /** 读光标位置：{ line, offset }。offset 是「这一行里第几个字符」，含隐藏符号。 */
+    function mdCaretSpot(editor) {
+      if (!editor) return null
+      const selection = typeof window !== 'undefined' ? window.getSelection() : null
+      if (!selection || selection.rangeCount === 0) return null
+      const range = selection.getRangeAt(0)
+      if (!editor.contains(range.startContainer)) return null
+      const lineEl = mdLineElementOf(editor, range.startContainer)
+      if (lineEl) {
+        const line = Number(lineEl.getAttribute('data-line'))
+        const probe = document.createRange()
+        probe.setStart(lineEl, 0)
+        try {
+          probe.setEnd(range.startContainer, range.startOffset)
+        } catch (error) {
+          return { line: Number.isFinite(line) ? line : 0, offset: 0 }
+        }
+        return { line: Number.isFinite(line) ? line : 0, offset: probe.toString().length }
+      }
+      /* 降级模式（超长文档撤回纯文本）：整个编辑区只有一个文本节点。
+         实测（评审 Q6）：不认这一路的话，降级态 mdCaretSpot 返回 null →
+         mdCaretGlobal 也 null → 掉回预览时无法还原光标。 */
+      if (range.startContainer.nodeType === 3 && range.startContainer.parentNode === editor) {
+        const text = editor.textContent || ''
+        const global = Math.max(0, Math.min(range.startOffset, text.length))
+        return mdSpotOfGlobal(text, global)
+      }
+      /* 光标直接落在 editor 上（刚好压在 <br> 或块边界）：按子节点序号折算行。
+         子节点是 [行0, br, 行1, br, …, 行n-1]。
+         第 at 个子节点「之前」这个位置：
+           · at 是偶数 → 落在第 at/2 行的行首
+           · at 是奇数 → 落在第 (at-1)/2 行的**行尾**（紧跟在那一行的 <br> 之前）
+         实测（评审 Q7 ③）：原来一律 Math.floor(at/2) 且 offset 恒为 0，
+         导致点文档末尾光标跳回该行行首。 */
+      if (range.startContainer === editor) {
+        const at = Math.max(0, Math.min(range.startOffset, editor.childNodes.length))
+        const lines = editor.querySelectorAll('.md-line')
+        if (at % 2 === 1) {
+          const line = Math.min((at - 1) / 2, Math.max(lines.length - 1, 0))
+          const row = lines[line]
+          return { line, offset: row ? row.textContent.length : 0 }
+        }
+        return { line: Math.min(at / 2, Math.max(lines.length - 1, 0)), offset: 0 }
+      }
+      return null
+    }
+
+    /**
+     * 读光标的「全局字符偏移」：从编辑区开头数到光标处，含隐藏符号与换行。
+     *
+     * ⚠️ 绝对不能用 Range.toString() 算这个偏移 —— 实测（probe-caret.js）：
+     *   Range.toString() 对 <br> **不产生任何字符**，而 editorToText 把每个 <br>
+     *   算成 1 个 \n。用它算出来的全局偏移每跨一行就少 1，光标会一路往前跑。
+     *   （实测：光标在第 2 行行首，正确全局偏移 6，Range.toString() 给 5；
+     *     往返一次 spot 从 offset 3 变成 2。）
+     * 正解：先按行取 spot，再用各行 textContent 长度累加 —— 与 editorToText 同源。
+     */
+    function mdCaretGlobal(editor) {
+      if (!editor) return null
+      const spot = mdCaretSpot(editor)
+      if (!spot) return null
+      const lines = editor.querySelectorAll('.md-line')
+      let total = 0
+      for (let index = 0; index < spot.line && index < lines.length; index += 1) {
+        total += lines[index].textContent.length + 1
+      }
+      return total + spot.offset
+    }
+
+    /** 把全局字符偏移换算成 { line, offset }。 */
+    function mdSpotOfGlobal(text, global) {
+      const source = String(text)
+      const limit = Math.max(0, Math.min(global, source.length))
+      const before = source.slice(0, limit)
+      const line = before.split('\n').length - 1
+      const offset = limit - (before.lastIndexOf('\n') + 1)
+      return { line, offset }
+    }
+
+    /**
+     * 把光标摆到「第 line 行的第 offset 个字符」。
+     *
+     * ⚠️ 必须跳过 display:none 的 .md-mark —— 实测（评审 Q2）：
+     *   符号隐藏时，offset 0..8 里有 [0,1,2,5,6] 这些位置会把光标放进隐藏的 ** 中间，
+     *   那些落点 getClientRects().length === 0（光标看不见）。用户在 offset 2 敲 Q，
+     *   draft 变成 "**Q粗体**后面的字" 而屏幕显示 "Q粗体后面的字" —— 字进了符号里，
+     *   用户完全无法纠正。所以遇到隐藏节点一律跨过去，把 offset 折算到可见边界。
+     */
+    function mdPlaceCaret(editor, line, offset) {
+      if (!editor) return
+      const selection = typeof window !== 'undefined' ? window.getSelection() : null
+      if (!selection) return
+      const lines = editor.querySelectorAll('.md-line')
+      if (lines.length === 0) {
+        const empty = document.createRange()
+        empty.selectNodeContents(editor)
+        empty.collapse(false)
+        selection.removeAllRanges()
+        selection.addRange(empty)
+        return
+      }
+      const target = lines[Math.min(Math.max(line, 0), lines.length - 1)]
+      const walker = document.createTreeWalker(target, NodeFilter.SHOW_TEXT)
+      const range = document.createRange()
+      let remaining = Math.max(0, offset)
+      let placed = false
+      while (walker.nextNode()) {
+        const current = walker.currentNode
+        const length = current.nodeValue.length
+        /* 这个文本节点所在的 span 被 CSS 隐藏了？整段跳过，不往里落。 */
+        const holder = current.parentNode
+        const hidden = holder && holder.nodeType === 1 && holder.classList
+          && holder.classList.contains('md-mark')
+        if (hidden) {
+          if (remaining < length) remaining = 0
+          else remaining -= length
+          continue
+        }
+        if (remaining <= length) {
+          /* 别落在代理对（emoji/扩展汉字）中间，那样会得到半个字符。 */
+          if (remaining > 0 && remaining < length) {
+            const code = current.nodeValue.charCodeAt(remaining - 1)
+            if (code >= 0xd800 && code <= 0xdbff) remaining -= 1
+          }
+          range.setStart(current, remaining)
+          range.collapse(true)
+          placed = true
+          break
+        }
+        remaining -= length
+      }
+      if (!placed) {
+        range.selectNodeContents(target)
+        range.collapse(false)
+      }
+      selection.removeAllRanges()
+      selection.addRange(range)
+    }
+
+    /** 只改哪一行是「当前行」，不重画 DOM（光标完全不动）。 */
+    function mdSetActiveLine(editor, activeLine) {
+      if (!editor) return
+      const lines = editor.querySelectorAll('.md-line')
+      for (let index = 0; index < lines.length; index += 1) {
+        lines[index].setAttribute('data-active', index === activeLine ? 'true' : 'false')
+      }
+    }
+
+    /**
+     * 重画整个编辑区。
+     *
+     * activeLine 为 -1 表示「没有当前行」（刚切文件 / 已失焦），所有行收成预览。
+     * globalCaret 非 null 时优先用它还原光标（结构变了的场景必须走这条）。
+     *
+     * 行数超过 MD_PREVIEW_LINE_LIMIT 时降级为纯文本（node.textContent = text），
+     * 行为与改造前一致，只是没有预览效果 —— 大文档不至于卡死。
+     */
+    function mdPaintEditor(editor, text, activeLine, globalCaret) {
+      if (!editor) return
+      const focused = typeof document !== 'undefined' && document.activeElement === editor
+      const source = String(text).replaceAll('\u00a0', ' ')
+      /* 显式传了 globalCaret 说明调用方知道结构要变、要求还原光标，
+         这一路不能因为「当前没聚焦」就跳过 —— 程序中主动重画时（applyFormat、
+         恢复历史版本、撤销）焦点常常还没落回来。 */
+      const explicit = globalCaret !== undefined && globalCaret !== null
+      const saved = explicit ? globalCaret : (focused ? mdCaretGlobal(editor) : null)
+      const lines = source.split('\n')
+      if (lines.length > MD_PREVIEW_LINE_LIMIT) {
+        /* 超长文档降级：结构退回纯文本，光标偏移语义与 editorToText 完全一致 */
+        editor.textContent = source
+        if (saved !== null && (focused || explicit)) {
+          const selection = window.getSelection()
+          if (selection) {
+            const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+            const range = document.createRange()
+            let remaining = saved
+            let placed = false
+            while (walker.nextNode()) {
+              const current = walker.currentNode
+              if (remaining <= current.nodeValue.length) {
+                range.setStart(current, remaining)
+                range.collapse(true)
+                placed = true
+                break
+              }
+              remaining -= current.nodeValue.length
+            }
+            if (!placed) {
+              range.selectNodeContents(editor)
+              range.collapse(false)
+            }
+            selection.removeAllRanges()
+            selection.addRange(range)
+          }
+        }
+        return
+      }
+      const fragment = document.createDocumentFragment()
+      const visible = Math.min(Math.max(activeLine, -1), lines.length - 1)
+      for (let index = 0; index < lines.length; index += 1) {
+        fragment.appendChild(mdLineNode(lines[index], index, index === visible))
+        if (index < lines.length - 1) fragment.appendChild(document.createElement('br'))
+      }
+      editor.textContent = ''
+      editor.appendChild(fragment)
+      if (saved !== null && (focused || explicit)) {
+        const spot = mdSpotOfGlobal(source, saved)
+        mdPlaceCaret(editor, spot.line, spot.offset)
+      }
+    }
+
+    /** 编辑区当前的第几行（-1 表示光标不在里面）。 */
+    function mdActiveLineOf(editor) {
+      if (!editor) return -1
+      const spot = mdCaretSpot(editor)
+      return spot ? spot.line : -1
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+     * 以下三个是「接管浏览器默认行为」的助手。实测依据见文件头第五节。
+     * ══════════════════════════════════════════════════════════════════════ */
+
+    /**
+     * 在 draft 的某个全局偏移处插入一段文本（可含 \n）。
+     * Enter 与粘贴都走它：改的是字符串，不是 DOM。
+     */
+    function mdInsertText(draft, global, chunk) {
+      const source = String(draft)
+      const at = Math.max(0, Math.min(global, source.length))
+      const next = source.slice(0, at) + chunk + source.slice(at)
+      return { next, caret: at + chunk.length }
+    }
+
+    /**
+     * 删除 draft 里的 [start, end) 区间，返回新字符串与新光标。
+     * 跨行选中后退格/删除走它。
+     */
+    function mdDeleteRange(draft, start, end) {
+      const source = String(draft)
+      const from = Math.max(0, Math.min(Math.min(start, end), source.length))
+      const to = Math.max(0, Math.min(Math.max(start, end), source.length))
+      return { next: source.slice(0, from) + source.slice(to), caret: from }
+    }
+
+    /** 读当前选区在 draft 里的 [start, end) 全局偏移；没有选区时返回 null。 */
+    function mdSelectionGlobal(editor) {
+      if (!editor) return null
+      const selection = typeof window !== 'undefined' ? window.getSelection() : null
+      if (!selection || selection.rangeCount === 0) return null
+      const range = selection.getRangeAt(0)
+      if (!editor.contains(range.startContainer) || !editor.contains(range.endContainer)) return null
+      const startSpot = mdCaretSpotOfNode(editor, range.startContainer, range.startOffset)
+      const endSpot = mdCaretSpotOfNode(editor, range.endContainer, range.endOffset)
+      if (startSpot === null || endSpot === null) return null
+      return { start: Math.min(startSpot, endSpot), end: Math.max(startSpot, endSpot) }
+    }
+
+    /** 把「某节点 + 节点内偏移」换算成全局字符偏移（内部用，与 mdCaretSpot 同源）。 */
+    function mdCaretSpotOfNode(editor, container, offset) {
+      const lineEl = mdLineElementOf(editor, container)
+      const lines = editor.querySelectorAll('.md-line')
+      const lineTotal = (line) => {
+        let total = 0
+        for (let index = 0; index < line && index < lines.length; index += 1) {
+          total += lines[index].textContent.length + 1
+        }
+        return total
+      }
+      if (!lineEl) {
+        if (container === editor) {
+          /* 与 mdCaretSpot 的 editor 边界分支保持一致：偶数落行首、奇数落前行末尾。 */
+          const at = Math.max(0, Math.min(offset, editor.childNodes.length))
+          if (at % 2 === 1) {
+            const line = Math.min((at - 1) / 2, Math.max(lines.length - 1, 0))
+            const row = lines[line]
+            return lineTotal(line) + (row ? row.textContent.length : 0)
+          }
+          return lineTotal(Math.min(at / 2, Math.max(lines.length - 1, 0)))
+        }
+        /* 降级模式：整个编辑区一个文本节点，全局偏移就是 offset。 */
+        if (container.nodeType === 3 && container.parentNode === editor) {
+          return Math.max(0, Math.min(offset, (editor.textContent || '').length))
+        }
+        return null
+      }
+      const line = Number(lineEl.getAttribute('data-line'))
+      const probe = document.createRange()
+      probe.setStart(lineEl, 0)
+      try {
+        probe.setEnd(container, offset)
+      } catch (error) {
+        return null
+      }
+      return lineTotal(line) + probe.toString().length
+    }
+
+    /**
+     * 极简撤销栈（Ctrl+Z / Ctrl+Shift+Z）。
+     *
+     * 为什么必须自己写：mdPaintEditor 每次都是整块重建 DOM，
+     * 浏览器原生 undo 栈会与新的 DOM 对不上（实测能回退一次，之后失效）。
+     * 这里只存 draft 字符串快照 + 光标，容量 100。
+     */
+    function mdUndoPush(stack, draft, caret) {
+      const last = stack.length > 0 ? stack[stack.length - 1] : null
+      if (last && last.draft === draft) return
+      stack.push({ draft, caret: typeof caret === 'number' ? caret : 0 })
+      if (stack.length > 100) stack.shift()
+    }
+
+    /* ══════════════════════════════════════════════════════════════════════
+     * 下面三个是「接管浏览器默认行为」的**入口**（评审 P0-4）。
+     * 不接管会怎样（全部实测过，见 probe-editing.js / probe-edit2.js）：
+     *
+     *   Enter（insertParagraph）
+     *     浏览器把一行 .md-line 拆成**两个相邻 span 且不插 <br>**
+     *     → editorToText 读成 "前半后半\n第二行"，换行凭空消失。
+     *     Shift+Enter（insertLineBreak）更糟：往行 span 内部塞真实 \n 文本节点
+     *     → 读成 "## 标题\n正文\n甲\n正文乙"，多出一个换行。
+     *   行首 Backspace 合并两行 → 残留 <br> → "AAABBB\n"，尾部多一个 \n。
+     *   跨行删除 → "ABIJ\n\nKLMNO"，中间凭空多一个空行。
+     *   多行粘贴 → 拆成 3 行还多出空行 → "原始行ABC\n\n"。
+     *
+     * 所以：**结构变更一律不让浏览器做**，全部改成「改 draft 字符串 + 重画」。
+     * ══════════════════════════════════════════════════════════════════════ */
+
+    /**
+     * 处理 Enter / 退格 / 删除 / 撤销。
+     *
+     * 返回 `{ handled, draft, caret }`：
+     *   handled === true  → 调用方必须 preventDefault，然后 setDraft(draft)，
+     *                        并在 DOM 更新后 mdPaintEditor(el, draft, spot.line, caret)
+     *   handled === false → 什么都不用做，交给浏览器 / 普通输入路径
+     *
+     * draft 与 caret 是**输入参数**（当前 draft 与光标全局偏移），不是从 DOM 读的 ——
+     * 这样同一个函数在 React 的旧 state 上也能得到确定结果。
+     */
+    function mdKeyDown(event, editor, draft, options) {
+      if (!editor || !event) return { handled: false }
+      const opts = options || {}
+      const source = String(draft)
+      const composing = editor.getAttribute('data-composing') === 'true'
+      /* 输入法组合期间一律不接管，否则会把候选词的按键吃掉。 */
+      if (composing || event.isComposing) return { handled: false }
+
+      const selection = typeof window !== 'undefined' ? window.getSelection() : null
+      const sel = mdSelectionGlobal(editor)
+      const global = mdCaretGlobal(editor)
+      /* 显式 caret 优先：调用方可能比 DOM 更清楚当前插入点（见文件头注释）。 */
+      const caret = typeof opts.caret === 'number'
+        ? Math.max(0, Math.min(opts.caret, source.length))
+        : (global === null ? source.length : global)
+
+      /* ---- Ctrl/Cmd + Z：撤销；Ctrl/Cmd + Shift + Z 或 Ctrl+Y：重做 ---- */
+      if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+        const key = String(event.key).toLowerCase()
+        if (key === 'z') {
+          const result = event.shiftKey
+            ? mdUndoRedo(opts.undoStack, opts.redoStack, source, caret, 'redo')
+            : mdUndoRedo(opts.undoStack, opts.redoStack, source, caret, 'undo')
+          return result === null ? { handled: false } : { handled: true, ...result }
+        }
+        if (key === 'y') {
+          const result = mdUndoRedo(opts.undoStack, opts.redoStack, source, caret, 'redo')
+          return result === null ? { handled: false } : { handled: true, ...result }
+        }
+        return { handled: false }
+      }
+
+      /* ---- Enter / Shift+Enter：都只插一个 \n ---- */
+      if (event.key === 'Enter') {
+        if (event.altKey) return { handled: false }
+        const next = sel && sel.start !== sel.end
+          ? mdDeleteRange(source, sel.start, sel.end)
+          : { next: source, caret }
+        const inserted = mdInsertText(next.next, next.caret, '\n')
+        return { handled: true, draft: inserted.next, caret: inserted.caret }
+      }
+
+      /* ---- Backspace / Delete：有选区就先删选区，单字符删除交给浏览器 ---- */
+      if (event.key === 'Backspace' || event.key === 'Delete') {
+        if (sel && sel.start !== sel.end) {
+          const removed = mdDeleteRange(source, sel.start, sel.end)
+          return { handled: true, draft: removed.next, caret: removed.caret }
+        }
+        if (event.key === 'Backspace') {
+          /* 行首退格：浏览器会合并两行并留下脏 <br>，自己删掉那个 \n 更干净。 */
+          if (caret > 0 && source.charAt(caret - 1) === '\n') {
+            const removed = mdDeleteRange(source, caret - 1, caret)
+            return { handled: true, draft: removed.next, caret: removed.caret }
+          }
+          return { handled: false }
+        }
+        /* Delete 键：行尾删除同理，删掉后面那个 \n */
+        if (caret < source.length && source.charAt(caret) === '\n') {
+          const removed = mdDeleteRange(source, caret, caret + 1)
+          return { handled: true, draft: removed.next, caret: removed.caret }
+        }
+        return { handled: false }
+      }
+
+      return { handled: false }
+    }
+
+    /**
+     * 把剪贴板里的纯文本插进 draft（多行粘贴必须走这里）。
+     *
+     * ⚠️ 不要用 execCommand('insertText') 插多行文本：实测它会把文本拆成
+     *    多个 .md-line 并各自补 <br>，读出来是 "原始行ABC\n\n"（内容挤在一起 + 多空行）。
+     * 顺手把 \r\n / \r 统一成 \n —— 这是既有扁平实现的遗留缺陷，这里一并修掉。
+     */
+    function mdPasteInto(editor, draft, clipboardText, options) {
+      const source = String(draft)
+      const clean = String(clipboardText === null || clipboardText === undefined ? '' : clipboardText)
+        .replace(/\r\n?/g, '\n')
+      const sel = editor ? mdSelectionGlobal(editor) : null
+      const global = editor ? mdCaretGlobal(editor) : null
+      /* 与 mdKeyDown 一致：显式给的插入点优先于 DOM 里摸到的。 */
+      const caret = typeof (options || {}).caret === 'number'
+        ? Math.max(0, Math.min(options.caret, source.length))
+        : (global === null ? source.length : global)
+      const base = sel && sel.start !== sel.end
+        ? mdDeleteRange(source, sel.start, sel.end)
+        : { next: source, caret }
+      const inserted = mdInsertText(base.next, base.caret, clean)
+      return { draft: inserted.next, caret: inserted.caret }
+    }
+
+    /**
+     * 撤销 / 重做。返回 `{ draft, caret }` 或 null（栈空，交给浏览器默认行为）。
+     *
+     * 为什么必须自己写：mdPaintEditor 每轮整块重建 DOM，浏览器原生 undo 栈
+     * 与新的 DOM 对不上（实测只能回退一次，之后失效）。
+     *
+     * 约定：undoStack **不含当前 draft**，只有历史快照。
+     *   undo → 弹出最后一个历史快照，把当前 draft 推进 redoStack
+     *   redo → 反过来
+     */
+    function mdUndoRedo(undoStack, redoStack, draft, caret, mode) {
+      const source = String(draft)
+      const undo = Array.isArray(undoStack) ? undoStack : null
+      const redo = Array.isArray(redoStack) ? redoStack : null
+      if (mode === 'redo') {
+        if (!redo || redo.length === 0) return null
+        const snapshot = redo.pop()
+        if (undo) mdUndoPush(undo, source, caret)
+        return { draft: snapshot.draft, caret: snapshot.caret }
+      }
+      if (!undo || undo.length === 0) return null
+      const snapshot = undo.pop()
+      if (redo) mdUndoPush(redo, source, caret)
+      return { draft: snapshot.draft, caret: snapshot.caret }
+    }
+
+    /**
+     * 只重画一行（活动行内「删掉符号后效果也要跟着消失」靠它，评审 P1-1）。
+     *
+     * 普通输入不重画整个编辑区（为了性能），但那样用户删掉一个 * 时
+     * <strong> 仍然存在 —— 与「删掉符号也同步取消效果」的验收要求不符。
+     * 这里只对当前行重新解析，其余行不动，成本约 0.1ms。
+     *
+     * 返回 true 表示这一行的结构确实变了、调用方需要重摆光标。
+     */
+    function mdRepaintLine(editor, line, text) {
+      if (!editor) return false
+      const lines = editor.querySelectorAll('.md-line')
+      const target = lines[line]
+      if (!target) return false
+      const raw = String(text).replaceAll('\u00a0', ' ')
+      if (target.textContent === raw) return false
+      const fresh = mdLineNode(raw, line, true)
+      target.replaceWith(fresh)
+      return true
+    }
+
+    /** 从整篇 draft 里取出第 line 行的原始文本（含符号）。 */
+    function mdLineTextOf(text, line) {
+      const lines = String(text).split('\n')
+      return line >= 0 && line < lines.length ? lines[line] : ''
+    }
+        /* ══════════════════════════════════════════════════════════════════════
+         * 编辑区接线（三处共用）
+         *
+         * 三块编辑器（素材区 / 文案区 / 写作区）各有一份 editorToText 与各自的
+         * draft state，但「预览怎么接进去」这部分逻辑完全相同：
+         *   光标换行 → 只切 data-active；普通输入 → 只重画本行；
+         *   Enter / 粘贴 / 跨行删 / 撤销 → 改 draft 字符串再整块重画。
+         * 收成一个 hook，避免三份分叉（三份分叉正是这类改动最容易回退的地方）。
+         * ══════════════════════════════════════════════════════════════════════ */
+
+        /**
+         * 给 contenteditable 接上实时预览。
+         *
+         * 参数：
+         *   editorRef     编辑区 DOM 的 ref（三个板块各自已有）
+         *   draft         当前 markdown 原文（string）
+         *   setDraft      更新 draft
+         *   editorToText  DOM → 纯文本（三处各有一份，语义必须与 mdPaintEditor 同源）
+         *   onDirty       标记文档已改动（可选）
+         *   onSave        Ctrl/Cmd+S（可选；不传就不拦 Ctrl+S）
+         *
+         * 返回 { props, paint, sync, ... }：
+         *   props 展开到 contenteditable 节点上；
+         *   paint / sync 供组件在「外部改了 draft」之后把 DOM 对齐。
+         */
+        function useMdPreview(config) {
+          const draft = typeof config.draft === 'string' ? config.draft : ''
+          const editorRef = config.editorRef
+          const setDraft = config.setDraft
+          const editorToText = config.editorToText
+          const onDirty = config.onDirty
+          const onSave = config.onSave
+
+          /* draft 的最新值：事件回调拿到的 props 可能是上一轮的，统一从这里读 */
+          const draftRef = useRef(draft)
+          draftRef.current = draft
+          /* 当前行（-1 = 不在编辑区）：只有这一行显示 md 符号 */
+          const activeRef = useRef(-1)
+          /* 最近一次已知的全局字符偏移：整块重画后靠它还原光标 */
+          const caretRef = useRef(0)
+          /* 输入法组合中：期间一律不碰 DOM */
+          const composingRef = useRef(false)
+          /* 自建撤销栈（浏览器原生的对不上重建后的 DOM，实测只能退一次） */
+          const undoRef = useRef([])
+          const redoRef = useRef([])
+          /* 打字合并撤销：600ms 内的连续输入算一步，否则每个字符都要退一次 */
+          const lastUndoRef = useRef(0)
+
+          const el = () => (editorRef ? editorRef.current : null)
+
+          /** 把 text 画进编辑区；line 传 undefined 时按焦点自适应。 */
+          const paint = (text, caret, line) => {
+            const node = el()
+            if (!node) return
+            const at = typeof caret === 'number' ? caret : caretRef.current
+            const spot = mdSpotOfGlobal(text, at)
+            const active = typeof line === 'number' ? line : spot.line
+            activeRef.current = active
+            caretRef.current = at
+            mdPaintEditor(node, text, active, at)
+          }
+
+          /**
+           * 把外部改掉的 draft 落到 DOM（点格式按钮、恢复历史版本、AI 改写回来）。
+           *
+           * 判据用 editorToText(el) === draft，不用 textContent === draft：
+           * 预览模式下 textContent 恰好等于 draft，但降级模式下也相等。
+           * 用 editorToText 两条路径都对，而且它正是「存盘内容」的定义。
+           */
+          const sync = () => {
+            const node = el()
+            if (!node) return
+            if (composingRef.current) return
+            if (editorToText(node) === draft) return
+            paint(draft, null, -1)
+          }
+
+          const markDirty = () => {
+            if (typeof onDirty === 'function') onDirty()
+          }
+
+          const pushUndo = () => {
+            mdUndoPush(undoRef.current, draftRef.current, caretRef.current)
+            redoRef.current.length = 0
+            lastUndoRef.current = Date.now()
+          }
+
+          /** 打字用的合并压栈：只在距上一次压栈超过 600ms 时记一帧。 */
+          const pushUndoThrottled = () => {
+            const now = Date.now()
+            if (now - lastUndoRef.current > 600) pushUndo()
+          }
+
+          /** 把一次结构变更落到 draft + DOM（Enter / 粘贴 / 撤销都走这里）。 */
+          const commit = (next, caret) => {
+            const node = el()
+            if (!node) return
+            draftRef.current = next
+            caretRef.current = caret
+            const spot = mdSpotOfGlobal(next, caret)
+            activeRef.current = spot.line
+            setDraft(next)
+            mdPaintEditor(node, next, spot.line, caret)
+            markDirty()
+          }
+
+          /* ── 光标换行：只切属性，不重画（整块重画会掉帧、还会抖光标）── */
+          const onSelect = () => {
+            const node = el()
+            if (!node) return
+            const spot = mdCaretSpot(node)
+            if (!spot) return
+            const at = mdCaretGlobal(node)
+            if (at !== null) caretRef.current = at
+            if (spot.line === activeRef.current) return
+            activeRef.current = spot.line
+            mdSetActiveLine(node, spot.line)
+          }
+
+          const onFocus = () => {
+            const node = el()
+            if (!node) return
+            const spot = mdCaretSpot(node)
+            const line = spot ? spot.line : 0
+            activeRef.current = line
+            /* 聚焦时要让本行露出符号，所以必须重画一次（此时用 DOM 里的光标） */
+            const at = mdCaretGlobal(node)
+            mdPaintEditor(node, draftRef.current, line, at)
+          }
+
+          const onBlur = () => {
+            activeRef.current = -1
+            const node = el()
+            if (node) mdSetActiveLine(node, -1)
+            markDirty()
+          }
+
+          /* ── 结构变更一律不让浏览器做 ── */
+          const onKeyDown = (event) => {
+            if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
+              event.preventDefault()
+              if (typeof onSave === 'function') onSave()
+              return
+            }
+            const node = el()
+            if (!node) return
+            const result = mdKeyDown(event, node, draftRef.current, {
+              undoStack: undoRef.current,
+              redoStack: redoRef.current,
+            })
+            if (!result || result.handled !== true) return
+            event.preventDefault()
+            if (result.draft === draftRef.current) return
+            /* 撤销 / 重做自己已经维护好栈；其余结构变更才压栈 */
+            const isUndoRedo = (event.ctrlKey || event.metaKey) && /^z|^y$/i.test(String(event.key))
+            if (!isUndoRedo) pushUndo()
+            commit(result.draft, result.caret)
+          }
+
+          const onPaste = (event) => {
+            const node = el()
+            if (!node) return
+            event.preventDefault()
+            const raw = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
+            if (raw === '') return
+            const result = mdPasteInto(node, draftRef.current, raw)
+            if (result.draft === draftRef.current) return
+            pushUndo()
+            commit(result.draft, result.caret)
+          }
+
+          /*
+           * 普通输入：浏览器已经把字符插进 DOM 了，只把这一行重新解析一次。
+           * 只重画一行的两个原因：
+           *   ① 性能：整块重画在 1900 行文档上是 8ms，每次按键都做会掉帧；
+           *   ② 光标：整块重画必须重摆光标，容易抖；单行只需要行内还原。
+           * 但也正因为不整块重画，必须显式调 mdRepaintLine ——
+           * 否则用户删掉一个 * 时 <strong> 还在，「删符号也同步取消效果」就不成立。
+           */
+          const onInput = (event) => {
+            if (composingRef.current) return
+            const node = event && event.currentTarget ? event.currentTarget : el()
+            if (!node) return
+            const next = editorToText(node)
+            if (next === draftRef.current) return
+            pushUndoThrottled()
+            draftRef.current = next
+            const spot = mdCaretSpot(node)
+            const at = mdCaretGlobal(node)
+            caretRef.current = at === null ? next.length : at
+            const line = spot ? spot.line : 0
+            activeRef.current = line
+            setDraft(next)
+            if (next.split('\n').length !== node.querySelectorAll('.md-line').length) {
+              /* 行数变了，说明浏览器做了结构性编辑（不该发生）：退回整块重画 */
+              mdPaintEditor(node, next, line, caretRef.current)
+              return
+            }
+            mdSetActiveLine(node, line)
+            const repainted = mdRepaintLine(node, line, mdLineTextOf(next, line))
+            if (repainted) {
+              const offset = mdSpotOfGlobal(next, caretRef.current).offset
+              mdPlaceCaret(node, line, offset)
+            }
+            markDirty()
+          }
+
+          const onCompositionStart = () => {
+            composingRef.current = true
+            const node = el()
+            if (node) node.setAttribute('data-composing', 'true')
+          }
+
+          /*
+           * 组合结束：Chrome 里 compositionend **先于** input 触发，
+           * 同步读 DOM 会读到还没提交的旧内容，在回调里直接重画还会把候选框顶开。
+           * 所以推到微任务里做。
+           */
+          const onCompositionEnd = (event) => {
+            composingRef.current = false
+            const node = event && event.currentTarget ? event.currentTarget : el()
+            if (node) node.removeAttribute('data-composing')
+            const finish = () => {
+              const target = el()
+              if (!target) return
+              const next = editorToText(target)
+              if (next === draftRef.current) {
+                /* 内容没变也要重画一次：组合期间 DOM 结构与预览不一致 */
+                mdPaintEditor(target, draftRef.current, activeRef.current)
+                return
+              }
+              draftRef.current = next
+              const spot = mdCaretSpot(target)
+              const at = mdCaretGlobal(target)
+              caretRef.current = at === null ? next.length : at
+              activeRef.current = spot ? spot.line : 0
+              setDraft(next)
+              mdPaintEditor(target, next, activeRef.current, caretRef.current)
+              markDirty()
+            }
+            if (typeof queueMicrotask === 'function') queueMicrotask(finish)
+            else setTimeout(finish, 0)
+          }
+
+          return {
+            props: {
+              onSelect,
+              onFocus,
+              onBlur,
+              onKeyDown,
+              onPaste,
+              onInput,
+              onCompositionStart,
+              onCompositionEnd,
+            },
+            paint,
+            sync,
+            pushUndo,
+            activeLine: () => activeRef.current,
+            caretGlobal: () => caretRef.current,
+          }
+        }
+
+
+
+
     function VaultIcon(props) {
       const size = typeof props.size === 'number' ? props.size : 20
       return h(
@@ -1888,9 +2826,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const node = editorRef.current
         if (!node) return
         if (vaultComposing.current) return
-        if (node.textContent === draft) return
+        if (editorToText(node) === draft) return
         editorEcho.current = draft
-        textToEditor(node, draft)
+        /* 走 sync：它会保住当前行与光标，不会把正在打字的行符号藏起来 */
+        mdPreview.sync()
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [mode, draft, readerFont, readerFontSize, readerLine, readerBg])
 
@@ -2791,13 +3730,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       /** md 原文 → contenteditable。真实 \n 靠 white-space: pre-wrap 显示成换行。 */
       const textToEditor = (node, text) => {
         if (!node) return
-        node.textContent = String(text).replaceAll('\u00a0', ' ')
+        /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
+        mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
       }
 
       /** 读 contenteditable 的纯文本选区，换算成 draft 里的 [start,end) 偏移。 */
       const readSelection = () => {
         const node = editorRef.current
         if (!node) return null
+        /* 预览模式必须用 mdSelectionGlobal：它按「行宽 + 1」累加算全局偏移，
+           与 editorToText / draft 同源。用 Range.toString() 会少算每个 <br>，
+           于是加粗时把换行符包进 ** 里、直接写坏磁盘（评审 P0-1 实测）。 */
+        if (node.querySelector('.md-line') !== null) return mdSelectionGlobal(node)
+        /* 降级模式：保持改造前的扁平语义 */
         const selection = typeof window !== 'undefined' ? window.getSelection() : null
         if (!selection || selection.rangeCount === 0) return null
         const range = selection.getRangeAt(0)
@@ -2815,23 +3760,31 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       const setCaret = (node, offset) => {
         const selection = typeof window !== 'undefined' ? window.getSelection() : null
         if (!selection || !node) return
+        /* 预览模式：必须走 mdPlaceCaret —— 它会跳过 display:none 的 .md-mark，
+           否则光标会停进隐藏的 ** 中间（评审 P0-2：在那儿打字，字进了符号里看不见）。 */
+        if (node.querySelector('.md-line') !== null) {
+          const spot = mdSpotOfGlobal(draft, offset)
+          mdPlaceCaret(node, spot.line, spot.offset)
+          return
+        }
+        /* 降级模式（超长文档退回纯文本）：保持改造前的行为 */
         const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
         let remaining = Math.max(0, offset)
         let target = null
-        let at = 0
+        let cursor = 0
         while (walker.nextNode()) {
           const current = walker.currentNode
           const length = current.nodeValue.replaceAll('\u00a0', ' ').length
           if (remaining <= length) {
             target = current
-            at = remaining
+            cursor = remaining
             remaining = 0
             break
           }
           remaining -= length
         }
         const range = document.createRange()
-        if (target) range.setStart(target, Math.min(at, target.nodeValue.length))
+        if (target) range.setStart(target, Math.min(cursor, target.nodeValue.length))
         else {
           range.selectNodeContents(node)
           range.collapse(false)
@@ -2839,6 +3792,17 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         selection.removeAllRanges()
         selection.addRange(range)
       }
+      
+      /* 编辑态实时预览（2026-11-19 大王要求）：非当前行隐藏 md 符号但保留效果，
+         当前行显示符号；删掉符号效果同步消失。三处编辑器共用同一个 hook。 */
+      const mdPreview = useMdPreview({
+        editorRef,
+        draft,
+        setDraft,
+        editorToText,
+        onDirty: () => setDoc((current) => (current ? { ...current, dirty: true } : current)),
+        onSave: () => void saveDoc(),
+      })
 
       /** 在编辑框里插入/包裹格式标记。 */
       const applyFormat = (kind) => {
@@ -3705,7 +4669,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                       // 重渲染可能重建这个节点，新节点是空的，但 editorEcho 仍等于 draft，
                       // 于是旧的「相等就跳过」逻辑会跳过填充 → 正文整块消失（用户实测 bug）。
                       if (vaultComposing.current) return
-                      if (node.textContent === draft) {
+                      if (editorToText(node) === draft) {
                         editorEcho.current = draft
                         return
                       }
@@ -3721,38 +4685,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     'aria-label': t('modeEdit'),
                     // 输入法组合期间不动 draft：否则每个拼音字母都重置防抖并触发保存。
                     // 便签页当年有这层保护，笔记库一直没有，顺手补上。
-                    onCompositionStart: () => {
-                      vaultComposing.current = true
-                    },
-                    onCompositionEnd: (event) => {
-                      vaultComposing.current = false
-                      const next = editorToText(event.currentTarget)
-                      editorEcho.current = next
-                      setDraft(next)
-                      setDoc((current) => (current ? { ...current, dirty: true } : current))
-                    },
-                    onInput: (event) => {
-                      if (vaultComposing.current) return
-                      const next = editorToText(event.currentTarget)
-                      editorEcho.current = next
-                      setDraft(next)
-                      setDoc((current) => (current ? { ...current, dirty: true } : current))
-                    },
+                    /* 实时预览的接管（2026-11-19）：Enter / 粘贴 / 跨行删 / 撤销
+                       全部走 mdKeyDown 系列，普通输入只重画本行。见 useMdPreview。 */
+                    ...mdPreview.props,
                     onBlur: () => {
+                      mdPreview.props.onBlur()
                       if (doc && doc.dirty) void saveDoc()
-                    },
-                    onKeyDown: (event) => {
-                      if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
-                        event.preventDefault()
-                        void saveDoc()
-                      }
-                    },
-                    // 粘贴一律降级为纯文本：md 不能混进 HTML 标签（契约 §4.3 底线 2）。
-                    onPaste: (event) => {
-                      event.preventDefault()
-                      const text = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
-                      if (text === '') return
-                      document.execCommand('insertText', false, text)
                     },
                   }),
                 ),
@@ -7771,13 +8709,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
         const textToEditor = (node, text) => {
           if (!node) return
-          node.textContent = String(text).replaceAll('\u00a0', ' ')
+          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
+          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
         }
 
         /** 读选区，换算成 draft 的 [start,end) 偏移。 */
         const readSelection = () => {
           const node = editorRef.current
           if (!node) return null
+          /* 预览模式必须用 mdSelectionGlobal：它按「行宽 + 1」累加算全局偏移，
+             与 editorToText / draft 同源。用 Range.toString() 会少算每个 <br>，
+             于是加粗时把换行符包进 ** 里、直接写坏磁盘（评审 P0-1 实测）。 */
+          if (node.querySelector('.md-line') !== null) return mdSelectionGlobal(node)
+          /* 降级模式：保持改造前的扁平语义 */
           const selection = typeof window !== 'undefined' ? window.getSelection() : null
           if (!selection || selection.rangeCount === 0) return null
           const range = selection.getRangeAt(0)
@@ -7794,23 +8738,31 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const setCaret = (node, offset) => {
           const selection = typeof window !== 'undefined' ? window.getSelection() : null
           if (!selection || !node) return
+          /* 预览模式：必须走 mdPlaceCaret —— 它会跳过 display:none 的 .md-mark，
+             否则光标会停进隐藏的 ** 中间（评审 P0-2：在那儿打字，字进了符号里看不见）。 */
+          if (node.querySelector('.md-line') !== null) {
+            const spot = mdSpotOfGlobal(draft, offset)
+            mdPlaceCaret(node, spot.line, spot.offset)
+            return
+          }
+          /* 降级模式（超长文档退回纯文本）：保持改造前的行为 */
           const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
           let remaining = Math.max(0, offset)
           let target = null
-          let at = 0
+          let cursor = 0
           while (walker.nextNode()) {
             const current = walker.currentNode
             const length = current.nodeValue.replaceAll('\u00a0', ' ').length
             if (remaining <= length) {
               target = current
-              at = remaining
+              cursor = remaining
               remaining = 0
               break
             }
             remaining -= length
           }
           const range = document.createRange()
-          if (target) range.setStart(target, Math.min(at, target.nodeValue.length))
+          if (target) range.setStart(target, Math.min(cursor, target.nodeValue.length))
           else {
             range.selectNodeContents(node)
             range.collapse(false)
@@ -7818,6 +8770,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           selection.removeAllRanges()
           selection.addRange(range)
         }
+        
+        /* 编辑态实时预览（2026-11-19 大王要求）：非当前行隐藏 md 符号但保留效果，
+           当前行显示符号；删掉符号效果同步消失。三处编辑器共用同一个 hook。 */
+        const mdPreview = useMdPreview({
+          editorRef,
+          draft,
+          setDraft,
+          editorToText,
+          onSave: () => void save(true),
+        })
 
         /**
          * 格式按钮：往纯文本里插 markdown 标记。
@@ -8183,7 +9145,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 editorRef.current = node
                 if (!node) return
                 if (composing.current) return
-                if (node.textContent === draft) return
+                if (editorToText(node) === draft) return
                 textToEditor(node, draft)
               },
               className: 'cb-editor-surface',
@@ -8192,30 +9154,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               spellCheck: false,
               role: 'textbox',
               'aria-multiline': true,
-              onCompositionStart: () => {
-                composing.current = true
-              },
-              onCompositionEnd: (event) => {
-                composing.current = false
-                setDraft(editorToText(event.currentTarget))
-              },
-              onInput: (event) => {
-                if (composing.current) return
-                setDraft(editorToText(event.currentTarget))
-              },
-              onKeyDown: (event) => {
-                if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
-                  event.preventDefault()
-                  void save(false)
-                }
-              },
-              // 粘贴一律降级为纯文本：md 文件里不能混进 HTML
-              onPaste: (event) => {
-                event.preventDefault()
-                const text = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
-                if (text === '') return
-                document.execCommand('insertText', false, text)
-              },
+              /* 实时预览的接管（2026-11-19）：Enter / 粘贴 / 跨行删 / 撤销
+                 全部走 mdKeyDown 系列，普通输入只重画本行。见 useMdPreview。 */
+              ...mdPreview.props,
+              onBlur: () => {
+                      mdPreview.props.onBlur()
+                      void save(true)
+                    },
             }),
           }),
           /* 正文 | 助手 分隔线（2026-11-18 可拖宽） */
@@ -9439,12 +10384,18 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
         const textToEditor = (node, text) => {
           if (!node) return
-          node.textContent = String(text).replaceAll('\u00a0', ' ')
+          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
+          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
         }
 
         const readSelection = () => {
           const node = editorRef.current
           if (!node) return null
+          /* 预览模式必须用 mdSelectionGlobal：它按「行宽 + 1」累加算全局偏移，
+             与 editorToText / draft 同源。用 Range.toString() 会少算每个 <br>，
+             于是加粗时把换行符包进 ** 里、直接写坏磁盘（评审 P0-1 实测）。 */
+          if (node.querySelector('.md-line') !== null) return mdSelectionGlobal(node)
+          /* 降级模式：保持改造前的扁平语义 */
           const selection = typeof window !== 'undefined' ? window.getSelection() : null
           if (!selection || selection.rangeCount === 0) return null
           const range = selection.getRangeAt(0)
@@ -9461,23 +10412,31 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const setCaret = (node, offset) => {
           const selection = typeof window !== 'undefined' ? window.getSelection() : null
           if (!selection || !node) return
+          /* 预览模式：必须走 mdPlaceCaret —— 它会跳过 display:none 的 .md-mark，
+             否则光标会停进隐藏的 ** 中间（评审 P0-2：在那儿打字，字进了符号里看不见）。 */
+          if (node.querySelector('.md-line') !== null) {
+            const spot = mdSpotOfGlobal(draft, offset)
+            mdPlaceCaret(node, spot.line, spot.offset)
+            return
+          }
+          /* 降级模式（超长文档退回纯文本）：保持改造前的行为 */
           const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT)
           let remaining = Math.max(0, offset)
           let target = null
-          let at = 0
+          let cursor = 0
           while (walker.nextNode()) {
             const current = walker.currentNode
             const length = current.nodeValue.replaceAll('\u00a0', ' ').length
             if (remaining <= length) {
               target = current
-              at = remaining
+              cursor = remaining
               remaining = 0
               break
             }
             remaining -= length
           }
           const range = document.createRange()
-          if (target) range.setStart(target, Math.min(at, target.nodeValue.length))
+          if (target) range.setStart(target, Math.min(cursor, target.nodeValue.length))
           else {
             range.selectNodeContents(node)
             range.collapse(false)
@@ -9485,6 +10444,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           selection.removeAllRanges()
           selection.addRange(range)
         }
+        
+        /* 编辑态实时预览（2026-11-19 大王要求）：非当前行隐藏 md 符号但保留效果，
+           当前行显示符号；删掉符号效果同步消失。三处编辑器共用同一个 hook。 */
+        const mdPreview = useMdPreview({
+          editorRef,
+          draft,
+          setDraft,
+          editorToText,
+          onSave: () => void save(true),
+        })
 
         /** 格式按钮：插 markdown 标记，绝不生成 HTML。 */
         const applyFormat = (kind) => {
@@ -9898,7 +10867,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 editorRef.current = node
                 if (!node) return
                 if (composing.current) return
-                if (node.textContent === draft) return
+                if (editorToText(node) === draft) return
                 textToEditor(node, draft)
               },
               className: 'wbg-editor-surface',
@@ -9907,29 +10876,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               spellCheck: false,
               role: 'textbox',
               'aria-multiline': true,
-              onCompositionStart: () => {
-                composing.current = true
-              },
-              onCompositionEnd: (event) => {
-                composing.current = false
-                setDraft(editorToText(event.currentTarget))
-              },
-              onInput: (event) => {
-                if (composing.current) return
-                setDraft(editorToText(event.currentTarget))
-              },
-              onKeyDown: (event) => {
-                if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
-                  event.preventDefault()
-                  void save(false)
-                }
-              },
-              onPaste: (event) => {
-                event.preventDefault()
-                const text = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
-                if (text === '') return
-                document.execCommand('insertText', false, text)
-              },
+              /* 实时预览的接管（2026-11-19）：Enter / 粘贴 / 跨行删 / 撤销
+                 全部走 mdKeyDown 系列，普通输入只重画本行。见 useMdPreview。 */
+              ...mdPreview.props,
+              onBlur: () => {
+                      mdPreview.props.onBlur()
+                      void save(true)
+                    },
             }),
           }),
           /* 正文 | 助手 分隔线（2026-11-18 可拖宽） */
@@ -10458,6 +11411,106 @@ body.dsh-resizing, body.dsh-resizing * {
 .dn-reader .vp-read .v-h6 { font-size: 0.97em; }
 .dn-reader .vp-read .v-pre { font-size: 0.9em; }
 .dn-reader .vp-read .v-code { font-size: 0.9em; }
+
+/* ── 编辑态实时预览（2026-11-19 大王要求）────────────────────────────
+   非当前行隐藏 md 符号但保留效果，当前行显示符号，删符号效果同步消失。
+   结构：每行一个 span.md-line（含 data-kind / data-active），行间一个
+   <br>（仅用于让 editorToText 数出换行，视觉上隐藏）。
+   与阅读态 .vp-* 同一套观感，变量全部取自主题。 */
+
+/* 行间 <br> 只服务「读成 \n」，不参与排版 */
+.dn-edit-surface br,
+.cb-editor-surface br,
+.wbg-editor-surface br { display: none; }
+
+.md-line {
+  display: block;
+  min-height: 1.85em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 符号层：非当前行藏起来 */
+.md-mark { display: none; }
+.md-line[data-active="true"] .md-mark { display: inline; }
+
+/* 行内效果 */
+.md-strong { font-weight: 700; color: var(--dsw-alias-label-primary); }
+.md-em { font-style: italic; }
+.md-code {
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  padding: 0 4px;
+  font-family: var(--dsw-font-mono, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-size: 0.92em;
+}
+
+/* 标题 */
+.md-line[data-kind="h1"],
+.md-line[data-kind="h2"],
+.md-line[data-kind="h3"],
+.md-line[data-kind="h4"],
+.md-line[data-kind="h5"],
+.md-line[data-kind="h6"] {
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--dsw-alias-brand-primary);
+  margin: 0.6em 0 0.3em;
+}
+.md-line[data-kind="h1"] { font-size: 1.66em; border-bottom: 1px solid var(--dsw-alias-border-l1); padding-bottom: 0.25em; }
+.md-line[data-kind="h2"] { font-size: 1.38em; }
+.md-line[data-kind="h3"] { font-size: 1.17em; }
+.md-line[data-kind="h4"] { font-size: 1.03em; color: var(--dsw-alias-label-primary); }
+.md-line[data-kind="h5"],
+.md-line[data-kind="h6"] { font-size: 0.97em; color: var(--dsw-alias-label-secondary); }
+
+/* 引用：左竖条 + 浅底，与 .vp-read .v-quote 一致 */
+.md-line[data-kind="quote"] {
+  margin: 0.4em 0;
+  padding: 0.25em 10px;
+  border-left: 3px solid var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: 0 8px 8px 0;
+  color: var(--dsw-alias-label-secondary);
+}
+
+/* 列表 / 待办：非当前行用伪元素画标记，当前行显示原始符号后不再画，
+   否则会出现「• - 内容」这种双标记。 */
+.md-line[data-kind="ul"],
+.md-line[data-kind="ol"],
+.md-line[data-kind="todo"] { padding-left: 20px; position: relative; }
+.md-line[data-kind="ul"]:not([data-active="true"])::before,
+.md-line[data-kind="ol"]:not([data-active="true"])::before,
+.md-line[data-kind="todo"]:not([data-active="true"])::before {
+  position: absolute;
+  left: 4px;
+  top: 0;
+  font-size: 0.9em;
+  line-height: 1.85em;
+  color: var(--dsw-alias-brand-primary);
+}
+.md-line[data-kind="ul"]:not([data-active="true"])::before { content: "•"; }
+.md-line[data-kind="todo"]:not([data-active="true"])::before { content: "☐"; }
+.md-line[data-kind="todo"][data-done="true"]:not([data-active="true"])::before { content: "☑"; }
+.md-line[data-kind="ol"]:not([data-active="true"])::before { content: "·"; }
+.md-line[data-side="true"] { color: var(--dsw-alias-label-secondary); }
+
+/* 代码块：整行浅底（围栏那一行在非当前行被隐藏，看起来就像一块代码） */
+.md-line[data-kind="pre"] {
+  background: var(--dsw-alias-bg-layer-2);
+  border-radius: var(--dsw-radius-sm, 8px);
+  padding: 0 8px;
+  font-family: var(--dsw-font-mono, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+  font-size: 0.92em;
+}
+
+/* 分隔线：非当前行直接画成一条线 */
+.md-line[data-kind="hr"]:not([data-active="true"]) {
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  color: transparent;
+  line-height: 1.85em;
+}
+.md-line[data-kind="hr"]:not([data-active="true"]) .md-mark { display: none; }
 
 /* 阅读面板本体：撑满并留出圆角，滚动条在 .vp-read 上（原有行为不变） */
 .dn-reader { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 8px; }
