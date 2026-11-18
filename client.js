@@ -3135,18 +3135,7 @@ window.__ModuleLoader__.load({
           // 有下拉展开时把 overflow 放开，否则绝对定位的面板会被横向滚动容器裁掉
           'data-menu': openMenu === '' ? 'false' : 'true',
         },
-        doc
-          ? h(
-            'span',
-            {
-              className: 'vpb-info',
-              /* 工具条加了文字按钮之后这一项会被挤到省略号，补个 title 让人能看到完整值 */
-              title: Math.max(1, Math.round((doc.size || 0) / 1024)) + ' KB · 约 ' + Math.max(1, Math.round((doc.text || '').length / 1000)) + ' 千字',
-            },
-            Math.max(1, Math.round((doc.size || 0) / 1024)) + ' KB · 约 ' + Math.max(1, Math.round((doc.text || '').length / 1000)) + ' 千字',
-          )
-          : h('span', { className: 'vpb-info vpb-info-empty' }, t('vaultSelectFirst')),
-        h('i', { className: 'vpb-sep' }),
+        /* 字数与预估时长只在文档底部显示（2026-11-18 合并到一处） */
         h('div', { className: 'vpb-grp' }, renderReaderControls()),
         h('i', { className: 'vpb-sep' }),
         /*
@@ -4093,6 +4082,7 @@ window.__ModuleLoader__.load({
               { className: 'vp-docfoot' },
               h('span', null, h('b', null, String(doc && doc.text ? doc.text.length : 0)), ' ' + t('vaultFootWords')),
               h('span', null, t('vaultFootPara') + ' ', h('b', null, String(doc && doc.text ? doc.text.split(/\n\s*\n/).filter((part) => part.trim() !== '').length : 0))),
+              h('span', null, t('copyMinutesPrefix'), h('b', null, String(Math.max(1, Math.round(((doc && doc.text ? doc.text.length : 0)) / 320)))), t('copyMinutesUnit')),
               doc && doc.path ? h('span', { className: 'vp-docfoot-path', title: doc.path }, doc.path) : null,
               h('span', { className: 'dn-spacer' }),
               saveState === 'saving'
@@ -7084,16 +7074,10 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'cb-doc-meta' },
-              h('span', { className: 'cb-pill' }, t(statusKey)),
-              h(
-                'span',
-                { className: 'cb-pill cb-pill-grey', title: meta.hasMeta ? doc.path : t('copyNoMetaHint') },
-                meta.hasMeta ? doc.path : t('copyNoMetaHint'),
-              ),
-              h('i', { className: 'cb-dot' }),
-              h('span', null, words + ' ' + t('copyWordUnit')),
-              h('i', { className: 'cb-dot' }),
-              h('span', null, t('copyMinutesPrefix') + Math.max(1, Math.round(words / 350)) + t('copyMinutesUnit')),
+            /*
+             * 2026-11-18 大王要求：状态胶囊 / 路径 / 字数 / 时长都不在这行了，
+             * 字数与时长统一放到文档底部。这里只留「阅读 / 编辑」切换。
+             */
               h('span', { className: 'cb-dn-spacer' }),
               // 阅读 / 编辑：与素材库同一套观感
               h(
@@ -7139,7 +7123,8 @@ window.__ModuleLoader__.load({
           h(ReaderBar, {
             t,
             hasDoc: true,
-            infoText: words + ' ' + t('copyWordUnit'),
+            /* 字数只在文档底部显示（2026-11-18 合并到一处） */
+            infoText: '',
             dirty: props.dirty === true,
             saveState: props.saveState,
             onFind: () => props.onFind(),
@@ -7163,6 +7148,7 @@ window.__ModuleLoader__.load({
             { className: 'cb-doc-foot' },
             h('span', null, h('b', null, String(words)), ' ' + t('copyWordUnit')),
             h('span', null, t('copyParaUnit') + ' ', h('b', null, String(blocks.length))),
+            h('span', null, t('copyMinutesPrefix'), h('b', null, String(Math.max(1, Math.round(words / 320)))), t('copyMinutesUnit')),
             h(
               'div',
               { className: 'cb-foot-right' },
@@ -8279,12 +8265,7 @@ window.__ModuleLoader__.load({
             h(
               'div',
               { className: 'wbg-doc-meta' },
-              props.project
-                ? h('span', { className: 'wbg-pill' }, props.project.title)
-                : null,
-              h('span', { className: 'wbg-pill wbg-pill-grey' }, file.name),
-              h('i', { className: 'wbg-dot' }),
-              h('span', null, words + ' ' + t('writeWordUnit')),
+            /* 2026-11-18：元数据与字数移到底部，这里只留「阅读 / 编辑」切换 */
               h('span', { className: 'wbg-dn-spacer' }),
               h(
                 'div',
@@ -8325,7 +8306,8 @@ window.__ModuleLoader__.load({
           h(ReaderBar, {
             t,
             hasDoc: true,
-            infoText: words + ' ' + t('writeWordUnit'),
+            /* 字数只在文档底部显示（2026-11-18 合并到一处） */
+            infoText: '',
             dirty: props.dirty === true,
             saveState: props.saveState,
             onFind: () => props.onFind(),
@@ -8350,6 +8332,7 @@ window.__ModuleLoader__.load({
             { className: 'wbg-doc-foot' },
             h('span', null, h('b', null, String(words)), ' ' + t('writeWordUnit')),
             h('span', null, t('writeFootParas') + ' ', h('b', null, String(blocks.filter((b) => b.t !== 'sep').length))),
+            h('span', null, t('copyMinutesPrefix'), h('b', null, String(Math.max(1, Math.round(words / 320)))), t('copyMinutesUnit')),
             h(
               'div',
               { className: 'wbg-foot-right' },
@@ -10812,6 +10795,11 @@ mark.df-hit[data-active="true"] {
 .vpb-state { max-width: 56px; }
 .vpb-droplabel { max-width: 84px; }
 /* 字数/状态可收缩：窄窗口先省略这两个，控件组保持 */
+/* 2026-11-18：字数只在文档底部显示。工具条不传字数时 span 是空的，
+   :empty 选中它就隐藏，紧跟的竖分隔线也一起隐藏，避免留下孤零零的线 */
+.vpb-info:empty { display: none; }
+.vpb-info:empty + .vpb-sep { display: none; }
+
 .vpb-info { flex: 0 0 auto; max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vpb-state { flex: 0 0 auto; white-space: nowrap; }
 .vpb-bar::-webkit-scrollbar { height: 0; display: none; }
