@@ -772,6 +772,36 @@ window.__ModuleLoader__.load({
      */
     const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+    /**
+     * 竖分隔线：拖动调整相邻区域宽度（2026-11-18 大王要求）。
+     *
+     * 实现照抄素材库 .vp-splitter：mousedown 时在 document 上挂
+     * mousemove / mouseup，松手立刻摘掉，不留残余监听。
+     *
+     * dir='right' 往右拖变宽（左侧的列表栏）
+     * dir='left'  往左拖变宽（右侧的助手栏）
+     */
+    const Splitter = ({ className, width, applyWidth, min, max, dir }) => {
+      const onDown = (event) => {
+        event.preventDefault()
+        const startX = event.clientX
+        const base = width
+        const sign = dir === 'left' ? -1 : 1
+        const onMove = (moveEvent) => {
+          applyWidth(Math.min(max, Math.max(min, base + (moveEvent.clientX - startX) * sign)))
+        }
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove)
+          document.removeEventListener('mouseup', onUp)
+          document.body.classList.remove('dsh-resizing')
+        }
+        document.body.classList.add('dsh-resizing')
+        document.addEventListener('mousemove', onMove)
+        document.addEventListener('mouseup', onUp)
+      }
+      return h('div', { className, title: '拖动调整宽度', onMouseDown: onDown })
+    }
+
     /** 文件名（去扩展名）作为标题。 */
     function vaultTitleOf(path) {
       const name = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
@@ -6303,7 +6333,7 @@ window.__ModuleLoader__.load({
           )
         }
 
-        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false' },
+        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', style: props.style },
           h('div', { className: 'cb-aside-h' },
             h(CbIcon, { name: 'sparkle', small: true }),
             h('span', null, t(props.titleKey)),
@@ -6911,6 +6941,9 @@ window.__ModuleLoader__.load({
         const [notice, setNotice] = useState('')
         /* AI 请求进行中：按钮转圈、防止连点发两次 */
         const [aiBusy, setAiBusy] = useState(false)
+        /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
+        const [listW, setListW] = useState(240)
+        const [asideW, setAsideW] = useState(268)
 
         const editorRef = useRef(null)
         const composing = useRef(false)
@@ -7432,6 +7465,16 @@ window.__ModuleLoader__.load({
             onRename: (node) => void renameNode(node),
             onMove: (node) => void moveNode(node),
             onDelete: (node) => void deleteNode(node),
+            style: { width: listW + 'px' },
+          }),
+          /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
+          h(Splitter, {
+            className: 'cb-split',
+            width: listW,
+            applyWidth: setListW,
+            min: 160,
+            max: 460,
+            dir: 'right',
           }),
             /*
              * 树操作的自绘输入条（2026-11-18）：重命名 / 移动。
@@ -7528,6 +7571,15 @@ window.__ModuleLoader__.load({
               },
             }),
           }),
+          /* 正文 | 助手 分隔线（2026-11-18 可拖宽） */
+          h(Splitter, {
+            className: 'cb-split',
+            width: asideW,
+            applyWidth: setAsideW,
+            min: 200,
+            max: 640,
+            dir: 'left',
+          }),
           /* 浮动加号已移除：挪进上面的「稿件」标题行 */
           notice !== '' ? h('div', { className: 'cb-toast' }, notice) : null,
           h(BoardAssistant, {
@@ -7539,6 +7591,7 @@ window.__ModuleLoader__.load({
             titleKey: 'copyAssistant',
             placeholderKey: 'copyAssistantInput',
             tasks: [],
+            style: { width: asideW + 'px' },
           }),
         )
       }
@@ -8135,6 +8188,9 @@ window.__ModuleLoader__.load({
         const [openVolumes, setOpenVolumes] = useState({})
         /* AI 请求进行中：防止连点把同一条续写发两次 */
         const [aiBusy, setAiBusy] = useState(false)
+        /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
+        const [listW, setListW] = useState(240)
+        const [asideW, setAsideW] = useState(268)
         /* 新建项目的自绘输入条（不用 window.prompt：Electron 不支持） */
         const [newProjectOpen, setNewProjectOpen] = useState(false)
         const [projectDraft, setProjectDraft] = useState('')
@@ -8641,6 +8697,16 @@ window.__ModuleLoader__.load({
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
             onDeleteProject: (item) => void deleteProject(item),
+            style: { width: listW + 'px' },
+          }),
+          /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
+          h(Splitter, {
+            className: 'wbg-split',
+            width: listW,
+            applyWidth: setListW,
+            min: 160,
+            max: 460,
+            dir: 'right',
           }),
           h(WritingDoc, {
             t,
@@ -8702,6 +8768,15 @@ window.__ModuleLoader__.load({
               },
             }),
           }),
+          /* 正文 | 助手 分隔线（2026-11-18 可拖宽） */
+          h(Splitter, {
+            className: 'wbg-split',
+            width: asideW,
+            applyWidth: setAsideW,
+            min: 200,
+            max: 640,
+            dir: 'left',
+          }),
           outlineOpen
             ? h(WritingOutline, { t, project, onClose: () => setOutlineOpen(false) })
             : null,
@@ -8747,6 +8822,7 @@ window.__ModuleLoader__.load({
             titleKey: 'writeAssistant',
             placeholderKey: 'writeInput',
             tasks: [],
+            style: { width: asideW + 'px' },
           }),
         )
       }
@@ -8896,6 +8972,36 @@ window.__ModuleLoader__.load({
 .vp-moveicon { flex: 0 0 auto; font-size: 12px; }
 .vp-movename { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-movecurrent { flex: 0 0 auto; font-size: 11px; color: var(--dsw-alias-label-secondary); }
+/* 区域分隔线（2026-11-18 大王要求：文案台/写作台可拖宽） */
+.cb-split, .wbg-split {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+}
+.cb-split::after, .wbg-split::after {
+  content: "";
+  position: absolute;
+  top: 0; bottom: 0; left: 2px; right: 2px;
+  background: transparent;
+  transition: background .12s ease;
+}
+.cb-split:hover::after, .wbg-split:hover::after {
+  background: var(--dsw-alias-brand-primary);
+  opacity: .45;
+}
+/*
+ * 拖动期间关掉宽度过渡（2026-11-18）。
+ * .cb-aside 原本有 transition: width .16s —— 拖的时候每次 mousemove
+ * 都走一遍过渡，手感发黏。拖动时给 body 挂这个类，松手就摘。
+ */
+body.dsh-resizing, body.dsh-resizing * {
+  transition: none !important;
+  user-select: none !important;
+  cursor: col-resize !important;
+}
+
 .vp-splitter { flex: 0 0 6px; cursor: col-resize; border-radius: 4px; background: transparent; }
 .vp-splitter:hover { background: var(--dsw-alias-brand-primary); opacity: .45; }
 .vp-tree-row { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background-color .12s ease; }
