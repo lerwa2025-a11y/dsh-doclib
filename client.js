@@ -5019,7 +5019,12 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
            * 改名期间这行不做按钮，点哪都只作用于输入框。
            */
           const renamingThis = props.rename && props.rename.path === node.path
-          const caretEl = h('span', { className: 'vp-tree-caret' }, isDir ? (isOpen ? '▾' : '▸') : '')
+          /*
+           * 只有目录才有展开箭头。文件行原来也画一个空 span（width 12px + gap 6px），
+           * 名字比素材库同类行右移 18px（2026-11-19 大王反馈「文件位置太靠右」）。
+           * 素材库的文件行本来就没有这个 span，这里跟它对齐。
+           */
+          const caretEl = isDir ? h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸') : null
           const iconEl = h(
             'span',
             { className: 'vp-tree-icon' },
@@ -8001,7 +8006,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             expandSignal: expandSignal,
             /* 树视图（2026-11-18 左栏改树） */
             tree: copyTree,
-            onPickDir: () => {},
+            /* 点目录也设选中（2026-11-19）：原来给的是空函数，选中的文件夹永远不高亮 */
+            onPickDir: (node) => setActivePath(node.path),
             onRename: (node) => void renameNode(node),
             onMove: (node) => void moveNode(node),
             onDelete: (node) => void deleteNode(node),
@@ -11405,10 +11411,10 @@ mark.df-hit[data-active="true"] {
 .wbg-vol-n { flex: none; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-ch { display: flex; align-items: baseline; gap: 8px; padding: 6px 8px; border-radius: var(--dsw-radius-sm, 8px); font-size: 12px; line-height: 1.35; color: var(--dsw-alias-label-secondary); }
 .wbg-ch:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
-.wbg-ch[data-active="true"] { background: var(--dsw-alias-bg-layer-1); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
+.wbg-ch[data-active="true"] { background: var(--dsw-alias-bg-layer-2); box-shadow: 0 1px 2px rgba(0, 0, 0, .06); }
 .wbg-ch-n { flex: none; font-family: 'Consolas', monospace; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-ch-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
-.wbg-ch[data-active="true"] .wbg-ch-t { font-weight: 600; }
+.wbg-ch[data-active="true"] .wbg-ch-t { color: var(--dsw-alias-brand-primary); font-weight: 600; }
 .wbg-ch-w { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-sep { height: 1px; margin: 8px 6px 0; background: var(--dsw-alias-border-l1); }
 .wbg-set { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--dsw-radius-sm, 8px); }
@@ -11455,7 +11461,9 @@ mark.df-hit[data-active="true"] {
 .wbg-nameinput-ch { font-size: 12px; }
 /* 改名失败的提示：跟在标题行下面的小红字，不再是个带输入框的浮条 */
 .wbg-inline-tip { flex: none; margin: 0 12px 6px; padding: 4px 8px; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
-.wbg-proj[data-active="true"] { background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font-weight: 600; }
+/* 选中态统一按素材库（2026-11-19 大王要求）：底色同档 + 名字品牌色加粗 */
+.wbg-proj[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-weight: 600; }
+.wbg-proj[data-active="true"] .wbg-proj-t { color: var(--dsw-alias-brand-primary); font-weight: 600; }
 .wbg-proj-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wbg-proj-n { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
@@ -11615,7 +11623,7 @@ mark.df-hit[data-active="true"] {
 .cb-list-item, .wbg-ch, .wbg-set {
   position: relative; cursor: pointer; box-sizing: border-box;
 }
-.cb-list-item[data-active="true"], .wbg-ch[data-active="true"], .vp-tree-row[data-active="true"] {
+.cb-list-item[data-active="true"], .wbg-ch[data-active="true"], .wbg-proj[data-active="true"], .vp-tree-row[data-active="true"] {
   box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary), 0 1px 2px rgba(0, 0, 0, .05);
 }
 .cb-list-item:hover, .wbg-ch:hover, .wbg-set:hover, .vp-tree-row:hover, .vp-toc-item:hover {
