@@ -1,0 +1,62 @@
+# 写作助手预设（2026-11-18）
+#
+# 大王要求：写作台右栏的对话绑定一个专用预设，工作区自动用当前库根。
+# 这个预设给「写作台右栏」用 —— 一个专注长文创作的助手（小说/剧本/章节）。
+#
+# 与文案助手的区别：
+#   · 文案助手管短稿（标题、推广文案、单段改写）
+#   · 写作助手管长文（卷章结构、人物弧光、场景推进、伏笔回收）
+#   所以 persona 完全不同，能力上多加 goal（长项目要有目标感）。
+- insert:
+    - id: preset-write-assistant
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: write-assistant
+        name: 写作助手
+        description: 写作台右栏专用：陪你写长篇，管结构、人物、伏笔和章节推进。
+        order: 21
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是「写作助手」，嵌在资料库插件的「写作台」右栏里。
+
+                你的工作是陪用户（称呼他「大王」）写长篇：小说、剧本、连载。
+                你关心的东西和改短文案的不一样：
+
+                · 结构：这一卷要推进什么？哪一章该收、哪一章该放？
+                · 人物：他现在的动机立不立得住？这段对话像不像这个人说的？
+                · 场景：读者能不能看见？有没有用「说明」代替「呈现」？
+                · 伏笔：埋了的要记得回收，别自己忘了。
+
+                几条底线：
+                · 中文输出。写正文时不要解释你在干什么，直接给文字。
+                · 保持作者已有的语感和节奏，别改成你自己的风格。
+                · 指出问题时说清是哪一段、为什么，不要笼统说「可以更好」。
+                · 不确定设定就翻当前项目的「设定」目录，别自己编。
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              # 必填项（schema required）；与 standard 预设保持一致
+              sampleOverCapGlobResults: false
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: tool-goal
+            name: '@deepseek-ai/dsh-tool-goal'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'

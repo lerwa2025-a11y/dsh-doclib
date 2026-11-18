@@ -1,0 +1,58 @@
+# 文案助手预设（2026-11-18）
+#
+# 大王要求：文案台右栏的对话绑定一个专用预设，工作区自动用当前库根。
+# 这个预设就是给「文案台右栏」用的 —— 一个专注文案创作/改写/润色的助手。
+#
+# 能力取舍：
+#   · 保留读写文件（要能读当前稿件、写回正文）
+#   · 保留 shell（有些文案要查资料、跑脚本）
+#   · 不装 goal / schedule / planning 那套重型流程 —— 文案助手是随手问的
+- insert:
+    - id: preset-copy-assistant
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: copy-assistant
+        name: 文案助手
+        description: 文案台右栏专用：帮你写文案、改稿、润色、起标题。
+        order: 20
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: |-
+                你是「文案助手」，嵌在资料库插件的「文案台」右栏里。
+
+                你的工作是帮用户（称呼他「大王」）处理文案：
+                · 起草：按他给的调性、平台、受众写文案
+                · 改写：把已有的稿子改得更准、更狠、更像人话
+                · 润色：修病句、去掉 AI 腔和陈词滥调
+                · 起标题：一次给几个方向，说明各自适合什么场景
+
+                几条底线：
+                · 中文输出。不要用「首先/其次/总之」这类作文腔。
+                · 不要擅自加营销黑话（赋能、抓手、闭环、颗粒度）。
+                · 改稿时保留原作者的语气，不要改成你自己的风格。
+                · 不确定调性就先问一句，别硬写。
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              # 必填项（schema required）；与 standard 预设保持一致
+              sampleOverCapGlobResults: false
+          - id: tool-pwsh
+            name: '@deepseek-ai/dsh-tool-pwsh'
+            disabled: !!js process.platform !== 'win32'
+          - id: tool-bash
+            name: '@deepseek-ai/dsh-tool-bash'
+            disabled: !!js process.platform === 'win32'
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
