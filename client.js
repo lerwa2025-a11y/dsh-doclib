@@ -4807,15 +4807,62 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const nodes = Array.isArray(props.nodes) ? props.nodes : []
         const activePath = typeof props.activePath === 'string' ? props.activePath : ''
         const [expanded, setExpanded] = useState(() => BOARD_MEMO.copy.expanded || {})
-        /* 需求5：文案区树展开状态写回内存 */
-        useEffect(() => { BOARD_MEMO.copy.expanded = expanded }, [expanded])
-        /* 需求4：首次自动全展开只做一次（原来这行缺失，导致 ReferenceError 黑屏） */
-        const autoExpandRef = useRef(false)
-
-        /* 全部展开/收起信号（2026-11-18）：外部改这个 prop 就重设展开状态 */
-        const expandSignal = props.expandSignal || { n: 0, mode: 'all' }
+        /*
+         * 需求5：把展开状态写回内存，供切板块回来时恢复。
+         *
+         * ⚠️ 跳过挂载时第一次 —— 否则「从没设置过」会被写成 {}，
+         *    和用户「手动全部收起」的 {} 分不出来，切回来就不知道该展开还是收起。
+         */
+        const memoDirtyRef = useRef(false)
         useEffect(() => {
-          if (!expandSignal || expandSignal.n === 0) return
+          if (!memoDirtyRef.current) { memoDirtyRef.current = true; return }
+          BOARD_MEMO.copy.expanded = expanded
+        }, [expanded])
+        /* 合并版 effect 内部用 didInitRef / lastSignalRef，不再需要 autoExpandRef */
+
+        /*
+         * 展开状态（2026-11-18 需求4 + 需求5 合并版）。
+         *
+         * 原来拆成两个 effect（信号 + 首次自动展开），它们是打架的：
+         *   · 按钮按 expandSignal.mode='all' 显示「全部收起」，但 n=0 时被 return，树是收起的
+         *   · 两个 effect 都 setExpanded，后执行的覆盖前面的，结果取决于 React 调度顺序
+         *
+         * 现在一条管完：
+         *   ① 首次（树数据到达时）
+         *      内存有记录 -> 恢复它（需求5：切板块回来是退出时的界面）
+         *      内存没记录 -> 全展开（需求4：重启后的默认状态）
+         *   ② 之后
+         *      用户点「全部展开/收起」-> 按 mode 执行
+         *      树重新加载（nodes 变）-> **不覆盖**用户手动设的状态
+         *
+         * 用 lastSignalRef 记住上次的信号值，才能区分「nodes 变了」和「用户点了按钮」。
+         */
+        const expandSignal = props.expandSignal || { n: 0, mode: 'all' }
+        const didInitRef = useRef(false)
+        const lastSignalRef = useRef('')
+
+        useEffect(() => {
+          if (nodes.length === 0) return
+
+          const sig = expandSignal.n + ':' + expandSignal.mode
+          const isFirst = !didInitRef.current
+          const signalChanged = lastSignalRef.current !== sig
+
+          /* ── 首次 ── */
+          if (isFirst) {
+            didInitRef.current = true
+            lastSignalRef.current = sig
+            if (BOARD_MEMO.copy.expanded !== undefined) {
+              setExpanded(BOARD_MEMO.copy.expanded)
+              return
+            }
+          } else if (!signalChanged) {
+            /* 不是首次、用户也没点按钮 —— 只是树数据变了，别覆盖用户状态 */
+            return
+          } else {
+            lastSignalRef.current = sig
+          }
+
           const next = {}
           if (expandSignal.mode === 'all') {
             const walk = (list) => {
@@ -4829,37 +4876,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             walk(nodes)
           }
           setExpanded(next)
-          /* 依赖加 nodes.length：树数据到达后要重跑，否则 n 不变永远展不开 */
-        }, [expandSignal.n, expandSignal.mode, nodes.length])
-
-        /*
-         * 首次自动全展开（2026-11-18 需求4）。
-         *
-         * 原来初始 expandSignal.n=0 会被上面的 effect 直接 return，
-         * 所以打开时文件夹是收起的；但工具栏图标按 mode='all' 显示
-         * 「全部收起」，状态自相矛盾。这里在节点首次到达时展开一次。
-         */
-        useEffect(() => {
-          if (autoExpandRef.current) return
-          if (nodes.length === 0) return
-          autoExpandRef.current = true
-          /* 需求5：上次退出时已有展开状态，就恢复它，不要全展开覆盖 */
-          if (BOARD_MEMO.copy.expanded && Object.keys(BOARD_MEMO.copy.expanded).length > 0) {
-            setExpanded(BOARD_MEMO.copy.expanded)
-            return
-          }
-          const next = {}
-          const walk = (list) => {
-            for (const node of list || []) {
-              if (node.type === 'dir') {
-                next[node.path] = true
-                walk(node.children)
-              }
-            }
-          }
-          walk(nodes)
-          setExpanded(next)
-        }, [nodes])
+        }, [nodes.length, expandSignal.n, expandSignal.mode])
         const [ctxMenu, setCtxMenu] = useState(null)
 
         /* 点外面 / 按 Esc 关右键菜单 */
