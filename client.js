@@ -802,6 +802,15 @@ window.__ModuleLoader__.load({
 
     const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
+/**
+ * 板块状态记忆（2026-11-18 需求5）。
+ *
+ * 大王要求：切板块/切页面再回来，要回到退出时的界面（选中的文件、
+ * 展开的文件夹都在）；但 F5 刷新或重启 DSH 要回到默认。
+ * 所以存内存 —— 不放 sessionStorage（那个刷新不丢）。
+ */
+const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
+
     /**
      * 竖分隔线：拖动调整相邻区域宽度（2026-11-18 大王要求）。
      *
@@ -1417,7 +1426,11 @@ window.__ModuleLoader__.load({
       const [sortBy, setSortBy] = useState('name')
       /** 排序下拉是否展开。 */
       const [sortOpen, setSortOpen] = useState(false)
-      const [expanded, setExpanded] = useState({})
+        const [expanded, setExpanded] = useState(() => BOARD_MEMO.copy.expanded || {})
+        /* 需求5：树展开状态写回内存 */
+        useEffect(() => { BOARD_MEMO.copy.expanded = expanded }, [expanded])
+        /* 需求4（2026-11-18）：首次加载自动全展开，只做一次 */
+        const autoExpandRef = useRef(false)
       const [selected, setSelected] = useState(null)
       const [doc, setDoc] = useState(null) // { path, title, text, mtime, dirty }
       const [draft, setDraft] = useState('')
@@ -4795,7 +4808,9 @@ window.__ModuleLoader__.load({
         const t = props.t
         const nodes = Array.isArray(props.nodes) ? props.nodes : []
         const activePath = typeof props.activePath === 'string' ? props.activePath : ''
-        const [expanded, setExpanded] = useState({})
+      const [expanded, setExpanded] = useState(() => BOARD_MEMO.vault.expanded || {})
+      /* 需求5：素材区树展开状态写回内存 */
+      useEffect(() => { BOARD_MEMO.vault.expanded = expanded }, [expanded])
 
         /* 全部展开/收起信号（2026-11-18）：外部改这个 prop 就重设展开状态 */
         const expandSignal = props.expandSignal || { n: 0, mode: 'all' }
@@ -4815,6 +4830,35 @@ window.__ModuleLoader__.load({
           }
           setExpanded(next)
         }, [expandSignal.n, expandSignal.mode])
+
+        /*
+         * 首次自动全展开（2026-11-18 需求4）。
+         *
+         * 原来初始 expandSignal.n=0 会被上面的 effect 直接 return，
+         * 所以打开时文件夹是收起的；但工具栏图标按 mode='all' 显示
+         * 「全部收起」，状态自相矛盾。这里在节点首次到达时展开一次。
+         */
+        useEffect(() => {
+          if (autoExpandRef.current) return
+          if (nodes.length === 0) return
+          autoExpandRef.current = true
+          /* 需求5：上次退出时已有展开状态，就恢复它，不要全展开覆盖 */
+          if (BOARD_MEMO.copy.expanded && Object.keys(BOARD_MEMO.copy.expanded).length > 0) {
+            setExpanded(BOARD_MEMO.copy.expanded)
+            return
+          }
+          const next = {}
+          const walk = (list) => {
+            for (const node of list || []) {
+              if (node.type === 'dir') {
+                next[node.path] = true
+                walk(node.children)
+              }
+            }
+          }
+          walk(nodes)
+          setExpanded(next)
+        }, [nodes])
         const [ctxMenu, setCtxMenu] = useState(null)
 
         /* 点外面 / 按 Esc 关右键菜单 */
@@ -6900,7 +6944,7 @@ window.__ModuleLoader__.load({
 
         return h(
           'div',
-          { className: 'cb-list' },
+          { className: 'cb-list', style: props.style },
           h(
             'div',
             { className: 'cb-search' },
@@ -7209,7 +7253,10 @@ window.__ModuleLoader__.load({
         const [exists, setExists] = useState(false)
         const [loading, setLoading] = useState(true)
         const [query, setQuery] = useState('')
-        const [activePath, setActivePath] = useState('')
+        /* 需求5：从内存恢复上次选中的稿件 */
+        const [activePath, setActivePath] = useState(() => BOARD_MEMO.copy.activePath || '')
+        /* 需求5：选中的稿件写回内存，切板块回来能恢复 */
+        useEffect(() => { BOARD_MEMO.copy.activePath = activePath }, [activePath])
         /* 目录树（2026-11-18：左栏改树，数据来自 /copy-tree） */
         const [copyTree, setCopyTree] = useState([])
         /* 阅读设置副本（2026-11-18）：ReaderBar 回调上来，应用到正文 */
@@ -7975,7 +8022,7 @@ window.__ModuleLoader__.load({
 
         return h(
           'div',
-          { className: 'wbg-list' },
+          { className: 'wbg-list', style: props.style },
           h(
             'div',
             { className: 'wbg-search' },
@@ -8432,7 +8479,10 @@ window.__ModuleLoader__.load({
         const [query, setQuery] = useState('')
         const [activeProject, setActiveProject] = useState('')
         const [project, setProject] = useState(null)
-        const [activeFile, setActiveFile] = useState('')
+        /* 需求5：从内存恢复上次选中的项目与文件 */
+        const [activeFile, setActiveFile] = useState(() => BOARD_MEMO.write.activeFile || '')
+        /* 需求5：选中的文件写回内存 */
+        useEffect(() => { BOARD_MEMO.write.activeFile = activeFile }, [activeFile])
         const [file, setFile] = useState(null)
         const [draft, setDraft] = useState('')
         /* 阅读设置副本（2026-11-18）：ReaderBar 回调上来，应用到正文 */
