@@ -25,7 +25,7 @@ window.__ModuleLoader__.load({
       zh: {
         panel: '工作台',
         // ── [工作台三板块] ──
-        tabVault: '素材库',
+        tabVault: '素材区',
         wsLabel: '工作台区域',
         wsShared: '四板块共用',
         wsPickTitle: '选择工作台区域（四个板块共用同一个工作区）',
@@ -33,8 +33,8 @@ window.__ModuleLoader__.load({
         asideAssistant: '工作台助手',
         asidePreset: '工作台预设',
         assistantHint: '让助手读这篇，或说改哪里…',
-        tabCopy: '文案台',
-        tabWrite: '写作台',
+        tabCopy: '文案区',
+        tabWrite: '写作区',
         tabVaultDesc: '笔记、资料、电子书',
         tabCopyDesc: '公众号、专栏、产品文案',
         tabWriteDesc: '短篇与长篇小说',
@@ -165,16 +165,18 @@ window.__ModuleLoader__.load({
         assistHistoryEmpty: '还没有对话。问一句试试，或点上面的「打开会话」。',
         assistHistoryMore: '只显示最近 80 条，更早的请点「打开会话」查看。',
         assistExpand: '展开助手',
-        assistNew: '换一个新会话',
+        assistNew: '新会话',
+        assistConfirmNew: '确认新会话？',
+        assistConfirmArchive: '确认归档？',
         assistSend: '发送',
         assistNoService: '当前环境没有会话服务，发不出去',
         assistCreateSession: 'New session',
-        assistDeleteSession: 'Archive session',
+        assistDeleteSession: 'Archive',
         assistDeleting: 'Archiving…',
         assistNoSessionYet: 'No session yet',
         /* 会话区常驻（2026-11-18） */
         assistCreateSession: '新建会话',
-        assistDeleteSession: '归档会话',
+        assistDeleteSession: '归档',
         assistDeleting: '归档中…',
         assistNoSessionYet: '还没建会话',
         assistSendFailed: '发送失败：',
@@ -233,8 +235,8 @@ window.__ModuleLoader__.load({
         copyParaUnit: '段落',
         copyReadTime: '预计阅读',
         copySavedAt: '自动保存于 ',
-        copyAssistant: '写作助手',
-        copyAssistantInput: '让助手接着写，或说改哪里…',
+        copyAssistant: '文案助手',
+        copyAssistantInput: '说点什么，或者贴一段稿子过来…',
         // ── [文案台 · 接真实数据] ──
         copyEmptyDir: '库里还没有「文案」文件夹',
         copyEmptyDirSub: '新建一篇稿件，或在库根建一个「文案」文件夹放 .md 稿件',
@@ -377,7 +379,7 @@ window.__ModuleLoader__.load({
       en: {
         panel: 'Workbench',
         // ── [Workbench tabs] ──
-        tabVault: 'Library',
+        tabVault: 'Assets',
         wsLabel: 'Workspace',
         wsShared: 'Shared',
         wsPickTitle: 'Choose the workspace (all four boards share one)',
@@ -516,7 +518,9 @@ window.__ModuleLoader__.load({
         assistHistoryEmpty: 'No messages yet. Ask something, or open the session.',
         assistHistoryMore: 'Showing the latest 80 messages. Open the session for older ones.',
         assistExpand: 'Expand assistant',
-        assistNew: 'Start another session',
+        assistNew: 'New session',
+        assistConfirmNew: 'New session?',
+        assistConfirmArchive: 'Archive?',
         assistSend: 'Send',
         assistNoService: 'No session service here; cannot send',
         assistSendFailed: 'Send failed: ',
@@ -575,8 +579,8 @@ window.__ModuleLoader__.load({
         copyParaUnit: 'paragraphs',
         copyReadTime: 'Reading time',
         copySavedAt: 'Autosaved at ',
-        copyAssistant: 'Writing assistant',
-        copyAssistantInput: 'Ask the assistant to keep writing, or what to change…',
+        copyAssistant: 'Copy assistant',
+        copyAssistantInput: 'Say something, or paste a draft…',
         copyEmptyDir: 'No "文案" folder in this library yet',
         copyEmptyDirSub: 'Create a draft, or add a "文案" folder with .md files to the library root',
         copyEmptyList: 'No drafts found',
@@ -4650,7 +4654,6 @@ window.__ModuleLoader__.load({
             h('span', { className: 'wb-ws-k' }, t('wsLabel')),
             h('b', { className: 'wb-ws-name' }, label || '—'),
             root ? h('span', { className: 'wb-ws-path' }, root) : null,
-            h('span', { className: 'wb-ws-tag' }, t('wsShared')),
             h('svg', { className: 'wb-ws-caret', viewBox: '0 0 24 24', 'aria-hidden': 'true' },
               h('path', { d: 'm6 9 6 6 6-6' })),
           ),
@@ -5889,6 +5892,21 @@ window.__ModuleLoader__.load({
         const warmRef = useRef(false)
         /* 会话建立中（防连点，2026-11-18 会话区常驻配套） */
         const [sessionBusy, setSessionBusy] = useState(false)
+        /*
+         * 二次确认（2026-11-18 需求2：点「新会话」「归档」防误触）。
+         * 第一次点只把按钮变成「确认…？」，3 秒内再点才真执行；
+         * 超时或点其他地方自动复原。不用系统 confirm —— 那会阻塞界面。
+         */
+        const [confirmSess, setConfirmSess] = useState('')
+        const confirmTimer = useRef(null)
+        const askConfirm = (kind) => {
+          setConfirmSess(kind)
+          if (confirmTimer.current) clearTimeout(confirmTimer.current)
+          confirmTimer.current = setTimeout(() => {
+            confirmTimer.current = null
+            setConfirmSess('')
+          }, 3000)
+        }
         /* 删除会话中（2026-11-18 会话卡片配套） */
         const [deletingSess, setDeletingSess] = useState(false)
         /*
@@ -6529,16 +6547,28 @@ window.__ModuleLoader__.load({
                 type: 'button',
                 className: 'cb-sess-btn',
                 disabled: sessionBusy,
-                onClick: () => void ensureSessionNow(),
-              }, sessionId !== '' ? t('assistNew') : t('assistCreateSession')),
+                onClick: () => {
+                  if (confirmSess !== 'new') { askConfirm('new'); return }
+                  setConfirmSess('')
+                  void ensureSessionNow()
+                },
+              }, confirmSess === 'new'
+                ? t('assistConfirmNew')
+                : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
               /* 删除这个会话（2026-11-18 大王要求：会话要能删） */
               sessionId !== ''
                 ? h('button', {
                   type: 'button',
                   className: 'cb-sess-btn cb-sess-btn-danger',
                   disabled: deletingSess,
-                  onClick: () => void deleteSession(),
-                }, deletingSess ? t('assistDeleting') : t('assistDeleteSession'))
+                  onClick: () => {
+                    if (confirmSess !== 'archive') { askConfirm('archive'); return }
+                    setConfirmSess('')
+                    void deleteSession()
+                  },
+                }, deletingSess
+                  ? t('assistDeleting')
+                  : (confirmSess === 'archive' ? t('assistConfirmArchive') : t('assistDeleteSession')))
                 : null,
             ),
           ),
@@ -9169,7 +9199,20 @@ window.__ModuleLoader__.load({
 /* 次要动作组：打开文件夹 / 刷新（并排，32px 高，与选择器同高） */
 .wb-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 /* 紧凑图标按钮：32px 方形圆角，与工作区选择器同高 */
-.wb-iconbtn { flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+/* 顶栏图标按钮（2026-11-18 需求8）：去掉边框，只留 hover 底色 */
+.wb-iconbtn {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
 .wb-iconbtn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .wb-iconbtn[data-active="true"] { background: var(--dsw-alias-brand-primary); border-color: transparent; color: var(--dsw-alias-bg-base); }
 .wb-iconbtn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
@@ -9187,7 +9230,29 @@ window.__ModuleLoader__.load({
 .wb-action:focus-visible .wb-action-icon { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: 2px; }
 /* 选择器：包一层定位上下文，弹出层挂在它下面 */
 .wb-ws-wrap { position: relative; flex: none; }
-.wb-ws { margin-left: auto; display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12px; color: var(--dsw-alias-label-secondary); max-width: 520px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+/*
+ * 工作台区域选择器（2026-11-18 需求8）：
+ * 原来 margin-left: auto 靠右，改成两侧 auto 让它水平居中。
+ */
+.wb-ws {
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 10px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  font-size: 12px;
+  color: var(--dsw-alias-label-secondary);
+  max-width: 520px;
+  white-space: nowrap;
+  overflow: hidden;
+  font: inherit;
+  cursor: pointer;
+}
 .wb-ws { font: inherit; cursor: pointer; }
 .wb-ws:hover { background: var(--dsw-alias-interactive-bg-hover); }
 .wb-ws[data-open="true"] { border-color: var(--dsw-alias-brand-primary); }
@@ -11094,7 +11159,17 @@ mark.df-hit[data-active="true"] {
 .cb-send { border: 0; cursor: pointer; }
 .cb-send:disabled { opacity: .45; cursor: default; }
 /* 模型座位：贴输入行左侧，弹出层向上开（输入行在底部，向下会被裁） */
-.cb-model { position: relative; flex: none; min-width: 0; max-width: 132px; }
+/*
+ * 模型座位（2026-11-18 需求1）：
+ * 原来 flex: none + max-width 132px —— 名字一长就把技能星标挤到第二行。
+ * 改成可收缩：空间够就并排，会话栏被拉窄才让模型名先截断，星标始终不下移。
+ */
+.cb-model {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 180px;
+}
 .cb-model-btn { display: inline-flex; align-items: center; gap: 2px; max-width: 132px; height: 22px; padding: 0 6px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; }
 .cb-model-btn:hover { color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .cb-model-btn[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
