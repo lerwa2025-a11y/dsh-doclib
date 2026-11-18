@@ -21,6 +21,7 @@ import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
 import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
+import { closeSession, closeSessionById, listSessions, openSession, sendToSession } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
 import {
   clearOrder,
@@ -402,6 +403,65 @@ export function apply(ctx) {
                   /* 读不到就当未知，客户端不做校验 */
                 }
                 sendJson(res, 200, { sessionId: sid, preset })
+                return
+              }
+
+              /*
+               * 工作台「真会话」管理（2026-11-18 重写）。
+               *
+               * 为什么放 Host：客户端的 sessions 服务根本没有 create()，
+               * 它只有 retain / scope / binding / fork，而 scope(id) 只能
+               * 借用「已 retained 的」——之前 client 里 hasSessionService 查 create，
+               * 恒为 false，于是永远报「当前环境没有会话服务」。
+               *
+               * 这里改用官方 Agent API（ctx.agents.create + agent.followup），
+               * 建出来的会话是**真正的活会话**，会自然出现在 DSH 会话面板里。
+               */
+              if (route === '/studio-session-open' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await openSession(webCtx, {
+                  key: body && body.key,
+                  root: body && body.root,
+                  preset: body && body.preset,
+                }))
+                return
+              }
+
+              if (route === '/studio-session-send' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, await sendToSession(webCtx, {
+                  sessionId: body && body.sessionId,
+                  text: body && body.text,
+                }))
+                return
+              }
+
+              /*
+               * 关闭一个工作台会话 + 解绑。
+               *
+               * 大王：「绑定失效是 bug 才对」——所以删会话必须同时清绑定，
+               * 否则下次打开还会指向一个已经 dispose 的会话，又报错。
+               */
+              if (route === '/studio-session-close' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                const byKey = body && typeof body.key === 'string' ? body.key : ''
+                const byId = body && typeof body.sessionId === 'string' ? body.sessionId : ''
+                let closed = { closed: false }
+                if (byKey !== '') closed = await closeSession(webCtx, byKey)
+                else if (byId !== '') closed = await closeSessionById(webCtx, byId)
+                /* 解绑：key 就是绑定键（root::board），直接清掉 */
+                try {
+                  const keyToClear = byKey !== '' ? byKey : (body && typeof body.root === 'string' ? body.root : '')
+                  if (keyToClear !== '') await clearBinding(keyToClear)
+                } catch {
+                  /* 解绑失败不影响关闭 */
+                }
+                sendJson(res, 200, closed)
+                return
+              }
+
+              if (route === '/studio-session-list' && req.method === 'GET') {
+                sendJson(res, 200, { sessions: listSessions() })
                 return
               }
 

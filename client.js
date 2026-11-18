@@ -169,9 +169,13 @@ window.__ModuleLoader__.load({
         assistSend: '发送',
         assistNoService: '当前环境没有会话服务，发不出去',
         assistCreateSession: 'New session',
+        assistDeleteSession: 'Delete session',
+        assistDeleting: 'Deleting…',
         assistNoSessionYet: 'No session yet',
         /* 会话区常驻（2026-11-18） */
         assistCreateSession: '新建会话',
+        assistDeleteSession: '删除会话',
+        assistDeleting: '删除中…',
         assistNoSessionYet: '还没建会话',
         assistSendFailed: '发送失败：',
         assistNeedWorkspace: '先点顶栏的「工作台区域」选一个文件夹，这个工作台才会有会话',
@@ -5477,21 +5481,28 @@ window.__ModuleLoader__.load({
         }
 
         /** 建一个工作台会话：优先按工作区 + 预设建，缺哪样退哪样。 */
+        /**
+         * 建一个工作台会话（2026-11-18 重写）。
+         *
+         * 客户端没有 sessions.create()，所以交给 Host：
+         * Host 用 ctx.agents.create() 建真 Agent + 真会话，
+         * 这样会话会出现在 DSH 会话面板里（大王要的效果）。
+         *
+         * root 传真实目录；key 用于 Host 侧按「库根 + 板块」持有 handle。
+         */
         const createWorkbenchSession = async (root, board) => {
-          const service = sessionsOf()
-          if (!service) throw new Error('no-session-service')
           if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
           const scope = await resolveScope(root, board)
-          const extra = {}
-          if (scope.preset !== null) extra.agentPreset = scope.preset
-          if (scope.workspaceId !== '') {
-            try {
-              return await service.create({ workspaceId: scope.workspaceId, ...extra })
-            } catch {
-              /* 工作区建不了就退回目录方式 */
-            }
+          const key = board ? root + '::' + board : root
+          const data = await vaultApiPost('/studio-session-open', {
+            key,
+            root,
+            preset: scope.preset !== null ? scope.preset : '',
+          })
+          if (!data || typeof data.sessionId !== 'string' || data.sessionId === '') {
+            throw new Error('session-create-failed')
           }
-          return await service.create({ cwd: root, ...extra })
+          return data.sessionId
         }
 
         /** 模型选择服务：与 DSH 主对话（/model 弹窗、输入框旁的模型座位）共用同一份 per-session 状态。 */
@@ -5512,21 +5523,30 @@ window.__ModuleLoader__.load({
             return undefined
           }
         }
-        const sessionUsable = (service, id) => {
-          if (typeof id !== 'string' || id === '') return false
-          if (typeof service.list?.getSnapshot !== 'function') return true
-          const snapshot = service.list.getSnapshot()
-          const rows = snapshot && snapshot.byId ? snapshot.byId : undefined
-          return !!rows && !!rows[id]
-        }
+        /**
+         * 这个会话 id 还能不能用。
+         *
+         * 客户端拿不到 service.list，所以这里只做「形状检查」；
+         * 真正失效（被删/被 dispose）由 Host 的 send/open 路由抛出 no-live-agent，
+         * 上层收到后会重建 —— 不在这里瞎猜。
+         */
+        const sessionUsable = (service, id) => typeof id === 'string' && id !== ''
         return {
           sessions: sessionsOf,
           modelDirectory: modelDirectoryFor,
           hasModelService: () => !!modelsOf(),
-          hasSessionService: () => {
-            const service = sessionsOf()
-            return !!service && typeof service.create === 'function' && typeof service.scope === 'function'
-          },
+          /**
+           * 能不能建会话。
+           *
+           * ⚠️ 2026-11-18 修正：原来查客户端 sessions 服务的 create()，
+           * 但客户端那一面**根本没有 create**（只有 retain/scope/binding/fork），
+           * 所以这个判断恒为 false，一律报「当前环境没有会话服务」。
+           *
+           * 现在会话由 Host 用官方 Agent API 建（ctx.agents.create），
+           * 客户端只要能访问 Host 路由就行 —— 交给调用时的实际请求去验证，
+           * 这里恒返回 true，避免前置阻塞。
+           */
+          hasSessionService: () => true,
           /** 读这个库根绑到哪个会话。读不到就是空串（当作未绑定）。 */
           loadBinding: async (root) => {
             if (typeof root !== 'string' || root.trim() === '') return ''
@@ -5551,8 +5571,6 @@ window.__ModuleLoader__.load({
            * 模型选择是 per-session 的，所以点模型按钮时也需要先有一个会话。
            */
           ensureSession: async (root) => {
-            const service = sessionsOf()
-            if (!service) throw new Error('no-session-service')
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
             /* 建会话要用真实目录（剥掉板块后缀），绑定键仍用原值 */
             const realRoot = unscope(root)
@@ -5571,7 +5589,7 @@ window.__ModuleLoader__.load({
              * 光看「会话还在」就复用会让文案台一直用错预设。
              * 这里比对它实际用的预设与本板块期望的预设，不一致就重建。
              */
-            if (sessionUsable(service, existing)) {
+            if (typeof existing === 'string' && existing !== '') {
               const board = boardOf(root)
               let wanted = ''
               if (board !== '') {
@@ -5604,20 +5622,30 @@ window.__ModuleLoader__.load({
            * 为什么先查一遍列表：绑定可能指向已被删掉的会话，直接 send 会报错；
            * 这里顺手校正，用户不会看到一个永远发不出去的输入框。
            */
+          /**
+           * 发一条消息（2026-11-18 重写：交给 Host 的 agent.followup）。
+           *
+           * 客户端 sessions 服务没有 create()，scope(id) 又只能借用已 retained 的，
+           * 所以消息发送必须在 Host 侧做 —— 那边的 handle.agent.followup() 才是正路。
+           */
           sendText: async (root, currentId, text) => {
-            const service = sessionsOf()
-            if (!service) throw new Error('no-session-service')
-            /* 空 cwd 会让 Host 去 mkdir '' —— 宁可在这里拦住，也不把一个看不懂的报错甩给用户 */
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
             const realRoot = unscope(root)
             let id = currentId
-            if (!sessionUsable(service, id)) {
+            if (!(typeof id === 'string' && id !== '')) {
               id = await createWorkbenchSession(realRoot, boardOf(root))
             }
-            const scope = service.scope(id)
-            const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
-            if (!conversation || typeof conversation.send !== 'function') throw new Error('no-conversation-service')
-            await conversation.send(text)
+            try {
+              await vaultApiPost('/studio-session-send', { sessionId: id, text })
+            } catch (err) {
+              /* 会话已失效（被删 / 被 dispose）：重建一次再发 */
+              if (messageOf(err).includes('no-live-agent')) {
+                id = await createWorkbenchSession(realRoot, boardOf(root))
+                await vaultApiPost('/studio-session-send', { sessionId: id, text })
+              } else {
+                throw err
+              }
+            }
             return id
           },
           /**
@@ -5633,12 +5661,10 @@ window.__ModuleLoader__.load({
            * 由调用方决定怎么提示，不编假结果。
            */
           askOnce: async (root, currentId, text) => {
-            const service = sessionsOf()
-            if (!service) throw new Error('no-session-service')
             if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
             const realRoot = unscope(root)
             let id = currentId
-            if (!sessionUsable(service, id)) {
+            if (!(typeof id === 'string' && id !== '')) {
               id = await createWorkbenchSession(realRoot, boardOf(root))
             }
             /* ① 分界 seq：之后新增的事件才算这一轮的 */
@@ -5649,11 +5675,8 @@ window.__ModuleLoader__.load({
             } catch {
               /* 拿不到分界就退回 -1（整段日志都算新的），仍能取到回复 */
             }
-            /* ② 发消息 */
-            const scope = service.scope(id)
-            const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
-            if (!conversation || typeof conversation.send !== 'function') throw new Error('no-conversation-service')
-            await conversation.send(text)
+            /* ② 发消息（2026-11-18：走 Host 的 agent.followup） */
+            await vaultApiPost('/studio-session-send', { sessionId: id, text })
             /* ③ 等回复（Host 侧轮询，最长 2 分钟） */
             let reply = { text: '', empty: true }
             try {
@@ -5738,6 +5761,8 @@ window.__ModuleLoader__.load({
         const warmRef = useRef(false)
         /* 会话建立中（防连点，2026-11-18 会话区常驻配套） */
         const [sessionBusy, setSessionBusy] = useState(false)
+        /* 删除会话中（2026-11-18 会话卡片配套） */
+        const [deletingSess, setDeletingSess] = useState(false)
         /*
          * 助手栏收起态（2026-11-18 大王要求：写作助手要能收起到侧边去）。
          * 收起时只剩一条竖直窄条，点它或按钮展开 —— 正文区拿回 268px 宽度。
@@ -6006,6 +6031,37 @@ window.__ModuleLoader__.load({
           }
         }
 
+        /**
+         * 删除当前会话（2026-11-18 大王要求）。
+         *
+         * 做三件事：
+         *   ① Host 侧 dispose 那个 Agent（释放内存、停止运行）
+         *   ② 清掉绑定 —— 「绑定失效是 bug」，不清的话下次打开还指向死会话
+         *   ③ 本地清空 sessionId / 聊天记录
+         *
+         * 注意：DSH 里的会话日志本身不会被删（那是 DSH 自己的资产），
+         *      只是助手不再使用它。要彻底删请去 DSH 会话面板操作。
+         */
+        const deleteSession = async () => {
+          if (deletingSess) return
+          if (scopeRoot === '') return
+          setDeletingSess(true)
+          setError('')
+          try {
+            await vaultApiPost('/studio-session-close', { key: scopeRoot, root: unscope(scopeRoot) })
+          } catch {
+            /* Host 侧关不掉也继续清本地，别卡住界面 */
+          }
+          setSessionId('')
+          setTitle('')
+          setRunning(false)
+          setMessages([])
+          setHistoryMore(false)
+          setModelLabel('')
+          setModels([])
+          setDeletingSess(false)
+        }
+
         const statusText = sessionId === '' ? t('assistUnbound') : busy || running ? t('assistRunning') : t('assistIdle')
         /** 空白会话：DSH 打开它会显示新手页，所以先提示一句，别让人以为坏了。 */
         const [blank, setBlank] = useState(false)
@@ -6075,6 +6131,15 @@ window.__ModuleLoader__.load({
                 disabled: sessionBusy,
                 onClick: () => void ensureSessionNow(),
               }, sessionId !== '' ? t('assistNew') : t('assistCreateSession')),
+              /* 删除这个会话（2026-11-18 大王要求：会话要能删） */
+              sessionId !== ''
+                ? h('button', {
+                  type: 'button',
+                  className: 'cb-sess-btn cb-sess-btn-danger',
+                  disabled: deletingSess,
+                  onClick: () => void deleteSession(),
+                }, deletingSess ? t('assistDeleting') : t('assistDeleteSession'))
+                : null,
             ),
           ),
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
@@ -10204,6 +10269,18 @@ mark.df-hit[data-active="true"] {
 .cb-sess-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 /* 没会话时的占位文字（2026-11-18 会话区常驻） */
 .cb-sess-none { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-style: italic; }
+/* 删除会话按钮（2026-11-18）：危险操作用错误色，避免误点 */
+.cb-sess-btn-danger {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);
+}
+.cb-sess-btn-danger:hover {
+  color: var(--dsw-alias-state-error-primary);
+  border-color: var(--dsw-alias-state-error-primary);
+  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
+}
+.cb-sess-btn-danger:disabled { opacity: .5; cursor: default; }
+
 .cb-sess-btn { height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
