@@ -139,8 +139,6 @@ window.__ModuleLoader__.load({
         readerFontHei: '黑体',
         readerFontKai: '楷体',
         readerFontFang: '仿宋',
-        readerZoomOut: '减小字号（A-）',
-        readerZoomIn: '增大字号（A+）',
         readerZoom: '字号',
         readerLine: '行距',
         vaultReload: '刷新',
@@ -519,8 +517,6 @@ window.__ModuleLoader__.load({
         readerFontHei: 'Heiti',
         readerFontKai: 'Kaiti',
         readerFontFang: 'FangSong',
-        readerZoomOut: 'Decrease font size (A-)',
-        readerZoomIn: 'Increase font size (A+)',
         readerZoom: 'Font size',
         readerLine: 'Line height',
         vaultReload: 'Reload',
@@ -3163,20 +3159,14 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           return hit === undefined ? String(id) : hit.label
         }
         const lineValue = String(readerLine)
+        /* 字号：12~28 每档一项（大王的手机屏也是逐档点比滑块准），当前值打勾 */
+        const sizeItems = []
+        for (let px = RF_SIZE_MIN; px <= RF_SIZE_MAX; px += 1) sizeItems.push({ id: String(px), label: px + 'px' })
         return [
-          h(
-            'div',
-            { className: 'vpb-zoom', key: 'size' },
-            h('button', {
-              type: 'button', className: 'vpb-zoom-btn', disabled: readerFontSize <= RF_SIZE_MIN, title: t('readerZoomOut'),
-              onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v - 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
-            }, 'A-'),
-            h('span', { className: 'vpb-zoom-val', title: t('readerZoom') }, readerFontSize + 'px'),
-            h('button', {
-              type: 'button', className: 'vpb-zoom-btn', disabled: readerFontSize >= RF_SIZE_MAX, title: t('readerZoomIn'),
-              onClick: () => { readerFontDirty.current = true; setReaderFontSize((v) => clampInt(v + 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT)) },
-            }, 'A+'),
-          ),
+          renderDrop('size', readerFontSize + 'px', t('readerZoom'), sizeItems, String(readerFontSize), (id) => {
+            readerFontDirty.current = true
+            setReaderFontSize(clampInt(Number(id), RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
+          }),
           renderDrop('font', labelOf(fontItems, readerFont), t('readerFont'), fontItems, readerFont, (id) => {
             readerFontDirty.current = true
             setReaderFont(readerFontOf(id))
@@ -5188,6 +5178,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           const hit = items.find((item) => item.id === id)
           return hit === undefined ? String(id) : hit.label
         }
+        /* 字号：12~28 每档一项，和素材区同一套规则（大王要求三界面一致） */
+        const sizeItems = []
+        for (let px = RF_SIZE_MIN; px <= RF_SIZE_MAX; px += 1) sizeItems.push({ id: String(px), label: px + 'px' })
 
         return h(
           'div',
@@ -5201,39 +5194,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           h(
             'div',
             { className: 'vpb-grp' },
-            h(
-              'div',
-              { className: 'vpb-zoom' },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'vpb-zoom-btn',
-                  disabled: fontSize <= RF_SIZE_MIN,
-                  title: t('readerZoomOut'),
-                  onClick: () => {
-                    readerDirtyFlag.current = true
-                    setFontSize((value) => clampInt(value - 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
-                  },
-                },
-                'A-',
-              ),
-              h('span', { className: 'vpb-zoom-val', title: t('readerZoom') }, fontSize + 'px'),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'vpb-zoom-btn',
-                  disabled: fontSize >= RF_SIZE_MAX,
-                  title: t('readerZoomIn'),
-                  onClick: () => {
-                    readerDirtyFlag.current = true
-                    setFontSize((value) => clampInt(value + 1, RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
-                  },
-                },
-                'A+',
-              ),
-            ),
+            drop('size', fontSize + 'px', t('readerZoom'), sizeItems, String(fontSize), (id) => {
+              readerDirtyFlag.current = true
+              setFontSize(clampInt(Number(id), RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
+            }),
             drop('font', labelOf(fontItems, font), t('readerFont'), fontItems, font, (id) => {
               readerDirtyFlag.current = true
               setFont(readerFontOf(id))
@@ -11631,18 +11595,12 @@ mark.df-hit[data-active="true"] {
 .vpb-info-empty { opacity: .7; }
 .vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
 .vpb-sep { flex: 0 0 auto; width: 1px; height: 13px; margin: 0 4px; background: var(--dsw-alias-border-l1); opacity: .7; }
-/* 字号 A- / 值 / A+：三个并列按钮包成一组 */
-.vpb-zoom { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; height: 26px; padding: 0 2px; border-radius: 4px; background: transparent; white-space: nowrap; }
-.vpb-zoom-btn { width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; line-height: 1; cursor: pointer; }
-.vpb-zoom-btn:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
-.vpb-zoom-btn:disabled { opacity: .35; cursor: default; }
-.vpb-zoom-btn:disabled:hover { background: none; color: var(--dsw-alias-label-secondary); }
-.vpb-zoom-val { min-width: 34px; text-align: center; font-size: 11px; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+/* 字号改成下拉（2026-11-18 大王要求）：原来 A- / 值 / A+ 三段式已删 */
 /* 自绘小下拉（.vp-newdrop 那套的观感，不用原生 select） */
 .vpb-drop { position: relative; flex: 0 0 auto; display: flex; }
 .vpb-droplabel { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
 .vpb-caret { flex: none; font-size: 10px; line-height: 1; opacity: .55; }
-.vpb-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 132px; max-width: 220px; max-height: 280px; overflow-y: auto; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); box-sizing: border-box; }
+.vpb-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 132px; max-width: 220px; max-height: min(360px, 60vh); overflow-y: auto; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); box-sizing: border-box; }
 .vpb-menu::-webkit-scrollbar { width: 6px; }
 .vpb-menu::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 .vpb-menu-item { display: flex; align-items: center; gap: 6px; width: 100%; padding: 6px 8px; border: 0; border-radius: 4px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; line-height: 1.35; text-align: left; white-space: nowrap; cursor: pointer; }
