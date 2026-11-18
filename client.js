@@ -5496,6 +5496,9 @@ window.__ModuleLoader__.load({
          * Host 侧调 ctx.sessionController.create() —— 建的是 DSH 持久化会话，
          * 天然出现在会话面板，重启后还在（R5 / R10）。
          */
+        /** 简单等待（轮询用）。 */
+        const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
         const createWorkbenchSession = async (root, board) => {
           if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
           const scope = await resolveScope(root, board)
@@ -6089,6 +6092,22 @@ window.__ModuleLoader__.load({
           }
         }
 
+        /**
+         * 读一次聊天记录并**返回数组**（2026-11-18 加）。
+         *
+         * loadHistory 只 setState 不返回，轮询时无法比较「有没有新回复」，
+         * 所以这里补一个返回数组的版本。读失败返回空数组，不抛。
+         */
+        const loadRows = async (id) => {
+          if (typeof id !== 'string' || id === '') return []
+          try {
+            const data = await vaultApiGet('/ai-history?session=' + encodeURIComponent(id) + '&limit=80')
+            return Array.isArray(data && data.messages) ? data.messages : []
+          } catch {
+            return []
+          }
+        }
+
         /* 会话变了就重拉记录 */
         useEffect(() => {
           void loadHistory(sessionId)
@@ -6122,21 +6141,51 @@ window.__ModuleLoader__.load({
           if (node) node.scrollTop = node.scrollHeight
         }, [messages])
 
+        /**
+         * 发一条消息，并**自动等回复**（2026-11-18 修）。
+         *
+         * 之前的 bug：发完只调一次 loadHistory，那时助手还没回复，
+         * 界面上永远只有自己那句 —— 必须切走再切回才看到回复。
+         *
+         * 现在：发完轮询，出现新的 assistant 消息就停（最长 3 分钟）。
+         * 轮询期间 busy=true，输入框禁用，用户知道在等。
+         */
         const send = async () => {
           const text = draft.trim()
           if (text === '' || busy) return
           setBusy(true)
           setError('')
+          let id = sessionId
           try {
             if (!api.hasSessionService()) throw new Error('no-session-service')
-            const id = await api.sendText(scopeRoot, sessionId, text)
+            /* ① 发出去 */
+            id = await api.sendText(scopeRoot, id, text)
             if (id !== sessionId) {
               setSessionId(id)
               await api.saveBinding(scopeRoot, id)
             }
             setDraft('')
-            /* 发完立刻刷一次记录，让用户看到自己发的内容 */
-            void loadHistory(id)
+            /* ② 先刷一次：让用户立刻看到自己发的那句 */
+            const firstRows = await loadRows(id)
+            setMessages(firstRows)
+            const before = firstRows.filter((m) => m && m.role === 'assistant').length
+            /* ③ 轮询等助手回复 */
+            let waited = 0
+            const STEP = 1200
+            const LIMIT = 180000
+            while (waited < LIMIT) {
+              await sleepMs(STEP)
+              waited += STEP
+              const rows = await loadRows(id)
+              setMessages(rows)
+              const now = rows.filter((m) => m && m.role === 'assistant').length
+              if (now > before) return
+              /* 兜底：已有回复且会话空闲，也停 */
+              if (now > 0) {
+                const st = await api.sessionState(id)
+                if (st && st.running !== true) return
+              }
+            }
           } catch (err) {
             const raw = messageOf(err)
             setError(raw === 'no-workspace'
@@ -6146,6 +6195,7 @@ window.__ModuleLoader__.load({
                 : t('assistSendFailed') + raw)
           } finally {
             setBusy(false)
+            if (id) void loadHistory(id)
           }
         }
 
