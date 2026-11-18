@@ -6511,24 +6511,47 @@ window.__ModuleLoader__.load({
         '归档': 'copyStatusArchived',
       }
 
-      /** 把正文按行拆成可渲染的块：只认 h2 / quote / p，其余原样当段落。 */
-      function copyBlocksOf(text) {
-        const out = []
-        const rows = String(text).replaceAll('\r\n', '\n').split('\n')
-        for (const row of rows) {
-          const line = row.trimEnd()
-          if (line.trim() === '') continue
-          if (/^\s{0,3}#{1,2}\s+/.test(line)) {
-            out.push({ t: 'h2', text: line.replace(/^\s{0,3}#{1,2}\s+/, '') })
-            continue
-          }
-          if (/^\s{0,3}>\s?/.test(line)) {
-            out.push({ t: 'quote', text: line.replace(/^\s{0,3}>\s?/, '') })
-            continue
-          }
-          out.push({ t: 'p', text: line })
+    /**
+     * 把 markdown 原文切成段落块（2026-11-18 收敛）。
+     *
+     * 文案台和写作台原来各有一套（copyBlocksOf / writeBlocksOf），
+     * 只差一条规则：写作台把「三个分隔线」当成场景切换（sep）。
+     * 现在合成一个，用 scenes 参数控制 ——
+     * 以后改解析规则只改这一处，不会出现两边不一致。
+     *
+     * @param text    markdown 原文
+     * @param scenes  true = 识别「---」为场景分隔
+     */
+    function blocksOf(text, scenes) {
+      const out = []
+      const rows = String(text).replaceAll('\r\n', '\n').split('\n')
+      for (const row of rows) {
+        const line = row.trimEnd()
+        if (line.trim() === '') continue
+        /* 一二级标题 */
+        if (/^\s{0,3}#{1,2}\s+/.test(line)) {
+          out.push({ t: 'h2', text: line.replace(/^\s{0,3}#{1,2}\s+/, '') })
+          continue
         }
-        return out
+        /* 引用 */
+        if (/^\s{0,3}>\s?/.test(line)) {
+          out.push({ t: 'quote', text: line.replace(/^\s{0,3}>\s?/, '') })
+          continue
+        }
+        /* 三个连续分隔线：长文里当场景切换，短稿里不特殊处理 */
+        if (scenes === true && /^\s{0,3}([-*_])\1{2,}\s*$/.test(line)) {
+          out.push({ t: 'sep', text: '' })
+          continue
+        }
+        out.push({ t: 'p', text: line })
+      }
+      return out
+    }
+
+      /** 把正文按行拆成可渲染的块：只认 h2 / quote / p，其余原样当段落。 */
+      /** 文案台分段：短稿，不把分隔线当场景切换。 */
+      function copyBlocksOf(text) {
+        return blocksOf(text, false)
       }
 
       /**
@@ -7640,28 +7663,9 @@ window.__ModuleLoader__.load({
         )
       }
       /** 把正文按行拆成块：h2 / quote 认前面，其余当段落。写作台多认一个「场景分隔」。 */
+      /** 写作台分段：长文，三个分隔线当场景切换。 */
       function writeBlocksOf(text) {
-        const out = []
-        const rows = String(text).replaceAll('\r\n', '\n').split('\n')
-        for (const row of rows) {
-          const line = row.trimEnd()
-          if (line.trim() === '') continue
-          if (/^\s{0,3}#{1,2}\s+/.test(line)) {
-            out.push({ t: 'h2', text: line.replace(/^\s{0,3}#{1,2}\s+/, '') })
-            continue
-          }
-          if (/^\s{0,3}>\s?/.test(line)) {
-            out.push({ t: 'quote', text: line.replace(/^\s{0,3}>\s?/, '') })
-            continue
-          }
-          // 三个连续分隔线当场景切换
-          if (/^\s{0,3}([-*_])\1{2,}\s*$/.test(line)) {
-            out.push({ t: 'sep', text: '' })
-            continue
-          }
-          out.push({ t: 'p', text: line })
-        }
-        return out
+        return blocksOf(text, true)
       }
 
       /** 正文字数：与 Host 侧 write-desk 同一口径（剥掉 markdown 标记）。 */
