@@ -81,13 +81,23 @@ export async function sendToSession(ctx, options) {
   const ctrl = ctrlOf(ctx)
   if (!ctrl || typeof ctrl.prompt !== 'function') throw new Error('no-session-controller')
 
-  await ctrl.prompt({
-    requestId: 'dshdoclib-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
-    sessionId,
-    mode: 'queue',
-    content: [{ type: 'text', text }],
-    clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-  })
+  /*
+   * ⚠️ signal 是必传参数。
+   * sessionController.prompt / wait 的签名是 prompt(request, signal: AbortSignal)，
+   * 不传会让内部调用 signal.throwIfAborted() 抛
+   *   TypeError: Cannot read properties of undefined (reading 'throwIfAborted')
+   * 我们用 AbortSignal.timeout 给一个上限，超时由上层再判断。
+   */
+  await ctrl.prompt(
+    {
+      requestId: 'dshdoclib-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8),
+      sessionId,
+      mode: 'queue',
+      content: [{ type: 'text', text }],
+      clientTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    },
+    AbortSignal.timeout(60000),
+  )
   return { sessionId, ok: true }
 }
 
@@ -108,12 +118,16 @@ export async function awaitReply(ctx, options) {
   const ctrl = ctrlOf(ctx)
   if (!ctrl || typeof ctrl.wait !== 'function') throw new Error('no-session-controller')
 
-  const value = await ctrl.wait({
-    sessionId,
-    timeoutMs,
-    ...(afterSeq !== undefined ? { afterSeq } : {}),
-    maxMessages: 40,
-  })
+  /* signal 必传（同上）：wait(request, signal) */
+  const value = await ctrl.wait(
+    {
+      sessionId,
+      timeoutMs,
+      ...(afterSeq !== undefined ? { afterSeq } : {}),
+      maxMessages: 40,
+    },
+    AbortSignal.timeout(timeoutMs + 10000),
+  )
 
   const records = value && Array.isArray(value.output && value.output.records) ? value.output.records : []
   let text = ''
@@ -173,7 +187,8 @@ export async function sessionState(ctx, options) {
   if (sessionId === '') throw new Error('no-session')
   const ctrl = ctrlOf(ctx)
   if (!ctrl || typeof ctrl.state !== 'function') throw new Error('no-session-controller')
-  const value = await ctrl.state({ sessionId })
+  /* signal 必传（同上） */
+  const value = await ctrl.state({ sessionId }, AbortSignal.timeout(15000))
   return {
     running: value ? value.running === true : false,
     active: value ? value.active === true : false,
