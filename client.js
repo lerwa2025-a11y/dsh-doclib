@@ -187,6 +187,7 @@ window.__ModuleLoader__.load({
         assistSkillEmpty: '没有可用技能',
         assistSkillClear: '清空',
         assistSkillManual: '手动',
+        assistSkillGroupOff: '已停用',
         assistModelLoading: '模型加载中…',
         assistModelEmpty: '没有可用模型',
         assistModelFailed: '模型切换失败：',
@@ -528,6 +529,7 @@ window.__ModuleLoader__.load({
         assistSkillEmpty: 'No skills',
         assistSkillClear: 'Clear',
         assistSkillManual: 'manual',
+        assistSkillGroupOff: 'off',
         assistModelLoading: 'Loading models…',
         assistModelEmpty: 'No models available',
         assistModelFailed: 'Model switch failed: ',
@@ -5868,7 +5870,7 @@ window.__ModuleLoader__.load({
          * skills 是 Host 读来的全部技能；pickedSkills 是用户勾的；
          * 技能只在发送时拼进消息前缀由模型加载，不是常驻状态。
          */
-        const [skills, setSkills] = useState([])
+        const [skillGroups, setSkillGroups] = useState([])
         const [pickedSkills, setPickedSkills] = useState([])
         const [skillOpen, setSkillOpen] = useState(false)
         const skillBoxRef = useRef(null)
@@ -6134,7 +6136,7 @@ window.__ModuleLoader__.load({
             try {
               const data = await vaultApiGet('/skills')
               if (!alive) return
-              setSkills(Array.isArray(data && data.skills) ? data.skills : [])
+              setSkillGroups(Array.isArray(data && data.groups) ? data.groups : [])
             } catch {
               /* 读不到就当没有技能，不影响对话 */
             }
@@ -6525,7 +6527,7 @@ window.__ModuleLoader__.load({
                 ? h(
                   'div',
                   { className: 'cb-model-menu cb-skill-menu' },
-                  skills.length === 0
+                  skillGroups.length === 0
                     ? h('div', { className: 'cb-model-empty' }, t('assistSkillEmpty'))
                     : [
                       /* 已选摘要 + 清空 */
@@ -6539,28 +6541,41 @@ window.__ModuleLoader__.load({
                           }, t('assistSkillClear')),
                         )
                         : null,
-                      /* 技能列表：点一下切换勾选 */
-                      ...skills.map((skill) =>
+                      /* 按组分列（结构和技能工坊一致） */
+                      ...skillGroups.map((group) =>
                         h(
-                          'button',
-                          {
-                            key: skill.id,
-                            type: 'button',
-                            className: 'cb-model-item cb-skill-item',
-                            'data-on': pickedSkills.includes(skill.id) ? 'true' : 'false',
-                            title: skill.description,
-                            onClick: () => {
-                              setPickedSkills((list) =>
-                                list.includes(skill.id)
-                                  ? list.filter((x) => x !== skill.id)
-                                  : list.concat(skill.id),
-                              )
-                            },
-                          },
-                          h('span', { className: 'cb-skill-name' }, skill.name),
-                          skill.manual
-                            ? h('span', { className: 'cb-skill-tag' }, t('assistSkillManual'))
-                            : null,
+                          'div',
+                          { key: group.id, className: 'cb-skill-group' },
+                          h('div', { className: 'cb-skill-gh' },
+                            h('span', null, group.name),
+                            group.off
+                              ? h('span', { className: 'cb-skill-tag' }, t('assistSkillGroupOff'))
+                              : null,
+                          ),
+                          group.skills.map((skill) =>
+                            h(
+                              'button',
+                              {
+                                key: skill.key,
+                                type: 'button',
+                                className: 'cb-model-item cb-skill-item',
+                                'data-on': pickedSkills.includes(skill.key) ? 'true' : 'false',
+                                title: skill.description,
+                                onClick: () => {
+                                  setPickedSkills((list) =>
+                                    list.includes(skill.key)
+                                      ? list.filter((x) => x !== skill.key)
+                                      : list.concat(skill.key),
+                                  )
+                                },
+                              },
+                              h('span', { className: 'cb-skill-name' }, skill.name),
+                              /* 只有用户能选的才算「手动」；模型自动的不用标 */
+                              skill.modelInvocable
+                                ? null
+                                : h('span', { className: 'cb-skill-tag' }, t('assistSkillManual')),
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -10810,6 +10825,15 @@ mark.df-hit[data-active="true"] {
 .cb-skill { position: relative; display: inline-flex; margin-left: 6px; }
 .cb-skill-btn { min-width: 96px; }
 .cb-skill-menu { max-height: 420px; overflow-y: auto; min-width: 260px; }
+/* 技能分组标题（2026-11-18：结构对齐技能工坊） */
+.cb-skill-group { margin-bottom: 8px; }
+.cb-skill-gh {
+  display: flex; align-items: center; justify-content: space-between; gap: 6px;
+  padding: 4px 8px; font-size: 11px; font-weight: 600;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  letter-spacing: .02em;
+}
+
 .cb-skill-bar {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 8px; margin-bottom: 4px;

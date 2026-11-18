@@ -23,7 +23,7 @@ import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
 import { awaitReply, closeSession, currentModel, modelCatalog, openSession, selectModel, sendToSession, sessionState, warmSession } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
-import { listSkills } from './skills-list.js'
+import { shapeCatalog } from './skills-list.js'
 import {
   clearOrder,
   deleteToTrash,
@@ -478,14 +478,45 @@ export function apply(ctx) {
               }
 
               /*
-               * 技能清单（2026-11-18）。
+               * 技能清单（2026-11-18，转调技能工坊）。
                *
-               * 右栏「选择技能」按钮用：列出 $DSH_HOME/skills 下全部技能，
-               * 标出哪些是 disable-model-invocation（只能用户主动选）。
-               * 只读，不加载也不修改任何技能。
+               * 大王指出应该复用技能工坊那个五角星按钮的数据，不要另起一套。
+               * 那个按钮注册在 DSH 主聊天界面的输入框（conversation.input.left），
+               * 是 React Slot，我的面板点不到；但它的 HTTP 接口可以调。
+               *
+               * GET /skill-workshop/catalog -> 32 个技能、4 个自定义分组、
+               * invocation 精确到 modelInvocable / userInvocable。
+               * 这里转一层，把它的分组结构原样给前端，两边永远一致。
+               *
+               * 只读：绝不调用技能工坊的任何写路由。
                */
               if (route === '/skills' && req.method === 'GET') {
-                sendJson(res, 200, await listSkills())
+                try {
+                  /*
+                   * 自请求同进程的接口。host 从 req.headers.host 取
+                   * （形如 127.0.0.1:57360），这样多开/换端口都对。
+                   */
+                  const host = req.headers && typeof req.headers.host === 'string' ? req.headers.host : ''
+                  if (host === '') throw new Error('no-host')
+                  const upstream = await fetch('http://' + host + '/skill-workshop/catalog', {
+                    headers: { accept: 'application/json' },
+                  })
+                  if (!upstream.ok) throw new Error('workshop-http-' + upstream.status)
+                  const raw = await upstream.json()
+                  const shaped = shapeCatalog(raw)
+                  sendJson(res, 200, { ok: true, ...shaped })
+                } catch (err) {
+                  /*
+                   * 技能工坊没装/没启用时不该让按钮报错 ——
+                   * 回一个空列表 + 原因，前端显示「没有可用技能」即可。
+                   */
+                  sendJson(res, 200, {
+                    ok: false,
+                    groups: [],
+                    flat: [],
+                    error: String(err && err.message ? err.message : err),
+                  })
+                }
                 return
               }
 

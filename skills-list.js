@@ -1,98 +1,104 @@
 /**
- * 技能清单读取（Host 侧，2026-11-18）
+ * 技能清单：转调技能工坊（2026-11-18 第二次）
  *
- * 大王要「选择技能」按钮：列出全部技能，勾选后发消息时自动加载。
+ * 大王指出：「你不能直接调用我技能工坊的那个按钮吗？那个五角星图标的」
  *
- * 关键发现（实测）：
- *   32 个技能里有 16 个标了 disable-model-invocation: true，
- *   意思是「模型不能自己加载，只有用户主动选才能用」。
+ * 查清的事实：
+ *   · 五角星是 dsh-skill-workshop（技能工坊）注册在 DSH **主聊天界面**
+ *     输入框旁（conversation.input.left）的技能选择器。
+ *   · 工作台右栏助手是我自己的插件面板，不同 UI 环境，点不到那个按钮
+ *     （它是 React Slot 注册的，不跨面板）。
+ *   · 但它有 HTTP 接口，且比我写的那套全得多：
+ *       GET /skill-workshop/catalog
+ *         -> { skills, roots, groups, ungrouped, problems }
+ *       实测：32 个技能、4 个自定义分组、
+ *       invocation 分 modelInvocable / userInvocable 两个开关。
  *
- *   这正是选择按钮的价值 —— 那 16 个技能在普通对话里模型永远碰不到，
- *   必须由用户在这里点名。
+ * 所以从「自己扫磁盘」改成「转调技能工坊接口」：
+ *   分组、调用方式、多根目录全部与技能工坊一致，以后只维护一处。
  *
- * 所以过滤规则：
- *   · disable-model-invocation: true -> **也列出来**，标记 kind: 'manual'
- *   · 没有 SKILL.md                      -> 跳过（不是技能）
- *
- * 只读 —— 不改任何技能文件。
+ * ⚠️ 本文件是 Host 半，不能 fetch 自己 —— 这里只做**纯整理**，
+ *    取数据由 index.js 的 /skills 路由去请求技能工坊。
  */
-import { readdir, readFile } from 'node:fs/promises'
-import { join } from 'node:path'
-import { homedir } from 'node:os'
-
-/** 技能根目录：$DSH_HOME/skills（DSH 只扫一层，不递归） */
-function skillsRoot() {
-  const home = process.env.DSH_HOME || join(homedir(), '.dsh')
-  return join(home, 'skills')
-}
 
 /**
- * 解析 SKILL.md 的 frontmatter。
+ * 把技能工坊 catalog 的原始 JSON 整理成按钮用的分组结构。
  *
- * 只取按钮要用的几项。容忍格式差异：
- * 技能文件里有带 metadata JSON、版本号、多行 whenToUse 的，
- * 解析器不能因为解析不了某个字段就整个丢掉。
+ * @param data  /skill-workshop/catalog 的响应体
+ * @returns { groups: [{ id, name, off, skills }], flat }
+ *   每个 skill: { key, name, description, modelInvocable, userInvocable }
  */
-function parseFrontmatter(text) {
-  const out = {}
-  const src = String(text).replace(/\r\n/g, '\n')
-  if (!src.startsWith('---')) return out
-  const end = src.indexOf('\n---', 3)
-  if (end < 0) return out
-  const block = src.slice(3, end)
+export function shapeCatalog(data) {
+  const rawSkills = Array.isArray(data && data.skills) ? data.skills : []
+  if (rawSkills.length === 0) return { groups: [], flat: [] }
 
-  /* 逐行解析 top-level key: value（跳过缩进的嵌套内容） */
-  for (const line of block.split('\n')) {
-    if (line === '' || /^\s/.test(line)) continue
-    const m = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line)
-    if (!m) continue
-    if (m[2].trim() === '') continue
-    let value = m[2].trim()
-    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1)
-    }
-    out[m[1]] = value
-  }
-  return out
-}
-
-/**
- * 列出全部技能。
- *
- * @returns { skills: [{ id, name, description, whenToUse, manual }] }
- *   manual=true 表示 disable-model-invocation，只能由用户主动选
- */
-export async function listSkills() {
-  const root = skillsRoot()
-  let dirs = []
-  try {
-    dirs = await readdir(root, { withFileTypes: true })
-  } catch {
-    return { skills: [], root, error: 'skills-dir-missing' }
-  }
-
-  const skills = []
-  for (const dir of dirs) {
-    if (!dir.isDirectory()) continue
-    const file = join(root, dir.name, 'SKILL.md')
-    let text
-    try {
-      text = await readFile(file, 'utf8')
-    } catch {
-      continue /* 没有 SKILL.md 的目录跳过 */
-    }
-    const fm = parseFrontmatter(text)
-    const manual = fm['disable-model-invocation'] === 'true'
-
-    skills.push({
-      id: dir.name,
-      name: typeof fm.name === 'string' && fm.name !== '' ? fm.name : dir.name,
-      description: typeof fm.description === 'string' ? fm.description : '',
-      whenToUse: typeof fm.whenToUse === 'string' ? fm.whenToUse : '',
-      manual,
+  /* key -> 按钮要用的形状 */
+  const byKey = new Map()
+  for (const s of rawSkills) {
+    const key = typeof s.key === 'string' ? s.key : ''
+    if (key === '') continue
+    const inv = s.invocation && typeof s.invocation === 'object' ? s.invocation : {}
+    byKey.set(key, {
+      key,
+      name: typeof s.name === 'string' && s.name !== '' ? s.name : key,
+      description: typeof s.description === 'string' ? s.description : '',
+      /* 两个开关分开：模型能不能自己加载 / 用户能不能主动用 */
+      modelInvocable: inv.modelInvocable === true,
+      userInvocable: inv.userInvocable === true,
     })
   }
 
-  skills.sort((a, b) => a.id.localeCompare(b.id))
-  return { skills, root }
+  const groups = []
+  const placed = new Set()
+
+  /* 自定义分组：按 order 排 */
+  const rawGroups = Array.isArray(data && data.groups) ? data.groups : []
+  const sortedGroups = rawGroups.slice().sort((a, b) => (Number(a && a.order) || 0) - (Number(b && b.order) || 0))
+
+  for (const g of sortedGroups) {
+    const members = Array.isArray(g && g.memberKeys) ? g.memberKeys : []
+    const skills = []
+    for (const key of members) {
+      const hit = byKey.get(key)
+      if (!hit) continue
+      skills.push(hit)
+      placed.add(key)
+    }
+    if (skills.length === 0) continue
+    groups.push({
+      id: typeof g.id === 'string' ? g.id : 'g-' + groups.length,
+      name: typeof g.name === 'string' && g.name !== '' ? g.name : '未命名分组',
+      /* 组被停用时整组不可用，标出来让用户知道 */
+      off: g.status === 'off' || g.off === true,
+      skills,
+    })
+  }
+
+  /* 未分组：放最后 */
+  const un = data && data.ungrouped ? data.ungrouped : undefined
+  const unMembers = Array.isArray(un && un.memberKeys) ? un.memberKeys : []
+  const unSkills = []
+  for (const key of unMembers) {
+    const hit = byKey.get(key)
+    if (!hit || placed.has(key)) continue
+    unSkills.push(hit)
+    placed.add(key)
+  }
+  if (unSkills.length > 0) {
+    groups.push({ id: '__ungrouped__', name: '未分组', off: false, skills: unSkills })
+  }
+
+  /* 兜底：catalog 里有但没进任何组的，别丢 */
+  const leftovers = []
+  for (const [key, skill] of byKey.entries()) {
+    if (!placed.has(key)) leftovers.push(skill)
+  }
+  if (leftovers.length > 0) {
+    groups.push({ id: '__orphan__', name: '其他', off: false, skills: leftovers })
+  }
+
+  const flat = []
+  for (const g of groups) for (const s of g.skills) flat.push(s)
+
+  return { groups, flat }
 }
