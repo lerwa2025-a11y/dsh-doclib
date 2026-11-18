@@ -1503,7 +1503,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       const [renaming, setRenaming] = useState(false)
       const [renameDraft, setRenameDraft] = useState('')
       const [renameError, setRenameError] = useState('')
-      const [historyOpen, setHistoryOpen] = useState(false)
       const [history, setHistory] = useState([])
       const [historyError, setHistoryError] = useState('')
       const [query, setQuery] = useState('')
@@ -2328,7 +2327,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         setSelected(entry)
         setConfirmDelete(false)
         // 切文件时清掉上一个文件的历史面板，避免串内容
-        setHistoryOpen(false)
+        setHistory([])
         setHistory([])
         setHistoryError('')
         setRenaming(false)
@@ -2697,6 +2696,17 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         }
       }
 
+      /*
+       * 打开「历史版本」下拉时才去拉列表（2026-11-19）：
+       * 四个阅读设置下拉 + 历史版本共用同一个 openMenu，
+       * 所以这里盯 openMenu 而不是盯某个按钮的点击事件。
+       */
+      useEffect(() => {
+        if (openMenu !== 'history') return undefined
+        void refreshHistory()
+        return undefined
+      }, [openMenu, selected])
+
       // ── 全库搜索 ───────────────────────────────────────────────────────────
       const runSearch = async (value) => {
         const keyword = (value === undefined ? query : value).trim()
@@ -2726,19 +2736,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         }
       }
 
-      const takeSnapshot = async () => {
-        if (!selected || selected.type === 'dir') return
-        try {
-          await vaultApiPost('/snapshot', { path: selected.path })
-          flashMessage(t('vaultSnapshotTaken'))
-          await refreshHistory()
-        } catch (err) {
-          setHistoryError(messageOf(err))
-        }
-      }
-
       const restoreSnapshot = async (name) => {
         if (!selected) return
+        /* 与文案区/写作区保持一致：恢复是不可撤销的覆盖，先问一句 */
+        if (!window.confirm(t('vaultSnapshotRestoreConfirm'))) return
         try {
           const saved = await vaultApiPost('/snapshot-restore', { path: selected.path, name })
           const fresh = await vaultApiGet(`/file?path=${encodeURIComponent(selected.path)}`)
@@ -3320,6 +3321,36 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           title: t('vaultSaveNow'), 'aria-label': t('vaultSaveNow'),
         }, h(BoardIcon, { name: 'save', className: 'wb-ic' })),
         /*
+         * 历史版本（2026-11-19 大王要求）：原来是个会撑出内联面板的文字按钮，
+         * 现在改成和文案区/写作区一模一样的图标下拉，位置也放在保存按钮后面。
+         * 下拉项格式对齐 ReaderBar：月-日 时:分 · 大小KB。
+         */
+        doc
+          ? renderDrop(
+              'history',
+              '',
+              t('vaultHistory'),
+              historyError !== ''
+                ? [{ id: '__err__', label: historyError }]
+                : history.length === 0
+                  ? [{ id: '__empty__', label: t('vaultHistoryEmpty') }]
+                  : history.map((item) => ({
+                      id: item.name,
+                      label:
+                        String(item.stamp).replace('T', ' ').slice(5, 16) +
+                        ' · ' +
+                        Math.max(1, Math.round((item.size || 0) / 1024)) +
+                        ' KB',
+                    })),
+              '',
+              (id) => {
+                if (id === '__empty__' || id === '__err__') return
+                void restoreSnapshot(id)
+              },
+              'history',
+            )
+          : null,
+        /*
          * 🗑 删除按钮已移除：大王要求删除走右键菜单。
          * 保存按钮 💾 保留（那个是高频操作，放右键反而更难用）。
          */
@@ -3650,43 +3681,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                   h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('todo'), title: t('vaultFmtTodo') }, '☐'),
                   h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('list'), title: t('vaultFmtList') }, '•'),
                   h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('code'), title: t('vaultFmtCode') }, '</>'),
-                  h('span', { className: 'dn-spacer' }),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'vp-fmtbtn',
-                      onClick: () => {
-                        setHistoryOpen((open) => !open)
-                        if (!historyOpen) void refreshHistory()
-                      },
-                      title: t('vaultHistory'),
-                    },
-                    t('vaultHistory'),
-                  ),
                 ),
-                historyOpen
-                  ? h(
-                      'div',
-                      { className: 'vp-history' },
-                      historyError !== '' ? h('div', { className: 'vp-error' }, historyError) : null,
-                      history.length === 0
-                        ? h('div', { className: 'vp-hint' }, t('vaultHistoryEmpty'))
-                        : history.map((item) =>
-                            h(
-                              'div',
-                              { className: 'vp-history-row', key: item.name },
-                              h('span', { className: 'vp-history-time' }, item.stamp.replace('T', ' ').slice(0, 19)),
-                              h('span', { className: 'vp-history-size' }, `${Math.max(1, Math.round((item.size || 0) / 1024))} KB`),
-                              h(
-                                'button',
-                                { type: 'button', className: 'vp-fmtbtn', onClick: () => void restoreSnapshot(item.name) },
-                                t('vaultRestore'),
-                              ),
-                            ),
-                          ),
-                    )
-                  : null,
                 h(
                   'div',
                   {
@@ -10198,10 +10193,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 .vp-doctitle { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 22px; font-weight: 700; letter-spacing: .01em; line-height: 1.3; padding: 2px 6px; border-radius: 6px; cursor: text; }
 .vp-doctitle:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-titleinput { flex: 0 1 70%; min-width: 140px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 22px; font-weight: 700; outline: none; }
-.vp-history { border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-2); padding: 8px 8px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; max-height: 200px; overflow-y: auto; }
-.vp-history-row { display: flex; align-items: center; gap: 8px; font-size: 12px; }
-.vp-history-time { flex: 1; min-width: 0; color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
-.vp-history-size { flex: 0 0 auto; color: var(--dsw-alias-label-secondary); }
 .vp-savestate { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; margin-right: 4px; }
 .vp-body { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 12px 16px 16px; }
 .vp-tree { flex: 0 0 auto; min-height: 0; overflow: auto; scrollbar-gutter: stable; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); padding: 8px 6px; }
