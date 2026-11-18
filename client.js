@@ -10447,7 +10447,7 @@ mark.df-hit[data-active="true"] {
  */
 .cb-input {
   margin-top: auto; flex: none;
-  display: flex; flex-direction: column; gap: 6px;
+  display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px;
   padding: 8px; border-radius: var(--dsw-radius-sm, 8px);
   border: 1px solid var(--dsw-alias-border-l2);
   background: var(--dsw-alias-bg-layer-1);
@@ -10455,6 +10455,8 @@ mark.df-hit[data-active="true"] {
 }
 /* 输入行：图标 + 输入框 + 发送键 */
 .cb-input-row {
+  /* 输入行独占一整行（上面一行放模型/技能按钮） */
+  flex: 1 1 100%;
   display: flex; align-items: center; gap: 6px; min-width: 0;
   height: 30px; padding: 0 4px 0 6px;
   border-radius: 6px;
@@ -10993,7 +10995,7 @@ mark.df-hit[data-active="true"] {
  * 技能按钮与面板（2026-11-18 第四次）：照抄技能工坊的
  * .ssPickerButton / .ssPicker / .ssSearch / .ssPickerItem / .ssLink。
  */
-.cb-skill { position: relative; display: inline-flex; }
+.cb-skill { position: relative; display: inline-flex; flex: none; }
 /* 按钮：和输入框旁那个五角星同一尺寸与配色 */
 .cb-skill-btn {
   display: grid;
