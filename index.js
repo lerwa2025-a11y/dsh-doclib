@@ -204,7 +204,6 @@ export function apply(ctx) {
                * 优先用配置里显式给的；没有就取注册表里排第一的那个（与「默认」同序）。
                */
               if (route === '/studio-preset' && req.method === 'GET') {
-                let preset = ''
                 let presets = []
                 try {
                   const registry = typeof webCtx.get === 'function' ? webCtx.get('agentPresets') : undefined
@@ -213,10 +212,28 @@ export function apply(ctx) {
                     presets = (Array.isArray(rows) ? rows : [])
                       .filter((row) => row && typeof row.id === 'string' && row.id !== '')
                       .map((row) => ({ id: row.id, name: typeof row.name === 'string' ? row.name : row.id }))
-                    if (presets.length > 0) preset = presets[0].id
                   }
                 } catch {
                   /* 拿不到预设不影响发消息，客户端会退化成不带预设 */
+                }
+
+                /*
+                 * 按板块挑预设（2026-11-18）：
+                 *   文案台 → copy-assistant（专注短稿：标题、推广、单段改写）
+                 *   写作台 → write-assistant（专注长文：结构、人物、伏笔）
+                 * 找不到就退回第一个，保持旧行为。
+                 */
+                const BOARD_PRESET = {
+                  copy: 'copy-assistant',
+                  write: 'write-assistant',
+                }
+                const board = typeof query.get === 'function' ? (query.get('board') || '') : ''
+                const wanted = typeof board === 'string' && BOARD_PRESET[board] ? BOARD_PRESET[board] : ''
+                let preset = ''
+                if (wanted !== '' && presets.some((row) => row.id === wanted)) {
+                  preset = wanted
+                } else if (presets.length > 0) {
+                  preset = presets[0].id
                 }
                 sendJson(res, 200, { preset, presets })
                 return

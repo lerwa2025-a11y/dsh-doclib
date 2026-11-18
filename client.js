@@ -5410,7 +5410,7 @@ window.__ModuleLoader__.load({
         }
 
         /** 缓存「工作区 + 预设」的解析结果：同一个库根只解析一次。 */
-        const scopeCache = { root: '', workspaceId: '', preset: null }
+        const scopeCache = { root: '', board: '', workspaceId: '', preset: null }
 
         /**
          * 绑定键可能带板块后缀（root::copy / root::write），
@@ -5423,6 +5423,13 @@ window.__ModuleLoader__.load({
           return at < 0 ? key : key.slice(0, at)
         }
 
+        /** 取板块标记（copy / write），没有就空串。用来挑对应预设。 */
+        const boardOf = (key) => {
+          if (typeof key !== 'string') return ''
+          const at = key.indexOf('::')
+          return at < 0 ? '' : key.slice(at + 2)
+        }
+
         /**
          * 解析工作台会话该落在哪个工作区、用哪个预设。
          *
@@ -5430,8 +5437,8 @@ window.__ModuleLoader__.load({
          * 所以建会话前先把库根注册成工作区（Host 侧幂等，同目录反复调只返回同一个），
          * 再把预设一起带上。两样都有了，DSH 打开这个会话就不会停在「选工作区 / 选模式」那页。
          */
-        const resolveScope = async (root) => {
-          if (scopeCache.root === root) {
+        const resolveScope = async (root, board) => {
+          if (scopeCache.root === root && scopeCache.board === (typeof board === 'string' ? board : '')) {
             return { workspaceId: scopeCache.workspaceId, preset: scopeCache.preset }
           }
           let workspaceId = ''
@@ -5446,23 +5453,30 @@ window.__ModuleLoader__.load({
             }
           }
           try {
-            const data = await vaultApiGet('/studio-preset')
+            /*
+             * 带上板块，让 Host 返回对应预设（2026-11-18）：
+             *   文案台 → copy-assistant，写作台 → write-assistant
+             */
+            const b = typeof board === 'string' ? board : ''
+            const qs = b === '' ? '' : '?board=' + encodeURIComponent(b)
+            const data = await vaultApiGet('/studio-preset' + qs)
             if (data && typeof data.preset === 'string' && data.preset !== '') preset = data.preset
           } catch {
             /* 拿不到预设就当没有 */
           }
           scopeCache.root = root
+          scopeCache.board = typeof board === 'string' ? board : ''
           scopeCache.workspaceId = workspaceId
           scopeCache.preset = preset
           return { workspaceId, preset }
         }
 
         /** 建一个工作台会话：优先按工作区 + 预设建，缺哪样退哪样。 */
-        const createWorkbenchSession = async (root) => {
+        const createWorkbenchSession = async (root, board) => {
           const service = sessionsOf()
           if (!service) throw new Error('no-session-service')
           if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
-          const scope = await resolveScope(root)
+          const scope = await resolveScope(root, board)
           const extra = {}
           if (scope.preset !== null) extra.agentPreset = scope.preset
           if (scope.workspaceId !== '') {
@@ -5546,7 +5560,7 @@ window.__ModuleLoader__.load({
               }
             })()
             if (sessionUsable(service, existing)) return existing
-            return await createWorkbenchSession(realRoot)
+            return await createWorkbenchSession(realRoot, boardOf(root))
           },
 
           /**
@@ -5563,7 +5577,7 @@ window.__ModuleLoader__.load({
             const realRoot = unscope(root)
             let id = currentId
             if (!sessionUsable(service, id)) {
-              id = await createWorkbenchSession(realRoot)
+              id = await createWorkbenchSession(realRoot, boardOf(root))
             }
             const scope = service.scope(id)
             const conversation = scope && typeof scope.get === 'function' ? scope.get('conversation') : undefined
@@ -5590,7 +5604,7 @@ window.__ModuleLoader__.load({
             const realRoot = unscope(root)
             let id = currentId
             if (!sessionUsable(service, id)) {
-              id = await createWorkbenchSession(realRoot)
+              id = await createWorkbenchSession(realRoot, boardOf(root))
             }
             /* ① 分界 seq：之后新增的事件才算这一轮的 */
             let sinceSeq = -1
