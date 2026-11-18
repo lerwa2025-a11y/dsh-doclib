@@ -8831,7 +8831,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          * 复用「新建项目」那套输入条形态：editPrompt 描述要做什么，editDraft 存正在打的字。
          * kind 取值：
          *   'rename-project' | 'rename-volume' | 'rename-chapter'
-         *   'new-volume' | 'new-chapter'
+         *   （新建卷 / 新建章不走这里 —— 点 ＋ 直接建）
          * 同一时刻只会有一个输入条，所以共用一个 state 就够。
          */
         const [editPrompt, setEditPrompt] = useState(null)
@@ -8934,6 +8934,40 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             flash(t('writeVolumeDeleted'))
           } catch (err) {
             flash(t('writeDeleteFailed') + messageOf(err))
+          }
+        }
+
+        /*
+         * 一键新建（2026-11-18 大王要求）：
+         * 点 ＋ 就是建，不弹输入条、不问名字 —— 名字由 Host 自动起
+         * （第一卷 / 第N章，章还会顺带建好 0001-第一章.md 空正文）。
+         * 想改名再右键「重命名」就行了，比每次都敲一遍快得多。
+         */
+        const addVolumeNow = async () => {
+          if (!project) {
+            setError(t('writePickProject'))
+            return
+          }
+          try {
+            await vaultApiPost('/write-add-volume', { path: project.path, afterIndex: -1 })
+            await loadProject(project.path)
+            flash(t('writeVolumeAdded'))
+          } catch (err) {
+            setError(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
+        const addChapterNow = async (vi) => {
+          if (!project) {
+            setError(t('writePickProject'))
+            return
+          }
+          try {
+            await vaultApiPost('/write-add-chapter', { path: project.path, volumeIndex: vi })
+            await loadProject(project.path)
+            flash(t('writeChapterAdded'))
+          } catch (err) {
+            setError(t('writeSaveFailed') + messageOf(err))
           }
         }
 
@@ -9367,8 +9401,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         /*
          * ── 结构编辑动作（2026-11-18 大王需求）─────────────────────
          *
-         * 五个入口都只做一件事：把「要改什么」放进 editPrompt，让左栏画出输入条。
-         * 真正落盘在 commitEdit —— 一处写盘，五处复用。
+         * 只剩三种「改名」了（2026-11-18 大王要求新建直接建，不弹输入条）：
+         *   rename-project / rename-volume / rename-chapter
+         * 都只做一件事：把「要改什么」放进 editPrompt，让左栏画出输入条。
+         * 真正落盘在 commitEdit —— 一处写盘，三处复用。
          */
         const openEdit = (kind, payload, value) => {
           setEditTip('')
@@ -9388,8 +9424,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           if (editPrompt.kind === 'rename-project') return t('writeProjectNamePrompt')
           if (editPrompt.kind === 'rename-volume') return t('writeVolumeNamePrompt')
           if (editPrompt.kind === 'rename-chapter') return t('writeChapterNamePrompt')
-          if (editPrompt.kind === 'new-volume') return t('writeNewVolumeDefault')
-          if (editPrompt.kind === 'new-chapter') return t('writeNewChapterDefault')
           return ''
         }
 
@@ -9398,8 +9432,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           if (editPrompt.kind === 'rename-project') return t('writeRenameProject')
           if (editPrompt.kind === 'rename-volume') return t('writeRenameVolume')
           if (editPrompt.kind === 'rename-chapter') return t('writeRenameChapter')
-          if (editPrompt.kind === 'new-volume') return t('writeNewVolume')
-          if (editPrompt.kind === 'new-chapter') return t('writeNewChapter')
           return ''
         }
 
@@ -9439,11 +9471,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               if (project && project.path === targetPath) await loadProject(targetPath)
               await reloadProjects()
               flash(t('writeProjectRenamed'))
-            } else if (kind === 'new-volume') {
-              const afterIndex = Number.isInteger(editPrompt.after) ? editPrompt.after : -1
-              await vaultApiPost('/write-add-volume', { path: project.path, afterIndex })
-              await loadProject(project.path)
-              flash(t('writeVolumeAdded'))
             } else if (kind === 'rename-volume') {
               await vaultApiPost('/write-rename-volume', {
                 path: project.path,
@@ -9452,13 +9479,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               })
               await loadProject(project.path)
               flash(t('writeVolumeRenamed'))
-            } else if (kind === 'new-chapter') {
-              await vaultApiPost('/write-add-chapter', {
-                path: project.path,
-                volumeIndex: editPrompt.volumeIndex,
-              })
-              await loadProject(project.path)
-              flash(t('writeChapterAdded'))
             } else if (kind === 'rename-chapter') {
               await vaultApiPost('/write-rename-chapter', {
                 path: project.path,
@@ -9505,9 +9525,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             onDeleteProject: (item) => void deleteProject(item),
             /* 结构编辑（2026-11-18）：项目改名 / 加卷 / 改卷名 / 加章 / 改章名 */
             onRenameProject: (item) => openEdit('rename-project', { path: item.path, item }, item.name),
-            onAddVolume: () => openEdit('new-volume', { after: -1 }, ''),
+            onAddVolume: () => void addVolumeNow(),
             onRenameVolume: (index, title) => openEdit('rename-volume', { index }, title),
-            onAddChapter: (volumeIndex) => openEdit('new-chapter', { volumeIndex }, ''),
+            onAddChapter: (volumeIndex) => void addChapterNow(volumeIndex),
             onRenameChapter: (volumeIndex, chapterIndex, title) =>
               openEdit('rename-chapter', { volumeIndex, chapterIndex }, title),
             /* 删卷 / 删章（2026-11-18）：入口只在右键菜单里 */
