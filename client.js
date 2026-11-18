@@ -763,6 +763,15 @@ window.__ModuleLoader__.load({
       return data
     }
 
+    /**
+     * 简单等待（轮询用）。
+     *
+     * 必须在 factory 顶层 —— assistantApi 和各个组件都要用。
+     * （2026-11-18：一开始误放进 assistantApi 内部，组件里调就报
+     *   「sleepMs is not defined」）
+     */
+    const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
     /** 文件名（去扩展名）作为标题。 */
     function vaultTitleOf(path) {
       const name = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
@@ -5496,9 +5505,6 @@ window.__ModuleLoader__.load({
          * Host 侧调 ctx.sessionController.create() —— 建的是 DSH 持久化会话，
          * 天然出现在会话面板，重启后还在（R5 / R10）。
          */
-        /** 简单等待（轮询用）。 */
-        const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
-
         const createWorkbenchSession = async (root, board) => {
           if (typeof root !== 'string' || root.trim() === '') throw new Error('no-workspace')
           const scope = await resolveScope(root, board)
@@ -6150,26 +6156,46 @@ window.__ModuleLoader__.load({
          * 现在：发完轮询，出现新的 assistant 消息就停（最长 3 分钟）。
          * 轮询期间 busy=true，输入框禁用，用户知道在等。
          */
+        /**
+         * 发一条消息，并自动等回复（2026-11-18）。
+         *
+         * ⚠️ 两段 try 分开：
+         *   · 发送段出错 -> 「发送失败：xxx」
+         *   · 等待段出错 -> 静默（消息已经发出去了，不该谎报发送失败）
+         *
+         * 大王反馈过：「每次都弹 sleepMs is not defined，但发送是成功的，也有回复」
+         * —— 就是一段 try 把轮询里的代码 bug 误报成了发送失败。
+         */
         const send = async () => {
           const text = draft.trim()
           if (text === '' || busy) return
           setBusy(true)
           setError('')
           let id = sessionId
+          /* ── 第一段：发送（出错才算发送失败） ── */
           try {
             if (!api.hasSessionService()) throw new Error('no-session-service')
-            /* ① 发出去 */
             id = await api.sendText(scopeRoot, id, text)
             if (id !== sessionId) {
               setSessionId(id)
               await api.saveBinding(scopeRoot, id)
             }
             setDraft('')
-            /* ② 先刷一次：让用户立刻看到自己发的那句 */
+          } catch (err) {
+            const raw = messageOf(err)
+            setError(raw === 'no-workspace'
+              ? t('assistNeedWorkspace')
+              : raw === 'no-session-service' || raw === 'no-conversation-service'
+                ? t('assistNoService')
+                : t('assistSendFailed') + raw)
+            setBusy(false)
+            return
+          }
+          /* ── 第二段：等回复（出错不谎报发送失败） ── */
+          try {
             const firstRows = await loadRows(id)
             setMessages(firstRows)
             const before = firstRows.filter((m) => m && m.role === 'assistant').length
-            /* ③ 轮询等助手回复 */
             let waited = 0
             const STEP = 1200
             const LIMIT = 180000
@@ -6179,20 +6205,14 @@ window.__ModuleLoader__.load({
               const rows = await loadRows(id)
               setMessages(rows)
               const now = rows.filter((m) => m && m.role === 'assistant').length
-              if (now > before) return
-              /* 兜底：已有回复且会话空闲，也停 */
+              if (now > before) break
               if (now > 0) {
                 const st = await api.sessionState(id)
-                if (st && st.running !== true) return
+                if (st && st.running !== true) break
               }
             }
-          } catch (err) {
-            const raw = messageOf(err)
-            setError(raw === 'no-workspace'
-              ? t('assistNeedWorkspace')
-              : raw === 'no-session-service' || raw === 'no-conversation-service'
-                ? t('assistNoService')
-                : t('assistSendFailed') + raw)
+          } catch {
+            /* 消息已经发出去了；这里失败只是刷新不到，不影响发送结果 */
           } finally {
             setBusy(false)
             if (id) void loadHistory(id)
