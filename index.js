@@ -367,6 +367,43 @@ export function apply(ctx) {
                 }))
                 return
               }
+              /*
+               * 读会话实际使用的 agent 预设（2026-11-18）。
+               *
+               * 用途：ensureSession 只判断会话是否存在，不判断预设对不对。
+               * 预设修复前建的旧会话（standard）会被一直复用，
+               * 导致「文案台打开会话还是标准」。
+               * 有了这条，客户端能校验；不符就重建会话。
+               */
+              if (route === '/session-preset' && req.method === 'GET') {
+                const sid = query.get('session') || ''
+                let preset = ''
+                try {
+                  const sq = typeof webCtx.get === 'function' ? webCtx.get('sessionQuery') : undefined
+                  if (sq && typeof sq.readSession === 'function' && sid !== '') {
+                    const snap = await sq.readSession(sid)
+                    /* 快照顶层有就直接用 */
+                    if (snap && typeof snap.agentPreset === 'string' && snap.agentPreset !== '') {
+                      preset = snap.agentPreset
+                    } else if (Array.isArray(snap && snap.events)) {
+                      /*
+                       * 实测（2026-11-18 解压会话日志确认）：
+                       * agentPreset 只出现在 type==="session" 那条元事件上，
+                       * 没有 agent-preset/selected 事件。
+                       */
+                      for (const ev of snap.events) {
+                        if (ev && ev.type === 'session' && typeof ev.agentPreset === 'string') {
+                          preset = ev.agentPreset
+                        }
+                      }
+                    }
+                  }
+                } catch {
+                  /* 读不到就当未知，客户端不做校验 */
+                }
+                sendJson(res, 200, { sessionId: sid, preset })
+                return
+              }
 
               // 目录树。sortBy 优先取 query（客户端刚点完排序会显式带），
               // 没带则用设置里存的那份 —— 刷新页面/换设备后仍然是上次选的排序。

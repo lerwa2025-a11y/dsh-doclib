@@ -5559,7 +5559,37 @@ window.__ModuleLoader__.load({
                 return ''
               }
             })()
-            if (sessionUsable(service, existing)) return existing
+
+            /*
+             * 预设校验（2026-11-18）：
+             * 旧会话可能是预设修复前建的（standard），
+             * 光看「会话还在」就复用会让文案台一直用错预设。
+             * 这里比对它实际用的预设与本板块期望的预设，不一致就重建。
+             */
+            if (sessionUsable(service, existing)) {
+              const board = boardOf(root)
+              let wanted = ''
+              if (board !== '') {
+                try {
+                  const data = await vaultApiGet('/studio-preset?board=' + encodeURIComponent(board))
+                  if (data && typeof data.preset === 'string') wanted = data.preset
+                } catch {
+                  /* 拿不到期望值就不校验，宁可复用也别乱重建 */
+                }
+              }
+              if (wanted === '') return existing
+              let actual = ''
+              try {
+                const got = await vaultApiGet('/session-preset?session=' + encodeURIComponent(existing))
+                if (got && typeof got.preset === 'string') actual = got.preset
+              } catch {
+                /* 读不到实际预设 → 不校验，复用 */
+              }
+              if (actual === '' || actual === wanted) return existing
+              /* 预设不符：重建（旧会话保留在 DSH 会话列表里，不删） */
+              console.info('[dsh-doclib] 会话预设不符，重建：' + actual + ' -> ' + wanted)
+              return await createWorkbenchSession(realRoot, board)
+            }
             return await createWorkbenchSession(realRoot, boardOf(root))
           },
 
