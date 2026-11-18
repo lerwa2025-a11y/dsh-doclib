@@ -169,13 +169,13 @@ window.__ModuleLoader__.load({
         assistSend: '发送',
         assistNoService: '当前环境没有会话服务，发不出去',
         assistCreateSession: 'New session',
-        assistDeleteSession: 'Delete session',
-        assistDeleting: 'Deleting…',
+        assistDeleteSession: 'Archive session',
+        assistDeleting: 'Archiving…',
         assistNoSessionYet: 'No session yet',
         /* 会话区常驻（2026-11-18） */
         assistCreateSession: '新建会话',
-        assistDeleteSession: '删除会话',
-        assistDeleting: '删除中…',
+        assistDeleteSession: '归档会话',
+        assistDeleting: '归档中…',
         assistNoSessionYet: '还没建会话',
         assistSendFailed: '发送失败：',
         assistNeedWorkspace: '先点顶栏的「工作台区域」选一个文件夹，这个工作台才会有会话',
@@ -6430,6 +6430,17 @@ window.__ModuleLoader__.load({
          *
          * 注意：DSH 里的会话日志本身不会被删（那是 DSH 自己的资产），
          *      只是助手不再使用它。要彻底删请去 DSH 会话面板操作。
+         */
+        /**
+         * 归档当前会话（2026-11-18 正名）。
+         *
+         * ⚠️ 名字叫 deleteSession（历史原因，不改以免动一堆断言），
+         * 但实际做的是**归档**，不是删除：
+         *   · Host 调 workspaceRegistry.archiveSession()
+         *   · 会话日志原样留在磁盘（sessions/<工作区>/<id>/session.v4.jsonl.zstd）
+         *   · DSH 的 unarchiveSession() 能恢复到原来的位置
+         *   · 同时清掉本插件的绑定表，让助手不再指向它
+         * 按钮文案已改成「归档会话」，和真实语义一致。
          */
         const deleteSession = async () => {
           if (deletingSess) return
