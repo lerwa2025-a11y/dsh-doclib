@@ -7148,7 +7148,25 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         if (!doc) {
           return h(
             'div',
-            { className: 'cb-doc' },
+            {
+              /*
+               * 2026-11-18 修「文案区底色没变」：
+               * 这里原来只挂 .cb-doc，没有 .dn-reader ——
+               * 于是空状态走的是 .cb-doc 的 background: bg-base（亮色纯白 #ffffff），
+               * 而左右两栏是 bg-module-platform #f5f6f7，看着就是「没变」。
+               *
+               * 有稿件时走的是下面 .dn-reader.cb-doc 那条路径，纸面由 ::before 画，
+               * 所以「打开一篇稿子才好看、不打开就是纯白」——
+               * 这套属性要跟下面那份保持一致。
+               */
+              className: 'dn-reader cb-doc',
+              'data-rt-bg': reader.bg,
+              'data-rf-font': reader.font,
+              style: {
+                '--dn-reader-size': (reader.fontSize || 14) + 'px',
+                '--dn-reader-line': String(reader.line || 1.85),
+              },
+            },
             h(
               'div',
               { className: 'cb-empty' },
