@@ -9785,7 +9785,7 @@ mark.df-hit[data-active="true"] {
  * ⚠️ max-width 必须把左右 margin（共 40px）扣掉 —— 否则 100% + 40px 会溢出到
  * 右边的写作助手区（2026-11-18 大王截图指出）。
  */
-.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 8px 0 0; }
+.cb-doc > .vpb-bar, .wbg-doc > .vpb-bar { margin: 8px 0 2px; }
 .vpb-bar[data-menu="true"] { overflow: visible; }
 /*
  * 极窄时藏掉次要信息（2026-11-18）：
@@ -9813,7 +9813,35 @@ mark.df-hit[data-active="true"] {
 .vpb-ib-icon { font-size: 13px; padding: 0 6px; }
 .vpb-ib-danger:hover { color: var(--dsw-alias-state-error-primary); }
 /* 文件信息 / 分组 / 竖分隔条（对齐 .cb-tb-sep） */
-.vpb-info { flex: 0 0 auto; padding: 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; /* 承载信息，用 secondary（对比度 6.79 ≥ 4.5） */ color: var(--dsw-alias-label-secondary); font-variant-numeric: tabular-nums; }
+.vpb-info {
+  flex: 0 0 auto; padding: 0 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 11px;
+  /* 承载信息，用 secondary（对比度 6.79 ≥ 4.5） */
+  color: var(--dsw-alias-label-secondary);
+  font-variant-numeric: tabular-nums;
+}
+/*
+ * 首行对齐（2026-11-18 大王要求）：
+ *
+ * 实测坐标系：.cb-doc 左 240 + padding 24 = 内容起点 264。
+ * 标题/正文的文字盒 left = 274.5，比内容起点多 10.5px ——
+ * 那是字体自身的左侧留白（left side bearing），不是 CSS 缩进。
+ *
+ * 所以阅读栏第一个元素的 padding-left 不能清零，
+ * 而是要和正文的「内容起点 + 字形留白」对齐。
+ * 实测 .vpb-info 的 padding-left: 6px 时首字落在 270（差 4.5px），
+ * 补到 10.5px 正好落在 274.5，与标题、正文三点一线。
+ */
+.vpb-bar > .vpb-info:first-child { padding-left: 10px; }
+/* 最后一个元素右侧对齐（它没有字形留白问题，保持 0） */
+.vpb-bar > :last-child { padding-right: 0; }
+/*
+ * 取最宽松的阅读栏高度（大王：「直接按最大的阅读栏高」）：
+ * 原来 30px，控件 26px + 上下 2px，紧贴。
+ * 给到 34px，控件垂直居中、上下各留 4px，鼠标更好点，也不再压着正文。
+ */
+.vpb-bar { min-height: 34px; }
 .vpb-info-empty { opacity: .7; }
 .vpb-grp { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; }
 .vpb-sep { flex: 0 0 auto; width: 1px; height: 13px; margin: 0 4px; background: var(--dsw-alias-border-l1); opacity: .7; }
