@@ -9389,7 +9389,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 .dn-btn-sm { font-size: 12px; padding: 2px 8px; }
 .vp-treehead { display: flex; align-items: center; gap: 6px; padding: 2px 4px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1);
   /* 标题行的下拉要浮在下面树列表之上（2026-11-18） */ position: relative; z-index: 20; }
-.vp-treehead-title { flex: 1; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+/* 2026-11-18：标题不再撑满整行（原来 flex:1 把加号推到行尾）。
+   改成「按内容宽度」，加号紧跟其后；超长时才省略。 */
+.vp-treehead-title { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 紧跟加号之后的那个文字按钮（展开/收起）用 auto 左边距顶到行尾 */
+.vp-treehead-title + .vp-newinline + .vp-treehead-btn { margin-left: auto; }
 .vp-treehead-btn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .vp-treehead-btn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
 /* 搜索框：对齐文案台 .cb-search（描边容器 + 图标 + 透明 input） */
@@ -10075,18 +10079,22 @@ mark.df-hit[data-active="true"] {
 /* .vp-newmenu 已删：加号容器改成 .vp-newfloat（absolute 定位到左下角）。 */
 /* 新建：浮动加号容器，贴在左栏左下角（2026-11-18 大王要求「加号放下面」） */
 /* 新建加号：已挪进「文件」标题行（2026-11-18 大王要求） */
-.vp-newinline { position: relative; flex: 0 0 auto; display: flex; align-items: center; }
+.vp-newinline { position: relative; flex: 0 0 auto; display: flex; align-items: center; margin-left: -2px; }
 /* 圆形加号按钮：与文案台 .cb-newdraft / 写作台 .wbg-newproj 视觉统一（2026-11-18） */
+/* 2026-11-18 大王要求：去边框、去底色，就是一个贴着标题的加号符号。
+   只在 hover / 展开时才显出圆底和边框，平时与文字同层。 */
 .vp-newbtn-round {
   display: grid; place-items: center;
-  width: 22px; height: 22px; padding: 0; border-radius: 50%;
-  border: 1px solid var(--dsw-alias-border-l1);
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary); font: inherit; font-size: 15px; line-height: 1;
+  width: 20px; height: 20px; padding: 0; border-radius: 50%;
+  border: 0;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font: inherit; font-size: 15px; line-height: 1;
   cursor: pointer;
+  transition: background .12s ease, color .12s ease;
 }
-.vp-newbtn-round:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-1)); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
-.vp-newbtn-round[data-open="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.vp-newbtn-round:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.vp-newbtn-round[data-open="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
 /*
  * 新建下拉菜单（2026-11-18 改 fixed）：
  *
@@ -10416,7 +10424,11 @@ mark.df-hit[data-active="true"] {
 
 .cb-head, .wbg-head { display: flex; align-items: center; gap: 6px; padding: 2px 12px 6px; margin-bottom: 2px; border-bottom: 1px solid var(--dsw-alias-border-l1);
   /* 下拉要浮在下面列表之上（2026-11-18） */ position: relative; z-index: 20; }
-.cb-head-title, .wbg-head-title { flex: 1; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); }
+/* 2026-11-18：同上，标题按内容宽度，加号贴字 */
+.cb-head-title, .wbg-head-title { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 文案台：紧跟加号的那个按钮顶到行尾（写作台后面没有按钮，不命中） */
+.cb-head-title + .vp-newinline + .vp-treehead-btn { margin-left: auto; }
+/* 写作台只有一个加号，其余留白；加号自己贴住标题 */
 
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; padding: 0; }
 .cb-search-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
