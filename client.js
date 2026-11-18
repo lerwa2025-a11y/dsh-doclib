@@ -5724,6 +5724,8 @@ window.__ModuleLoader__.load({
         const [modelLabel, setModelLabel] = useState('')
         const [modelBusy, setModelBusy] = useState(false)
         const [modelOpen, setModelOpen] = useState(false)
+        /* 模型菜单容器（2026-11-18：点外面要能关掉） */
+        const modelBoxRef = useRef(null)
         /*
          * 聊天记录（2026-11-18）：原来右栏只有输入框，看不到聊了什么。
          * 从 Host /ai-history 读整段历史，只读。
@@ -5732,6 +5734,8 @@ window.__ModuleLoader__.load({
         const [historyLoading, setHistoryLoading] = useState(false)
         const [historyMore, setHistoryMore] = useState(false)
         const msgListRef = useRef(null)
+        /* 会话预热只做一次（2026-11-18） */
+        const warmRef = useRef(false)
         /* 会话建立中（防连点，2026-11-18 会话区常驻配套） */
         const [sessionBusy, setSessionBusy] = useState(false)
         /*
@@ -5811,16 +5815,28 @@ window.__ModuleLoader__.load({
         }, [api, sessionId])
 
         /** 没有会话时点模型：先建/拿会话，再去开菜单 —— 选择是 per-session 的，没会话无处落。 */
+        /**
+         * 打开模型菜单（2026-11-18 改）。
+         *
+         * 大王要的顺序：选模型 → 打字 → 发送，会话在后台建。
+         *
+         * 技术约束：模型目录只能按会话取（directoryFor(sessionId)），
+         * 没有全局模型列表 API。所以这里会话没好就先静默补建一次，
+         * 不弹窗、不跳转 —— 侧栏挂载时已在预热，通常不用等。
+         */
         const openModels = async () => {
           if (modelOpen) {
             setModelOpen(false)
             return
           }
+          if (scopeRoot === '') {
+            setError(t('assistNeedWorkspace'))
+            return
+          }
           if (sessionId === '') {
-            if (scopeRoot === '') {
-              setError(t('assistNeedWorkspace'))
-              return
-            }
+            if (sessionBusy) return
+            setSessionBusy(true)
+            setError('')
             try {
               const id = await api.ensureSession(scopeRoot)
               await api.saveBinding(scopeRoot, id)
@@ -5829,6 +5845,8 @@ window.__ModuleLoader__.load({
               const raw = messageOf(err)
               setError(raw === 'no-session-service' ? t('assistNoService') : t('assistSendFailed') + raw)
               return
+            } finally {
+              setSessionBusy(false)
             }
           }
           setModelOpen(true)
@@ -5852,6 +5870,27 @@ window.__ModuleLoader__.load({
             setModelBusy(false)
           }
         }
+
+        /*
+         * 模型菜单点外面就关（2026-11-18 大王要求）。
+         * 原来只有再点一次按钮才关，菜单会一直挂在界面上。
+         */
+        useEffect(() => {
+          if (!modelOpen) return undefined
+          const onDown = (event) => {
+            const box = modelBoxRef.current
+            const node = event.target
+            if (box && node && typeof box.contains === 'function' && box.contains(node)) return
+            setModelOpen(false)
+          }
+          const onKey = (event) => { if (event.key === 'Escape') setModelOpen(false) }
+          document.addEventListener('mousedown', onDown)
+          document.addEventListener('keydown', onKey)
+          return () => {
+            document.removeEventListener('mousedown', onDown)
+            document.removeEventListener('keydown', onKey)
+          }
+        }, [modelOpen])
 
         /** 拉一次聊天记录。会话没绑定时清空即可，不报错。 */
         const loadHistory = async (id) => {
@@ -5879,6 +5918,28 @@ window.__ModuleLoader__.load({
         useEffect(() => {
           void loadHistory(sessionId)
         }, [sessionId])
+
+        /*
+         * 会话预热（2026-11-18）：
+         * 侧栏一挂载就在后台把会话建好，
+         * 这样点模型、发第一句都不用再等 —— 用户感觉是「直接就能用」。
+         * 只建一次；失败就等用户操作时再试，不打扰。
+         */
+        useEffect(() => {
+          if (warmRef.current) return
+          if (scopeRoot === '') return
+          if (sessionId !== '') { warmRef.current = true; return }
+          warmRef.current = true
+          void (async () => {
+            try {
+              const id = await api.ensureSession(scopeRoot)
+              await api.saveBinding(scopeRoot, id)
+              setSessionId(id)
+            } catch {
+              /* 预热失败不影响使用，用户点模型或发消息时会再试 */
+            }
+          })()
+        }, [api, scopeRoot, sessionId])
 
         /* 新消息进来滚到底 */
         useEffect(() => {
@@ -6047,7 +6108,7 @@ window.__ModuleLoader__.load({
           h('div', { className: 'cb-input' },
             h(
               'div',
-              { className: 'cb-model' },
+              { className: 'cb-model', ref: modelBoxRef },
               h(
                 'button',
                 {
