@@ -8132,7 +8132,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               ? h(
                 'div',
                 {
-                  className: 'wbg-vol',
+                  className: 'wbg-vol wbg-sect',
+                  'data-kind': 'body',
                   'data-open': bodyOpen ? 'true' : 'false',
                   role: 'button',
                   tabIndex: 0,
@@ -8208,7 +8209,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               ? h(
                   'div',
                   {
-                    className: 'wbg-vol',
+                    className: 'wbg-vol wbg-sect',
+                    'data-kind': 'setting',
                     'data-open': settingOpen ? 'true' : 'false',
                     role: 'button',
                     tabIndex: 0,
@@ -10646,6 +10648,26 @@ mark.df-hit[data-active="true"] {
 .wbg-list { width: 240px; flex: none; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
 .wbg-search { margin: 12px 12px 4px; height: 30px; flex: none; display: flex; align-items: center; gap: 6px; padding: 0 8px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .wbg-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 8px 12px; }
+/*
+ * 左栏分区标题（2026-11-18 需求10）：
+ * 「正文」「设定」两个大区，原来和卷章用同一档 11px 灰字，分不出来。
+ * 现在放大到 13px、加粗、上色区分：正文蓝（主角）、设定琥珀（辅助）。
+ */
+.wbg-sect {
+  margin-top: 6px;
+  padding: 10px 6px 6px;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+  font-size: 13px;
+}
+.wbg-sect .wbg-vol-t { font-size: 13px; font-weight: 700; letter-spacing: .01em; }
+.wbg-sect .wbg-vol-n { font-size: 11px; }
+.wbg-sect[data-kind="body"] { color: var(--dsw-alias-brand-primary); }
+.wbg-sect[data-kind="setting"] { color: var(--dsw-alias-state-warn-primary); }
+.wbg-sect[data-kind="body"] .wbg-vol-t,
+.wbg-sect[data-kind="body"] .wbg-vol-caret { color: var(--dsw-alias-brand-primary); }
+.wbg-sect[data-kind="setting"] .wbg-vol-t,
+.wbg-sect[data-kind="setting"] .wbg-vol-caret { color: var(--dsw-alias-state-warn-primary); }
+
 .wbg-vol { display: flex; align-items: center; gap: 6px; padding: 8px 6px 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .wbg-vol[data-open="false"] { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 500; }
 .wbg-vol-caret { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
