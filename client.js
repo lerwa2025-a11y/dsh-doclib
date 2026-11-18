@@ -6136,7 +6136,22 @@ window.__ModuleLoader__.load({
             try {
               const data = await vaultApiGet('/skills')
               if (!alive) return
-              setSkillGroups(Array.isArray(data && data.groups) ? data.groups : [])
+              /*
+               * 只列 invocation.userInvocable 的技能 ——
+               * 这是技能工坊自己的过滤规则（client.js:2355）：
+               * 用户在输入框能打 /name 调用的那些。
+               * 模型自动但用户不能调的，不在这里列（本面板是用户点名用的）。
+               */
+              const raw = Array.isArray(data && data.groups) ? data.groups : []
+              const filtered = raw
+                .map((group) => ({
+                  ...group,
+                  skills: (Array.isArray(group.skills) ? group.skills : []).filter(
+                    (skill) => skill && skill.userInvocable === true,
+                  ),
+                }))
+                .filter((group) => group.skills.length > 0)
+              setSkillGroups(filtered)
             } catch {
               /* 读不到就当没有技能，不影响对话 */
             }
@@ -6502,7 +6517,7 @@ window.__ModuleLoader__.load({
                 h('span', { className: 'cb-model-txt' }, modelLabel !== '' ? modelLabel : t('assistModelPick')),
                 h('span', { className: 'cb-model-caret' }, modelBusy ? '·' : '▾'),
               ),
-            /* 选择技能（2026-11-18 大王要求）：和模型按钮并排 */
+            /* 选择技能（2026-11-18）：和技能工坊输入框旁那个按钮一模一样 */
             h(
               'div',
               { className: 'cb-skill', ref: skillBoxRef },
@@ -6510,18 +6525,40 @@ window.__ModuleLoader__.load({
                 'button',
                 {
                   type: 'button',
-                  className: 'cb-model-btn cb-skill-btn',
+                  className: 'cb-skill-btn',
+                  'aria-label': t('assistSkill'),
+                  title: pickedSkills.length === 0
+                    ? t('assistSkill')
+                    : t('assistSkillPicked') + pickedSkills.length,
+                  'aria-haspopup': 'dialog',
+                  'aria-expanded': skillOpen ? 'true' : 'false',
                   'data-open': skillOpen ? 'true' : 'false',
-                  title: t('assistSkill'),
                   disabled: busy,
+                  onMouseDown: (event) => event.preventDefault(),
                   onClick: () => setSkillOpen((open) => !open),
                 },
-                h('span', { className: 'cb-model-txt' },
-                  pickedSkills.length === 0
-                    ? t('assistSkillPick')
-                    : t('assistSkillPicked') + pickedSkills.length,
+                /*
+                 * 五角星图标：和技能工坊输入框旁那个按钮**同一份 path**
+                 * （dsh-skill-workshop/client.js:2484）。
+                 */
+                h('svg', {
+                  viewBox: '0 0 16 16',
+                  width: 14,
+                  height: 14,
+                  fill: 'none',
+                  'aria-hidden': 'true',
+                },
+                  h('path', {
+                    d: 'M8 1.9l1.75 3.55 3.9.57-2.82 2.75.66 3.89L8 10.83l-3.49 1.83.66-3.89L2.35 6.02l3.9-.57L8 1.9Z',
+                    stroke: 'currentColor',
+                    strokeWidth: 1.2,
+                    strokeLinejoin: 'round',
+                  }),
                 ),
-                h('span', { className: 'cb-model-caret' }, '▾'),
+                /* 已选数量角标（技能工坊没有，但选了得看得见） */
+                pickedSkills.length > 0
+                  ? h('span', { className: 'cb-skill-count' }, pickedSkills.length)
+                  : null,
               ),
               skillOpen
                 ? h(
@@ -10822,8 +10859,46 @@ mark.df-hit[data-active="true"] {
 .cb-model-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-model-caret { flex: none; font-size: 10px; opacity: .6; }
 /* 技能按钮（2026-11-18）：复用 .cb-model-btn 的外观，只调间距 */
-.cb-skill { position: relative; display: inline-flex; margin-left: 6px; }
-.cb-skill-btn { min-width: 96px; }
+/*
+ * 技能按钮（2026-11-18 第三次）：照抄技能工坊的 .ssPickerButton，
+ * 26×26 五角星，透明底，hover 才显背景 —— 和输入框旁那个按钮一致。
+ */
+.cb-skill { position: relative; display: inline-flex; }
+.cb-skill-btn {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--dsw-radius-sm, 8px);
+  padding: 0;
+  color: var(--dsw-alias-label-tertiary);
+  background: transparent;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.cb-skill-btn:hover, .cb-skill-btn[aria-expanded='true'] {
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-interactive-bg-hover);
+}
+.cb-skill-btn:disabled { opacity: .45; cursor: default; }
+/* 已选数量角标：右下角一个小圆点数字 */
+.cb-skill-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-business-primary);
+  color: var(--dsw-alias-label-inverse, #fff);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+}
+
 .cb-skill-menu { max-height: 420px; overflow-y: auto; min-width: 260px; }
 /* 技能分组标题（2026-11-18：结构对齐技能工坊） */
 .cb-skill-group { margin-bottom: 8px; }
