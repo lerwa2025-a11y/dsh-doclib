@@ -168,6 +168,11 @@ window.__ModuleLoader__.load({
         assistNew: '换一个新会话',
         assistSend: '发送',
         assistNoService: '当前环境没有会话服务，发不出去',
+        assistCreateSession: 'New session',
+        assistNoSessionYet: 'No session yet',
+        /* 会话区常驻（2026-11-18） */
+        assistCreateSession: '新建会话',
+        assistNoSessionYet: '还没建会话',
         assistSendFailed: '发送失败：',
         assistNeedWorkspace: '先点顶栏的「工作台区域」选一个文件夹，这个工作台才会有会话',
         assistModel: '模型',
@@ -5727,6 +5732,8 @@ window.__ModuleLoader__.load({
         const [historyLoading, setHistoryLoading] = useState(false)
         const [historyMore, setHistoryMore] = useState(false)
         const msgListRef = useRef(null)
+        /* 会话建立中（防连点，2026-11-18 会话区常驻配套） */
+        const [sessionBusy, setSessionBusy] = useState(false)
         /*
          * 助手栏收起态（2026-11-18 大王要求：写作助手要能收起到侧边去）。
          * 收起时只剩一条竖直窄条，点它或按钮展开 —— 正文区拿回 268px 宽度。
@@ -5906,12 +5913,36 @@ window.__ModuleLoader__.load({
           }
         }
 
-        const startFresh = async () => {
-          await api.unbind(scopeRoot)
-          setSessionId('')
-          setTitle('')
-          setRunning(false)
+        /**
+         * 建一个新会话（2026-11-18 会话区常驻配套）。
+         *
+         * 两种入口都用它：
+         *   · 没会话时点「新建会话」
+         *   · 有会话时点「换一个新会话」（先解绑再建）
+         * 建完自动拉聊天记录。
+         */
+        const ensureSessionNow = async () => {
+          if (sessionBusy) return
+          if (scopeRoot === '') {
+            setError(t('assistNeedWorkspace'))
+            return
+          }
+          setSessionBusy(true)
           setError('')
+          try {
+            /* 已有会话：先解绑，强制下面建新的 */
+            if (sessionId !== '') await api.unbind(scopeRoot)
+            const id = await api.ensureSession(scopeRoot)
+            await api.saveBinding(scopeRoot, id)
+            setSessionId(id)
+            setRunning(false)
+            await loadHistory(id)
+          } catch (err) {
+            const raw = messageOf(err)
+            setError(raw === 'no-session-service' ? t('assistNoService') : t('assistSendFailed') + raw)
+          } finally {
+            setSessionBusy(false)
+          }
         }
 
         const statusText = sessionId === '' ? t('assistUnbound') : busy || running ? t('assistRunning') : t('assistIdle')
@@ -5961,15 +5992,30 @@ window.__ModuleLoader__.load({
                   h(CbIcon, { name: 'checkCircle', small: true }),
                   h('span', null, t(task.key)))))
             : null,
-          sessionId !== ''
-            ? h('div', { className: 'cb-sess' },
-              h('span', { className: 'cb-sess-k' }, t('assistStatus')),
-              h('span', { className: 'cb-sess-t', title: sessionId }, title !== '' ? title : sessionId),
-              blank ? h('span', { className: 'cb-sess-hint' }, t('assistBlankHint')) : null,
-              h('div', { className: 'cb-sess-btns' },
-                h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => api.openSession(sessionId) }, t('assistOpen')),
-                h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => void startFresh() }, t('assistNew'))))
-            : null,
+          /*
+           * 会话区常驻（2026-11-18 大王要求）：
+           * 原来整块被 sessionId !== '' 包着，没会话就不显示，
+           * 必须先点模型才会建会话、才出现「打开会话」。
+           * 现在两种状态都显示，没会话时给「新建会话」。
+           */
+          h('div', { className: 'cb-sess' },
+            h('span', { className: 'cb-sess-k' }, t('assistStatus')),
+            sessionId !== ''
+              ? h('span', { className: 'cb-sess-t', title: sessionId }, title !== '' ? title : sessionId)
+              : h('span', { className: 'cb-sess-t cb-sess-none' }, t('assistNoSessionYet')),
+            blank ? h('span', { className: 'cb-sess-hint' }, t('assistBlankHint')) : null,
+            h('div', { className: 'cb-sess-btns' },
+              sessionId !== ''
+                ? h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
+                : null,
+              h('button', {
+                type: 'button',
+                className: 'cb-sess-btn',
+                disabled: sessionBusy,
+                onClick: () => void ensureSessionNow(),
+              }, sessionId !== '' ? t('assistNew') : t('assistCreateSession')),
+            ),
+          ),
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
           /*
            * 聊天记录区（2026-11-18 大王要求）：
@@ -10095,6 +10141,8 @@ mark.df-hit[data-active="true"] {
 .cb-sess-k { font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-sess-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-sess-btns { display: flex; gap: 6px; flex-wrap: wrap; }
+/* 没会话时的占位文字（2026-11-18 会话区常驻） */
+.cb-sess-none { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-style: italic; }
 .cb-sess-btn { height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
