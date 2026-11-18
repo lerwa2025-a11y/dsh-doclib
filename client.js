@@ -9334,12 +9334,11 @@ mark.df-hit[data-active="true"] {
   flex: 1; min-height: 0; overflow-y: auto; outline: none;
   white-space: pre-wrap; word-break: break-word;
   /*
-   * 首行对齐（2026-11-18 大王质疑后重测）：
-   * contenteditable 的文本节点从内容框起算，不含字体的 left side bearing，
-   * 而阅读态 p/h2 的文字盒含那 10.5px —— 所以编辑态首字比标题/阅读栏左 10.5px。
-   * 补 10px 让三者对齐（实测落在 274，与标题 274.5 齐）。
-   */
-  padding-left: 10px; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+   * 首行对齐（2026-11-18 像素扫描定案）：
+   * 内容起点 = .cb-doc 的 padding-left 24，标题笔画正好落在 24。
+   * 编辑态不加任何额外左内边距，笔画同样落在 24，与标题一致。
+   * （上一轮加 10px 是误判：把字形留白当缺陷，反而推离了标题。）
+   */ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 .cb-editor-surface:empty::before { content: attr(data-placeholder); color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 
 /* 底部错误与保存状态 */
@@ -9605,8 +9604,7 @@ mark.df-hit[data-active="true"] {
 .wbg-editor-surface {
   flex: 1; min-height: 0; overflow-y: auto; outline: none;
   white-space: pre-wrap; word-break: break-word;
-  /* 首行对齐：同文案台，补字形左侧留白 10px（2026-11-18） */
-  padding-left: 10px; font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
+  /* 首行对齐：同文案台，不加额外左内边距（2026-11-18 像素扫描定案） */ font-size: 15px; line-height: 1.95; color: var(--dsw-alias-label-primary); caret-color: var(--dsw-alias-label-primary); }
 
 /* 场景分隔符（正文里的三个连续短横线） */
 .wbg-scene-sep { margin: 16px 0; text-align: center; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); opacity: .55; user-select: none; }
@@ -9846,7 +9844,27 @@ mark.df-hit[data-active="true"] {
  * 实测 .vpb-info 的 padding-left: 6px 时首字落在 270（差 4.5px），
  * 补到 10.5px 正好落在 274.5，与标题、正文三点一线。
  */
-.vpb-bar > .vpb-info:first-child { padding-left: 10px; }
+/*
+ * 首行对齐（2026-11-18 像素扫描定案）：
+ *
+ * 3x DPI 扫描的四条基线：
+ *   标题 h1    笔画 24  （内容起点，无额外缩进）
+ *   参考段落   笔画 24
+ *   编辑态     笔画 24  （去掉上一轮误加的 10px 后）
+ *   阅读栏     笔画 24  ← 这里让 .vpb-info 左内边距归零即可
+ *
+ * 上一轮我用 Range 文字盒坐标判断对齐，那是含字形 advance 的盒子，
+ * 跟肉眼看到的笔画起点不是一回事；加 10px 反而推离了标题。
+ */
+/*
+ * 阅读栏首字对齐（2026-11-18 像素扫描定案）：
+ *
+ * 内容起点 24 下，标题(18px)/正文(15px)的「索」笔画都在 24，
+ * 而阅读栏「1」(11px) 笔画在 25 —— 因为 left side bearing 按字号比例缩放，
+ * 11px 字形留白更少，笔画反而更靠左。
+ * 用 -1px 补偿，让 11px 的「1」笔画也落在 24。
+ */
+.vpb-bar > .vpb-info:first-child { padding-left: 0; margin-left: -1px; }
 /* 最后一个元素右侧对齐（它没有字形留白问题，保持 0） */
 .vpb-bar > :last-child { padding-right: 0; }
 /*
