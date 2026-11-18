@@ -159,6 +159,9 @@ window.__ModuleLoader__.load({
         assistOpen: '打开会话',
         /* 助手栏收起（2026-11-18 大王要求：写作助手能收起到侧边） */
         assistCollapse: '收起助手',
+        assistHistoryLoading: '读取对话中…',
+        assistHistoryEmpty: '还没有对话。问一句试试，或点上面的「打开会话」。',
+        assistHistoryMore: '只显示最近 80 条，更早的请点「打开会话」查看。',
         assistExpand: '展开助手',
         assistNew: '换一个新会话',
         assistSend: '发送',
@@ -489,6 +492,9 @@ window.__ModuleLoader__.load({
         assistRunning: 'Running',
         assistOpen: 'Open session',
         assistCollapse: 'Collapse assistant',
+        assistHistoryLoading: 'Loading conversation…',
+        assistHistoryEmpty: 'No messages yet. Ask something, or open the session.',
+        assistHistoryMore: 'Showing the latest 80 messages. Open the session for older ones.',
         assistExpand: 'Expand assistant',
         assistNew: 'Start another session',
         assistSend: 'Send',
@@ -5643,6 +5649,14 @@ window.__ModuleLoader__.load({
         const [modelBusy, setModelBusy] = useState(false)
         const [modelOpen, setModelOpen] = useState(false)
         /*
+         * 聊天记录（2026-11-18）：原来右栏只有输入框，看不到聊了什么。
+         * 从 Host /ai-history 读整段历史，只读。
+         */
+        const [messages, setMessages] = useState([])
+        const [historyLoading, setHistoryLoading] = useState(false)
+        const [historyMore, setHistoryMore] = useState(false)
+        const msgListRef = useRef(null)
+        /*
          * 助手栏收起态（2026-11-18 大王要求：写作助手要能收起到侧边去）。
          * 收起时只剩一条竖直窄条，点它或按钮展开 —— 正文区拿回 268px 宽度。
          */
@@ -5761,6 +5775,39 @@ window.__ModuleLoader__.load({
           }
         }
 
+        /** 拉一次聊天记录。会话没绑定时清空即可，不报错。 */
+        const loadHistory = async (id) => {
+          if (typeof id !== 'string' || id === '') {
+            setMessages([])
+            setHistoryMore(false)
+            return
+          }
+          setHistoryLoading(true)
+          try {
+            const data = await vaultApiGet('/ai-history?session=' + encodeURIComponent(id) + '&limit=80')
+            const rows = Array.isArray(data.messages) ? data.messages : []
+            setMessages(rows)
+            setHistoryMore(data.more === true)
+          } catch {
+            /* 读不到就当空，不打扰用户 */
+            setMessages([])
+            setHistoryMore(false)
+          } finally {
+            setHistoryLoading(false)
+          }
+        }
+
+        /* 会话变了就重拉记录 */
+        useEffect(() => {
+          void loadHistory(sessionId)
+        }, [sessionId])
+
+        /* 新消息进来滚到底 */
+        useEffect(() => {
+          const node = msgListRef.current
+          if (node) node.scrollTop = node.scrollHeight
+        }, [messages])
+
         const send = async () => {
           const text = draft.trim()
           if (text === '' || busy) return
@@ -5774,6 +5821,8 @@ window.__ModuleLoader__.load({
               await api.saveBinding(root, id)
             }
             setDraft('')
+            /* 发完立刻刷一次记录，让用户看到自己发的内容 */
+            void loadHistory(id)
           } catch (err) {
             const raw = messageOf(err)
             setError(raw === 'no-workspace'
@@ -5851,6 +5900,32 @@ window.__ModuleLoader__.load({
                 h('button', { type: 'button', className: 'cb-sess-btn', onClick: () => void startFresh() }, t('assistNew'))))
             : null,
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
+          /*
+           * 聊天记录区（2026-11-18 大王要求）：
+           * 原来右栏只有「会话 / 输入框」两块，看不到聊了什么。
+           * 现在把 user / assistant 消息按时间铺出来，可滚动。
+           */
+          h('div', { className: 'cb-chat', ref: msgListRef },
+            historyLoading && messages.length === 0
+              ? h('div', { className: 'cb-chat-hint' }, t('assistHistoryLoading'))
+              : null,
+            !historyLoading && messages.length === 0
+              ? h('div', { className: 'cb-chat-empty' },
+                h(CbIcon, { name: 'sparkle', small: true }),
+                h('span', null, t('assistHistoryEmpty')))
+              : null,
+            historyMore ? h('div', { className: 'cb-chat-hint' }, t('assistHistoryMore')) : null,
+            messages.map((msg, index) =>
+              h(
+                'div',
+                {
+                  key: index,
+                  className: msg.role === 'user' ? 'cb-msg cb-msg-user' : 'cb-msg cb-msg-ai',
+                },
+                h('div', { className: 'cb-msg-text' }, msg.text),
+              ),
+            ),
+          ),
           h('div', { className: 'cb-input' },
             h(
               'div',
@@ -5896,28 +5971,30 @@ window.__ModuleLoader__.load({
                 )
                 : null,
             ),
-            h(CbIcon, { name: 'sparkle', small: true }),
-            h('input', {
-              className: 'cb-input-field',
-              type: 'text',
-              value: draft,
-              placeholder: t(props.placeholderKey),
-              disabled: busy,
-              onChange: (event) => setDraft(event.target.value),
-              onKeyDown: (event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  void send()
-                }
-              },
-            }),
-            h('button', {
-              type: 'button',
-              className: 'cb-send',
-              title: t('assistSend'),
-              disabled: busy || draft.trim() === '',
-              onClick: () => void send(),
-            }, h(CbIcon, { name: 'arrowUp', small: true }))))
+            /* 输入行：图标 + 输入框 + 发送键（2026-11-18 从单行改成独立一行） */
+            h('div', { className: 'cb-input-row' },
+              h(CbIcon, { name: 'sparkle', small: true }),
+              h('input', {
+                className: 'cb-input-field',
+                type: 'text',
+                value: draft,
+                placeholder: t(props.placeholderKey),
+                disabled: busy,
+                onChange: (event) => setDraft(event.target.value),
+                onKeyDown: (event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    void send()
+                  }
+                },
+              }),
+              h('button', {
+                type: 'button',
+                className: 'cb-send',
+                title: t('assistSend'),
+                disabled: busy || draft.trim() === '',
+                onClick: () => void send(),
+              }, h(CbIcon, { name: 'arrowUp', small: true })))))
       }
 
       // ── 文案台：接真实数据（2026-11-17）────────────────────────────────
@@ -9476,7 +9553,29 @@ mark.df-hit[data-active="true"] {
 .cb-task { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; color: var(--dsw-alias-label-primary); }
 .cb-task .cb-ic { color: var(--dsw-alias-brand-primary); }
 .cb-task[data-done="true"], .cb-task[data-done="true"] .cb-ic { color: var(--dsw-alias-state-success-primary); }
-.cb-input { margin-top: auto; flex: none; height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 6px 0 8px; border-radius: var(--dsw-radius-sm, 8px); border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); font-size: 12px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/*
+ * 输入区重排（2026-11-18 大王：「下面的输入框也挤到一团」）：
+ * 原来固定 34px 单行 —— 模型按钮 + 图标 + 输入框 + 发送键全挤一行，
+ * 在 268px 宽的面板里输入框只剩几十像素。
+ * 改成纵向两段：模型选择占一行，输入框 + 发送占一行。
+ */
+.cb-input {
+  margin-top: auto; flex: none;
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 8px; border-radius: var(--dsw-radius-sm, 8px);
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  box-sizing: border-box;
+}
+/* 输入行：图标 + 输入框 + 发送键 */
+.cb-input-row {
+  display: flex; align-items: center; gap: 6px; min-width: 0;
+  height: 30px; padding: 0 4px 0 6px;
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  background: var(--dsw-alias-bg-base);
+  box-sizing: border-box;
+}
 .cb-input > .cb-ic { color: var(--dsw-alias-brand-primary); }
 .cb-send { width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 4px; background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-bg-base); }
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
@@ -9923,6 +10022,50 @@ mark.df-hit[data-active="true"] {
 .cb-sess-btn { height: 24px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
+/*
+ * 聊天记录区（2026-11-18 新增）：
+ * 占满剩余高度、可滚动，消息气泡区分 user / assistant。
+ */
+.cb-chat {
+  flex: 1; min-height: 0; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 2px 2px 4px;
+  /* 滚动条收窄，别占掉本来就窄的面板 */
+  scrollbar-width: thin;
+}
+.cb-chat::-webkit-scrollbar { width: 6px; }
+.cb-chat::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
+.cb-chat-hint, .cb-chat-empty {
+  flex: none; padding: 10px 8px; border-radius: 6px;
+  font-size: 11px; line-height: 1.6;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  background: var(--dsw-alias-bg-layer-2);
+}
+.cb-chat-empty {
+  display: flex; align-items: flex-start; gap: 6px;
+}
+.cb-chat-empty .cb-ic { flex: none; margin-top: 2px; color: var(--dsw-alias-brand-primary); }
+.cb-msg { display: flex; flex-direction: column; gap: 2px; }
+.cb-msg-text {
+  padding: 8px 10px; border-radius: 8px;
+  font-size: 12px; line-height: 1.7;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  max-width: 100%; box-sizing: border-box;
+}
+/* 用户消息：靠右、品牌色淡底 */
+.cb-msg-user { align-items: flex-end; }
+.cb-msg-user .cb-msg-text {
+  background: color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent);
+  color: var(--dsw-alias-label-primary);
+  border-bottom-right-radius: 2px;
+}
+/* 助手消息：靠左、中性底 */
+.cb-msg-ai { align-items: flex-start; }
+.cb-msg-ai .cb-msg-text {
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+  border-bottom-left-radius: 2px;
+}
 .cb-input-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; padding: 0; }
 .cb-input-field::placeholder { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-input-field:disabled { opacity: .6; }

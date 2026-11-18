@@ -20,6 +20,7 @@ import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import { createWriteProject, listWriteProjects, readWriteProject } from './write-desk.js'
 import { readTail, waitReply } from './ai-edit.js'
+import { readHistory } from './history.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
 import {
   clearOrder,
@@ -333,6 +334,19 @@ export function apply(ctx) {
                   sessionId: body && body.sessionId,
                   sinceSeq: body && typeof body.sinceSeq === 'number' ? body.sinceSeq : -1,
                   timeoutMs: body && typeof body.timeoutMs === 'number' ? body.timeoutMs : 120000,
+                }))
+                return
+              }
+              /*
+               * 读聊天记录（2026-11-18）。
+               * 右栏写作助手原来只有输入框、没有对话区，用户看不到聊了什么。
+               * sessionQuery.readSession() 能读完整事件流，这里抽成消息数组返回。
+               * 只读，不改会话。
+               */
+              if (route === '/ai-history' && req.method === 'GET') {
+                sendJson(res, 200, await readHistory(webCtx, {
+                  sessionId: query.get('session') || '',
+                  limit: Number(query.get('limit') || 60),
                 }))
                 return
               }
