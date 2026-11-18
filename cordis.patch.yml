@@ -13,13 +13,16 @@
 #   现在合并进本文件，用 group 组织成一个组 ——
 #   装 dsh-doclib 就自带两个预设，不用再单独装。
 #
+# 组用 DSH 内置的 cordis:group（与插件内 compaction 组同一写法），
+# 不依赖任何自定义入口模块/包导出。
+#
 # 组内三个条目：
 #   dsh-doclib              插件本体（页面 + Host 路由）
 #   preset-copy-assistant   文案台右栏的预设
 #   preset-write-assistant  写作台右栏的预设
 - insert:
     - id: dsh-doclib-bundle
-      name: dsh-doclib/bundle
+      name: cordis:group
       group: true
       config:
         # ── 插件本体 ──────────────────────────────────────

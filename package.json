@@ -13,8 +13,7 @@
     "./icon": "./icon.svg",
     "./vault": "./index.js",
     "./vault/locale/*.json": "./locale/vault/*.json",
-    "./vault/icon": "./icon-vault.svg",
-    "./bundle": "./bundle.js"
+    "./vault/icon": "./icon-vault.svg"
   },
   "files": [
     "index.js",
@@ -36,8 +35,7 @@
     "README.md",
     "LICENSE",
     "history.js",
-    "studio-session.js",
-    "bundle.js"
+    "studio-session.js"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
