@@ -3110,7 +3110,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
        *    展开状态统一由 VaultPage 的 openMenu 管（同一时刻只开一个）。
        *    注意：本函数是渲染期调用的普通函数、不是组件，里面不许出现任何 hook。
        */
-      const renderDrop = (key, label, title, items, current, onPick) =>
+      /* icon：按钮最左边画一个小图标（字体下拉用它，见 renderDrop('font', …) 处注释）。
+       * 传空串或不传就不画，字号 / 行距 / 底色三个下拉不受影响。 */
+      const renderDrop = (key, label, title, items, current, onPick, icon) =>
         h(
           'div',
           { className: 'vpb-drop', key },
@@ -3124,7 +3126,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               'aria-haspopup': 'listbox',
               'aria-expanded': openMenu === key ? 'true' : 'false',
               onClick: () => setOpenMenu((open) => (open === key ? '' : key)),
+              // label 可能为空（字体下拉在「跟随主题」时就是空的），
+              // 空文本按钮必须靠 aria-label 才读得出来，所以两边都写上 title。
+              'aria-label': title,
             },
+            icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
             h('span', { className: 'vpb-droplabel' }, label),
             h('span', { className: 'vpb-caret' }, '▾'),
           ),
@@ -3167,10 +3173,13 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             readerFontDirty.current = true
             setReaderFontSize(clampInt(Number(id), RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
           }),
-          renderDrop('font', labelOf(fontItems, readerFont), t('readerFont'), fontItems, readerFont, (id) => {
+          /* 字体下拉（2026-11-18 大王反馈歧义）：
+           * 原来按钮上写「主题默认」，和右边底色那个「跟随主题」并排，两个都像在换主题。
+           * 现在「跟随主题」时按钮只留图标（Lucide type 的 A 字形）+ ▾，选过具体字体才显示字体名。 */
+          renderDrop('font', readerFont === '' ? '' : labelOf(fontItems, readerFont), t('readerFont'), fontItems, readerFont, (id) => {
             readerFontDirty.current = true
             setReaderFont(readerFontOf(id))
-          }),
+          }, 'font'),
           renderDrop('line', labelOf(lineItems, lineValue), t('readerLine'), lineItems, lineValue, (id) => {
             readerFontDirty.current = true
             setReaderLine(readerLineOf(id))
@@ -4574,6 +4583,15 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         ],
         // Lucide check —— 勾选态
         check: ['M20 6 9 17l-5-5'],
+        // Lucide a-large-small —— 字体（Aa）。字体下拉用它当按钮图标：
+        // ① 「主题默认」四个字写在按钮上会被误读成「换主题」；
+        // ② 旁边的复制 / 标注都是文本类动作，用 T 字形会混淆，Aa 才是字体选择器的通用符号。
+        font: [
+          'm15 16 2.536-7.328a1.02 1.02 1 0 1 1.928 0L22 16',
+          'M15.697 14h5.606',
+          'm2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16',
+          'M3.304 13h6.392',
+        ],
         // Lucide x —— 关闭
         x: ['M18 6 6 18', 'm6 6 12 12'],
         // Lucide house —— 库根
@@ -5127,7 +5145,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           return () => document.removeEventListener('mousedown', onDown)
         }, [openMenu])
 
-        const drop = (key, label, title, items, current, onPick) =>
+        const drop = (key, label, title, items, current, onPick, icon) =>
           h(
             'div',
             { className: 'vpb-drop', key },
@@ -5141,7 +5159,9 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                 'aria-haspopup': 'listbox',
                 'aria-expanded': openMenu === key ? 'true' : 'false',
                 onClick: () => setOpenMenu((open) => (open === key ? '' : key)),
+                'aria-label': title,
               },
+              icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
               h('span', { className: 'vpb-droplabel' }, label),
               h('span', { className: 'vpb-caret' }, '▾'),
             ),
@@ -5198,10 +5218,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               readerDirtyFlag.current = true
               setFontSize(clampInt(Number(id), RF_SIZE_MIN, RF_SIZE_MAX, RF_SIZE_DEFAULT))
             }),
-            drop('font', labelOf(fontItems, font), t('readerFont'), fontItems, font, (id) => {
+            drop('font', font === '' ? '' : labelOf(fontItems, font), t('readerFont'), fontItems, font, (id) => {
               readerDirtyFlag.current = true
               setFont(readerFontOf(id))
-            }),
+            }, 'font'),
             drop('line', labelOf(lineItems, String(line)), t('readerLine'), lineItems, String(line), (id) => {
               readerDirtyFlag.current = true
               setLine(readerLineOf(id))
@@ -11600,6 +11620,8 @@ mark.df-hit[data-active="true"] {
 .vpb-drop { position: relative; flex: 0 0 auto; display: flex; }
 .vpb-droplabel { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
 .vpb-caret { flex: none; font-size: 10px; line-height: 1; opacity: .55; }
+/* 字体下拉在「跟随主题」时没有文字，只剩图标；空 span 会把图标和 ▾ 顶开，收掉。 */
+.vpb-droplabel:empty { display: none; }
 .vpb-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 132px; max-width: 220px; max-height: min(360px, 60vh); overflow-y: auto; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); box-sizing: border-box; }
 .vpb-menu::-webkit-scrollbar { width: 6px; }
 .vpb-menu::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
