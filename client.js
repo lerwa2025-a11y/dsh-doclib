@@ -78,7 +78,6 @@ window.__ModuleLoader__.load({
         vaultDeleted: '已移入回收站',
         vaultDeleteFailed: '删除失败：',
         /* 左栏视图切换 */
-        vaultSaveNow: '手动保存（Ctrl+S）',
         vaultSearch: '搜索全库',
         vaultSearchEmpty: '没有匹配的笔记',
         vaultTrashPanel: '回收站',
@@ -452,7 +451,6 @@ window.__ModuleLoader__.load({
         vaultDeleted: 'Moved to trash',
         vaultDeleteFailed: 'Delete failed: ', 
         /* 左栏视图切换 */
-        vaultSaveNow: 'Save now (Ctrl+S)',
         vaultSearch: 'Search vault',
         vaultSearchEmpty: 'No matching notes',
         vaultTrashPanel: 'Trash',
@@ -819,6 +817,44 @@ window.__ModuleLoader__.load({
       const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error((data && data.error) || `HTTP ${response.status}`)
       return data
+    }
+
+    /**
+     * 离开时立即落盘（2026-11-19 大王要求）。
+     *
+     * 背景：改文字只改内存 draft，停手 600ms（素材区）/1.2s（文案区、写作区）才写盘。
+     * 如果改完立刻切走、关标签、手机上划掉页面，定时器还没烧到，改动就丢了。
+     * 这里在三种「要离开」的时刻补一次写盘：
+     *   · pagehide        —— 关标签 / 刷新 / 前进后退
+     *   · visibilitychange 变 hidden —— 手机上切 App、划到后台（页面可能被系统杀掉）
+     *   · 组件卸载（含切到工作台外的会话页）—— 卸载时补最后一次
+     *
+     * flush 每次都从 ref 里取最新的那份闭包，所以读得到最新的 draft。
+     * 落盘失败不弹错：定时器还在就还会再试；真的丢了也不该在切页面时糊用户一脸。
+     */
+    function useFlushOnLeave(flush) {
+      const flushRef = useRef(flush)
+      flushRef.current = flush
+      useEffect(() => {
+        const run = () => {
+          if (typeof flushRef.current !== 'function') return
+          try {
+            flushRef.current()
+          } catch (err) {
+            /* 落盘失败静默 */
+          }
+        }
+        const onVisibility = () => {
+          if (document.visibilityState === 'hidden') run()
+        }
+        window.addEventListener('pagehide', run)
+        document.addEventListener('visibilitychange', onVisibility)
+        return () => {
+          window.removeEventListener('pagehide', run)
+          document.removeEventListener('visibilitychange', onVisibility)
+          run()
+        }
+      }, [])
     }
 
     /**
@@ -3459,6 +3495,12 @@ function useScrollMemo(bucket, selector, ready) {
         }
       }
 
+      /* 离开时立即落盘：还没写盘的内容比盘上的新就先写一次 */
+      useFlushOnLeave(() => {
+        if (!doc || doc.text === draft) return
+        void saveDoc()
+      })
+
       useEffect(() => {
         if (!doc || !doc.dirty) return
         const timer = setTimeout(() => {
@@ -4416,13 +4458,9 @@ function useScrollMemo(bucket, selector, ready) {
             : doc
               ? h('span', { className: 'vpb-state', 'data-state': 'saved' }, t('vaultSaved'))
               : null,
-        h('button', {
-          type: 'button', className: 'vpb-pill vpb-ib', onClick: () => void saveDoc(), disabled: !doc || !doc.dirty,
-          title: t('vaultSaveNow'), 'aria-label': t('vaultSaveNow'),
-        }, h(BoardIcon, { name: 'save', className: 'wb-ic' })),
         /*
          * 历史版本（2026-11-19 大王要求）：原来是个会撑出内联面板的文字按钮，
-         * 现在改成和文案区/写作区一模一样的图标下拉，位置也放在保存按钮后面。
+         * 现在改成和文案区/写作区一模一样的图标下拉，位置紧跟在保存状态后面。
          * 下拉项格式对齐 ReaderBar：月-日 时:分 · 大小KB。
          */
         doc
@@ -6208,7 +6246,6 @@ function useScrollMemo(bucket, selector, ready) {
         const hasDoc = props.hasDoc === true
         const infoText = typeof props.infoText === 'string' ? props.infoText : ''
         const saveState = typeof props.saveState === 'string' ? props.saveState : 'idle'
-        const dirty = props.dirty === true
 
         const [fontSize, setFontSize] = useState(RF_SIZE_DEFAULT)
         const [font, setFont] = useState('')
@@ -6433,18 +6470,6 @@ function useScrollMemo(bucket, selector, ready) {
               : hasDoc
                 ? h('span', { className: 'vpb-state', 'data-state': 'saved' }, t('vaultSaved'))
                 : null,
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'vpb-pill vpb-ib',
-              disabled: !hasDoc || !dirty,
-              title: t('vaultSaveNow'),
-              'aria-label': t('vaultSaveNow'),
-              onClick: () => props.onSave(),
-            },
-            h(BoardIcon, { name: 'save', className: 'wb-ic' }),
-          ),
           hasDoc
             ? drop(
                 'history',
@@ -8519,18 +8544,16 @@ function useScrollMemo(bucket, selector, ready) {
           ),
           /*
            * ── 阅读栏（2026-11-18 照搬素材库 .vpb-bar）──────────────────
-           *   [字数] ‖ [A- 14px A+ | 字体▾ | 行距▾ | 底色▾] ‖ [查找 复制] ‖ [已保存 💾]
+           *   [字数] ‖ [字号▾ | 字体▾ | 行距▾ | 底色▾] ‖ [查找 复制] ‖ [保存状态 历史版本▾]
            */
           h(ReaderBar, {
             t,
             hasDoc: true,
             /* 字数只在文档底部显示（2026-11-18 合并到一处） */
             infoText: '',
-            dirty: props.dirty === true,
             saveState: props.saveState,
             onFind: () => props.onFind(),
             onCopy: () => props.onCopyAll(),
-            onSave: () => props.onSaveNow(),
             onReader: (cfg) => props.onReader(cfg),
             /* 历史版本（2026-11-19）：按当前稿件路径取快照列表 */
             docPath: doc.path,
@@ -8880,6 +8903,12 @@ function useScrollMemo(bucket, selector, ready) {
           }
           // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [draft, doc])
+
+        /* 离开时立即落盘（同素材区） */
+        useFlushOnLeave(() => {
+          if (!doc || doc.text === draft) return
+          void save(true)
+        })
 
         // contenteditable ↔ draft：与素材库同一套（真实 \n + pre-wrap，不产生富文本节点）
         const editorToText = (node) => {
@@ -9300,7 +9329,7 @@ function useScrollMemo(bucket, selector, ready) {
                   type: 'button',
                   className: 'cb-prompt-go',
                   onClick: () => void promptCommit(),
-                }, t('vaultSaveNow')),
+                }, t('ok')),
                 h('button', {
                   type: 'button',
                   className: 'cb-prompt-x',
@@ -9329,7 +9358,6 @@ function useScrollMemo(bucket, selector, ready) {
             /* ReaderBar 的三个回调（2026-11-18） */
             onCopyAll: () => void copyAll(),
             onFind: openFind,
-            onSaveNow: () => void save(false),
             /* 历史版本恢复后重读正文（2026-11-19）：不进 pick 以免重置 mode */
             onReloadDoc: (path) => void reloadDoc(path),
             editor: h('div', {
@@ -10085,11 +10113,9 @@ function useScrollMemo(bucket, selector, ready) {
             hasDoc: true,
             /* 字数只在文档底部显示（2026-11-18 合并到一处） */
             infoText: '',
-            dirty: props.dirty === true,
             saveState: props.saveState,
             onFind: () => props.onFind(),
             onCopy: () => props.onCopyAll(),
-            onSave: () => props.onSaveNow(),
             onReader: (cfg) => props.onReader(cfg),
             /* 历史版本（2026-11-19）：按当前正文路径取快照列表 */
             docPath: file.path,
@@ -10633,6 +10659,12 @@ function useScrollMemo(bucket, selector, ready) {
           // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [draft, file])
 
+        /* 离开时立即落盘（同素材区） */
+        useFlushOnLeave(() => {
+          if (!file || file.text === draft) return
+          void save(true)
+        })
+
         // contenteditable ↔ draft（与素材库/文案台同一套）
         const editorToText = (node) => {
           if (!node) return ''
@@ -11128,7 +11160,6 @@ function useScrollMemo(bucket, selector, ready) {
             /* ReaderBar 的三个回调（2026-11-18） */
             onCopyAll: () => void copyAll(),
             onFind: openFind,
-            onSaveNow: () => void save(false),
             /* 历史版本恢复后重读正文（2026-11-19） */
             onReloadDoc: (path) => void reloadDoc(path),
             editor: h('div', {
