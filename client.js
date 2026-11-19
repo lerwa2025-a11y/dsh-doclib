@@ -62,7 +62,6 @@ window.__ModuleLoader__.load({
         vaultSnapshotRestored: '已从快照恢复',
         vaultRestore: '恢复这份',
         vaultSnapshotRestoreConfirm: '用这份历史版本覆盖当前内容？当前内容会先自动存一份，可以再回来。',
-        vaultFmtBold: '加粗（选中文字后点）',
         vaultCopyAll: '复制全文',
         vaultCopyPath: '复制路径',
         vaultPathCopied: '路径已复制',
@@ -106,10 +105,6 @@ window.__ModuleLoader__.load({
         vaultFolderHint: '这是文件夹。点标题可以改名，也可以用右键菜单；在左侧文件列表里点文件查看内容。',
         vaultMoved: '已移动',
         vaultDeleteDirWarn: '文件夹里的所有内容会一起移入回收站',
-        vaultFmtHeading: '二级标题',
-        vaultFmtTodo: '待办',
-        vaultFmtList: '列表',
-        vaultFmtCode: '行内代码',
         vaultFormatBoldSample: '加粗文字',
         vaultFormatCodeSample: '代码',
         // ── [t7 视觉主题] ──
@@ -441,7 +436,6 @@ window.__ModuleLoader__.load({
         vaultSnapshotRestored: 'Restored from snapshot',
         vaultRestore: 'Restore',
         vaultSnapshotRestoreConfirm: 'Replace the current content with this version? The current one is saved first, so you can come back.',
-        vaultFmtBold: 'Bold (select text first)',
         vaultCopyAll: 'Copy full text',
         vaultCopyPath: 'Copy path',
         vaultPathCopied: 'Path copied',
@@ -485,10 +479,6 @@ window.__ModuleLoader__.load({
         vaultFolderHint: 'This is a folder. Click the title to rename, or use the context menu; pick a file in the list on the left to read it.',
         vaultMoved: 'Moved',
         vaultDeleteDirWarn: 'everything inside will be moved to trash too',
-        vaultFmtHeading: 'Heading 2',
-        vaultFmtTodo: 'To-do',
-        vaultFmtList: 'List',
-        vaultFmtCode: 'Inline code',
         vaultFormatBoldSample: 'bold text',
         vaultFormatCodeSample: 'code',
         // ── [t7 视觉主题] ──
@@ -1933,7 +1923,46 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           }
 
           /* ── 结构变更一律不让浏览器做 ── */
+          /* Ctrl/Cmd+B / +I：格式按钮行已删（2026-11-19 大王要求），
+             但加粗/斜体照样要能打出来 —— 所以快捷键留在这里。
+             有选中就包住，已经包着就再按一次拆掉；没选中就插一对符号、
+             光标落在中间，接着打字直接生效。 */
+          const toggleInline = (marker) => {
+            const node = el()
+            if (!node) return
+            const source = draftRef.current
+            const sel = mdSelectionGlobal(node)
+            const start = sel ? sel.start : Math.max(0, Math.min(caretRef.current, source.length))
+            const end = sel ? sel.end : start
+            const picked = source.slice(start, end)
+            const before = source.slice(Math.max(0, start - marker.length), start)
+            const after = source.slice(end, end + marker.length)
+            let next = ''
+            let caret = start
+            if (picked !== '' && before === marker && after === marker) {
+              next = source.slice(0, start - marker.length) + picked + source.slice(end + marker.length)
+              caret = start - marker.length + picked.length
+            } else if (picked !== '') {
+              next = source.slice(0, start) + marker + picked + marker + source.slice(end)
+              caret = start + marker.length + picked.length
+            } else {
+              next = source.slice(0, start) + marker + marker + source.slice(start)
+              caret = start + marker.length
+            }
+            pushUndo()
+            commit(next, caret)
+          }
+
           const onKeyDown = (event) => {
+            if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+              const key = String(event.key).toLowerCase()
+              const marker = key === 'b' ? '**' : (key === 'i' ? '*' : '')
+              if (marker !== '') {
+                event.preventDefault()
+                toggleInline(marker)
+                return
+              }
+            }
             if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
               event.preventDefault()
               if (typeof onSave === 'function') onSave()
@@ -4637,15 +4666,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
               : h(
                 Fragment,
                 null,
-                h(
-                  'div',
-                  { className: 'vp-formatbar' },
-                  h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('bold'), title: t('vaultFmtBold') }, 'B'),
-                  h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('heading'), title: t('vaultFmtHeading') }, 'H'),
-                  h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('todo'), title: t('vaultFmtTodo') }, '☐'),
-                  h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('list'), title: t('vaultFmtList') }, '•'),
-                  h('button', { type: 'button', className: 'vp-fmtbtn', onClick: () => applyFormat('code'), title: t('vaultFmtCode') }, '</>'),
-                ),
                 h(
                   'div',
                   {
@@ -11134,9 +11154,6 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 .vp-resultrow:hover { background: var(--dsw-alias-bg-layer-2); }
 .vp-resultname { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vp-resultexcerpt { font-size: 11px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-formatbar { display: flex; align-items: center; gap: 4px; padding: 2px 0 6px; border-bottom: 1px solid var(--dsw-alias-border-l1); margin-bottom: 6px; }
-.vp-fmtbtn { border: 1px solid var(--dsw-alias-border-l1); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; min-width: 26px; padding: 2px 6px; border-radius: 6px; cursor: pointer; }
-.vp-fmtbtn:hover { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
 .vp-iconbtn { border: 1px solid transparent; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 1; min-width: 28px; height: 26px; padding: 0 6px; border-radius: 6px; cursor: pointer; }
 .vp-iconbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vp-iconbtn:disabled { opacity: .4; cursor: default; }
@@ -11352,12 +11369,11 @@ body.dsh-resizing, body.dsh-resizing * {
    不这么做的话选「夜间深色」时纸面变黑而文字仍继承主题的深色字 → 黑底黑字。 */
 .dn-reader { color: var(--dn-reader-ink); }
 .dn-reader .vp-read { color: var(--dn-reader-ink); background: transparent; }
-/* 编辑态：让纸面透上来（textarea 本身已是 transparent，这里兜住 formatbar 与历史面板） */
+/* 编辑态：让纸面透上来（textarea 本身已是 transparent） */
 /* 编辑态（t10 的 contenteditable）：文字色跟随底色，背景保持透明以露出纸面。
    注意别给编辑区设 background —— 纸面由 ::before 画，设了会盖在上面。 */
 .dn-reader .dn-edit-surface { background: transparent; color: var(--dn-reader-ink); }
 .dn-reader .dn-edit-surface::selection { background: color-mix(in srgb, var(--dn-reader-accent) 30%, transparent); }
-.dn-reader .vp-formatbar { border-bottom-color: color-mix(in srgb, var(--dn-reader-ink) 22%, transparent); }
 .dn-reader .vp-read .v-p,
 .dn-reader .vp-read .v-list,
 .dn-reader .vp-read li { color: var(--dn-reader-ink); }
