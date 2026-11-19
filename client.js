@@ -66,7 +66,6 @@ window.__ModuleLoader__.load({
         vaultCopyPath: '复制路径',
         vaultPathCopied: '路径已复制',
         vaultSendChatNew: '发送到新对话',
-        vaultRenameHint: '点标题改名',
         vaultRename: '重命名',
         /* 树操作提示（2026-11-18 左栏改树后新增） */
         vaultRenamePrompt: '新名字',
@@ -107,8 +106,8 @@ window.__ModuleLoader__.load({
         vaultFormatBoldSample: '加粗文字',
         vaultFormatCodeSample: '代码',
         // ── [t7 视觉主题] ──
-        readerBg: '阅读底色',
-        readerBgAuto: '主题',
+        readerBg: '背景',
+        readerBgAuto: '默认',
         readerBgWhite: '纯白',
         readerBgCream: '米黄纸质',
         readerBgGreen: '淡绿护眼',
@@ -439,7 +438,6 @@ window.__ModuleLoader__.load({
         vaultCopyPath: 'Copy path',
         vaultPathCopied: 'Path copied',
         vaultSendChatNew: 'Send to a new chat',
-        vaultRenameHint: 'Click the title to rename',
         vaultRename: 'Rename',
         /* 树操作提示（2026-11-18） */
         vaultRenamePrompt: 'New name',
@@ -480,8 +478,8 @@ window.__ModuleLoader__.load({
         vaultFormatBoldSample: 'bold text',
         vaultFormatCodeSample: 'code',
         // ── [t7 视觉主题] ──
-        readerBg: 'Reading background',
-        readerBgAuto: 'Theme',
+        readerBg: 'Background',
+        readerBgAuto: 'Default',
         readerBgWhite: 'Pure white',
         readerBgCream: 'Cream paper',
         readerBgGreen: 'Soft green',
@@ -4370,11 +4368,11 @@ function useScrollMemo(bucket, selector, ready) {
             readerFontDirty.current = true
             setReaderFont(readerFontOf(id))
           }, 'font'),
-          renderDrop('line', labelOf(lineItems, lineValue), t('readerLine'), lineItems, lineValue, (id) => {
+          renderDrop('line', t('readerLine'), t('readerLine'), lineItems, lineValue, (id) => {
             readerFontDirty.current = true
             setReaderLine(readerLineOf(id))
           }),
-          renderDrop('bg', labelOf(bgItems, readerBg), t('readerBg'), bgItems, readerBg, (id) => {
+          renderDrop('bg', t('readerBg'), t('readerBg'), bgItems, readerBg, (id) => {
             readerDirty.current = true
             setReaderBg(readerBgOf(id))
           }),
@@ -4588,15 +4586,22 @@ function useScrollMemo(bucket, selector, ready) {
                       void commitRename()
                     },
                   })
-                : h(
-                    'button',
-                    { type: 'button', className: 'vp-doctitle', title: t('vaultRenameHint'), onClick: startRename },
-                    h(BoardIcon, { name: 'folder', className: 'wb-ic' }),
-                  ),
+                : mode === 'edit'
+                  ? h(
+                      'button',
+                      { type: 'button', className: 'vp-doctitle', onClick: () => startRename() },
+                      h(BoardIcon, { name: 'folder', className: 'wb-ic' }),
+                    )
+                  : h(
+                      'span',
+                      { className: 'vp-doctitle vp-doctitle-static' },
+                      h(BoardIcon, { name: 'folder', className: 'wb-ic' }),
+                    ),
               /*
-               * ✎ 改名按钮已移除（2026-11-18 大王要求）：
-               * 改名统一走左栏右键菜单，标题旁不再留按钮。
-               * 标题本身仍可点（vp-doctitle 的 onClick 还在），那是老习惯保留。
+               * 改名入口（2026-11-19 大王要求）：
+               * 阅读模式下标题是纯文本（不可点、不弹悬停提示）；
+               * 编辑模式下点标题就在原地改成输入框。
+               * 左栏右键菜单里的「重命名」仍然保留。
                */
               h('span', { className: 'dn-spacer' }),
             ),
@@ -4631,20 +4636,17 @@ function useScrollMemo(bucket, selector, ready) {
                     void commitRename()
                   },
                 })
-              : h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-doctitle',
-                    title: t('vaultRenameHint'),
-                    onClick: startRename,
-                  },
-                  doc.title,
-                ),
+              : mode === 'edit'
+                ? h(
+                    'button',
+                    { type: 'button', className: 'vp-doctitle', onClick: () => startRename() },
+                    doc.title,
+                  )
+                : h('span', { className: 'vp-doctitle vp-doctitle-static' }, doc.title),
             renaming
               ? h('span', { className: 'vp-ext' }, splitExt(selected.name, selected.type === 'dir').ext)
               : null,
-            /* ✎ 改名按钮已移除：改名统一走左栏右键菜单（同文件夹分支） */
+            /* 改名入口同文件夹分支：阅读模式纯文本，编辑模式点标题原地改 */
             h('span', { className: 'dn-spacer' }),
 
             /* 复制路径：从阅读工具条挪到「阅读 / 编辑」这一栏（2026-11-17） */
@@ -6424,11 +6426,11 @@ function useScrollMemo(bucket, selector, ready) {
               readerDirtyFlag.current = true
               setFont(readerFontOf(id))
             }, 'font'),
-            drop('line', labelOf(lineItems, String(line)), t('readerLine'), lineItems, String(line), (id) => {
+            drop('line', t('readerLine'), t('readerLine'), lineItems, String(line), (id) => {
               readerDirtyFlag.current = true
               setLine(readerLineOf(id))
             }),
-            drop('bg', labelOf(bgItems, bg), t('readerBg'), bgItems, bg, (id) => {
+            drop('bg', t('readerBg'), t('readerBg'), bgItems, bg, (id) => {
               readerDirtyFlag.current = true
               setBg(readerBgOf(id))
             }),
@@ -8503,7 +8505,33 @@ function useScrollMemo(bucket, selector, ready) {
           h(
             'div',
             { className: 'cb-doc-head' },
-            h('h1', { className: 'cb-doc-title' }, doc.title !== '' ? doc.title : t('copyUntitled')),
+            props.titleEdit
+              ? h('input', {
+                  className: 'cb-doc-title-input',
+                  autoFocus: true,
+                  value: props.titleEdit.value,
+                  onChange: (event) => props.onTitleChange(event.target.value),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void props.onTitleCommit()
+                    } else if (event.key === 'Escape') {
+                      props.onTitleCancel()
+                    }
+                  },
+                  onBlur: () => void props.onTitleCommit(),
+                })
+              : h(
+                  'h1',
+                  {
+                    className: 'cb-doc-title',
+                    'data-renamable': mode === 'edit' && doc.readOnly !== true ? 'true' : 'false',
+                    onClick: () => {
+                      if (mode === 'edit' && doc.readOnly !== true) props.onTitleStart()
+                    },
+                  },
+                  doc.title !== '' ? doc.title : t('copyUntitled'),
+                ),
             h(
               'div',
               { className: 'cb-doc-meta' },
@@ -8768,6 +8796,53 @@ function useScrollMemo(bucket, selector, ready) {
           } catch (err) {
             setDoc(null)
             setError(t('copyLoadFailed') + messageOf(err))
+          }
+        }
+
+        /*
+         * 标题原地改名（2026-11-19 大王要求）：
+         * 编辑模式下点标题就变成输入框，不再弹任何浮条；阅读模式标题是纯文本。
+         * 文案区的「标题」其实就是文件名，改名走 /rename 后重新读一遍正文。
+         */
+        const [titleEdit, setTitleEdit] = useState(null)
+        const titleGuard = useRef(false)
+        const startTitleEdit = () => {
+          if (!doc || doc.readOnly === true) return
+          titleGuard.current = false
+          setTitleEdit({ value: doc.title !== '' ? doc.title : vaultTitleOf(doc.path) })
+        }
+        const closeTitleEdit = () => {
+          titleGuard.current = true
+          setTitleEdit(null)
+        }
+        const commitTitleEdit = async () => {
+          if (!titleEdit || !doc) return
+          if (titleGuard.current) return
+          titleGuard.current = true
+          const typed = String(titleEdit.value).trim()
+          const oldBase = doc.title !== '' ? doc.title : vaultTitleOf(doc.path)
+          if (typed === '' || typed === oldBase) {
+            setTitleEdit(null)
+            return
+          }
+          const oldPath = doc.path
+          const dir = oldPath.includes('/') ? oldPath.slice(0, oldPath.lastIndexOf('/') + 1) : ''
+          try {
+            if (doc.text !== draft) await save(true)
+            const res = await vaultApiPost('/rename', { path: oldPath, name: typed + '.md' })
+            const nextPath = res && typeof res.path === 'string' && res.path !== '' ? res.path : dir + typed + '.md'
+            setTitleEdit(null)
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(nextPath))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setActivePath(nextPath)
+            setDoc({ path: nextPath, title: typed, text, mtime: data.mtime, readOnly: data.readOnly === true })
+            setDraft(text)
+            setSaveState('idle')
+            void reload()
+            flash(t('vaultRenamed'))
+          } catch (err) {
+            titleGuard.current = false
+            setError(t('vaultRenameFailed') + messageOf(err))
           }
         }
 
@@ -9360,6 +9435,12 @@ function useScrollMemo(bucket, selector, ready) {
             onFind: openFind,
             /* 历史版本恢复后重读正文（2026-11-19）：不进 pick 以免重置 mode */
             onReloadDoc: (path) => void reloadDoc(path),
+            /* 标题原地改名（2026-11-19）：编辑模式下点标题变输入框 */
+            titleEdit,
+            onTitleStart: startTitleEdit,
+            onTitleChange: (value) => setTitleEdit({ value }),
+            onTitleCommit: commitTitleEdit,
+            onTitleCancel: closeTitleEdit,
             editor: h('div', {
               key: 'cb-edit-surface',
               ref: (node) => {
@@ -10073,7 +10154,33 @@ function useScrollMemo(bucket, selector, ready) {
           h(
             'div',
             { className: 'wbg-doc-head' },
-            h('h1', { className: 'wbg-doc-title' }, file.title),
+            props.titleEdit
+              ? h('input', {
+                  className: 'wbg-doc-title-input',
+                  autoFocus: true,
+                  value: props.titleEdit.value,
+                  onChange: (event) => props.onTitleChange(event.target.value),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault()
+                      void props.onTitleCommit()
+                    } else if (event.key === 'Escape') {
+                      props.onTitleCancel()
+                    }
+                  },
+                  onBlur: () => void props.onTitleCommit(),
+                })
+              : h(
+                  'h1',
+                  {
+                    className: 'wbg-doc-title',
+                    'data-renamable': props.mode === 'edit' ? 'true' : 'false',
+                    onClick: () => {
+                      if (props.mode === 'edit') props.onTitleStart()
+                    },
+                  },
+                  file.title,
+                ),
             h(
               'div',
               { className: 'wbg-doc-meta' },
@@ -10598,6 +10705,73 @@ function useScrollMemo(bucket, selector, ready) {
             setError('')
           } catch (err) {
             setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
+
+        /*
+         * 标题原地改名（2026-11-19 大王要求）：
+         * 编辑模式下点标题变输入框；阅读模式纯文本、无悬停提示。
+         * 章节改的是 项目.md 里的标题（走 /write-rename-chapter，正文文件名不动）；
+         * 设定文件没有「结构标题」，改的是文件名（走 /rename）。
+         */
+        const [titleEdit, setTitleEdit] = useState(null)
+        const titleGuard = useRef(false)
+        const findChapterOf = (proj, fileName) => {
+          const volumes = proj && Array.isArray(proj.volumes) ? proj.volumes : []
+          for (let vi = 0; vi < volumes.length; vi += 1) {
+            const chapters = volumes[vi] && Array.isArray(volumes[vi].chapters) ? volumes[vi].chapters : []
+            for (let ci = 0; ci < chapters.length; ci += 1) {
+              if (chapters[ci] && chapters[ci].file === fileName) return { vi, ci }
+            }
+          }
+          return null
+        }
+        const startTitleEdit = () => {
+          if (!file || file.readOnly === true) return
+          titleGuard.current = false
+          setTitleEdit({ value: file.title !== '' ? file.title : file.name })
+        }
+        const closeTitleEdit = () => {
+          titleGuard.current = true
+          setTitleEdit(null)
+        }
+        const commitTitleEdit = async () => {
+          if (!titleEdit || !file) return
+          if (titleGuard.current) return
+          titleGuard.current = true
+          const typed = String(titleEdit.value).trim()
+          const oldTitle = file.title !== '' ? file.title : file.name
+          if (typed === '' || typed === oldTitle) {
+            setTitleEdit(null)
+            return
+          }
+          try {
+            if (file.text !== draft) await save(true)
+            const spot = project ? findChapterOf(project, file.name) : null
+            if (spot && project) {
+              await vaultApiPost('/write-rename-chapter', {
+                path: project.path,
+                volumeIndex: spot.vi,
+                chapterIndex: spot.ci,
+                name: typed,
+              })
+              setTitleEdit(null)
+              setActiveFile('')
+              const data = await loadProject(project.path)
+              if (data) await restoreBody(data, file.name)
+              flash(t('writeChapterRenamed'))
+            } else {
+              const res = await vaultApiPost('/rename', { path: file.path, name: typed })
+              const nextPath = res && typeof res.path === 'string' && res.path !== '' ? res.path : file.path
+              setTitleEdit(null)
+              setFile({ ...file, path: nextPath, name: nextPath.slice(nextPath.lastIndexOf('/') + 1), title: typed })
+              setActiveFile('')
+              if (activeProject !== '') void loadProject(activeProject)
+              flash(t('vaultRenamed'))
+            }
+          } catch (err) {
+            titleGuard.current = false
+            setError(t('writeSaveFailed') + messageOf(err))
           }
         }
 
@@ -11162,6 +11336,12 @@ function useScrollMemo(bucket, selector, ready) {
             onFind: openFind,
             /* 历史版本恢复后重读正文（2026-11-19） */
             onReloadDoc: (path) => void reloadDoc(path),
+            /* 标题原地改名（2026-11-19）：编辑模式下点标题变输入框 */
+            titleEdit,
+            onTitleStart: startTitleEdit,
+            onTitleChange: (value) => setTitleEdit({ value }),
+            onTitleCommit: commitTitleEdit,
+            onTitleCancel: closeTitleEdit,
             editor: h('div', {
               key: 'wbg-edit-surface',
               ref: (node) => {
@@ -11442,7 +11622,7 @@ function useScrollMemo(bucket, selector, ready) {
 /* .vp-icon-rename 已删：标题旁的 ✎ 改名按钮已移除，改名统一走左栏右键菜单。 */
 .vp-ext { flex: 0 0 auto; font-size: 18px; font-weight: 700; color: var(--dsw-alias-label-secondary); padding-right: 2px; }
 .vp-doctitle { max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 22px; font-weight: 700; letter-spacing: .01em; line-height: 1.3; padding: 2px 6px; border-radius: 6px; cursor: text; }
-.vp-doctitle:hover { background: var(--dsw-alias-bg-layer-2); }
+.vp-doctitle-static { cursor: default; } .vp-doctitle:hover:not(.vp-doctitle-static) { background: var(--dsw-alias-bg-layer-2); }
 .vp-titleinput { flex: 0 1 70%; min-width: 140px; padding: 2px 8px; border-radius: 6px; border: 1px solid var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 22px; font-weight: 700; outline: none; }
 .vp-savestate { font-size: 12px; color: var(--dsw-alias-label-secondary); white-space: nowrap; margin-right: 4px; }
 .vp-body { flex: 1; min-height: 0; display: flex; gap: 16px; padding: 12px 16px 16px; }
@@ -12619,6 +12799,9 @@ mark.df-hit[data-active="true"] {
 .cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); /* 边距统一由容器给（照素材库 .vp-doc 的做法，2026-11-18） */ padding: 12px 24px 16px;
   /* 兜底：子元素不许伸出中栏（下拉菜单已改 fixed，不受此裁剪影响） */ overflow: hidden; }
 .cb-doc-head { flex: none; padding: 2px 0 0; }
+.cb-doc-title-input, .wbg-doc-title-input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 1px 8px; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; outline: none; }
+.cb-doc-title[data-renamable="true"], .wbg-doc-title[data-renamable="true"] { cursor: text; }
+.cb-doc-title[data-renamable="true"]:hover, .wbg-doc-title[data-renamable="true"]:hover { color: var(--dsw-alias-brand-primary); }
 .cb-doc-title { margin: 0 0 8px; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .cb-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; /* 元信息要读，用 secondary */ color: var(--dsw-alias-label-secondary); }
 .cb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
