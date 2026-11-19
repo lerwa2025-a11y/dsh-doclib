@@ -843,13 +843,65 @@ window.__ModuleLoader__.load({
     const sleepMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
 
 /**
- * 板块状态记忆（2026-11-18 需求5）。
+ * 板块状态记忆（2026-11-18 需求5；2026-11-19 扩到「切到工作台外」）。
  *
  * 大王要求：切板块/切页面再回来，要回到退出时的界面（选中的文件、
- * 展开的文件夹都在）；但 F5 刷新或重启 DSH 要回到默认。
+ * 展开的文件夹、滚动位置、阅读还是编辑，都在）；
+ * 但 F5 刷新或重启 DSH 要回到默认。
  * 所以存内存 —— 不放 sessionStorage（那个刷新不丢）。
+ *
+ * workbench 段：顶栏当前板块（tab）与「访问过哪些板块」（mounted）。
+ * 主面板 main 是 keyed slot，切到会话页时整个工作台被卸载，
+ * 这两个 state 原来随之丢掉 → 切回来总是落在素材区、且之前打开的
+ * 文案区/写作区被卸载（稿子与草稿一起没了）。
  */
-const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
+const BOARD_MEMO = { vault: {}, copy: {}, write: {}, workbench: {} }
+
+/** 从内存恢复顶栏板块；不认识的值退回素材区。 */
+const memoOfTab = () => {
+  const value = BOARD_MEMO.workbench.tab
+  return typeof value === 'string' && value !== '' ? value : 'vault'
+}
+
+/** 从内存恢复「访问过的板块」集合；没有就只认素材区。 */
+const memoOfMounted = () => {
+  const value = BOARD_MEMO.workbench.mounted
+  return value !== null && typeof value === 'object' ? value : { vault: true }
+}
+
+/**
+ * 记住 / 还原正文的滚动位置（2026-11-19 大王要求「切页面回来还停在原处」）。
+ *
+ * scroll 不冒泡，但捕获阶段能收到 —— 挂 document 捕获即可，
+ * 不必给三个板块各找一个根节点 ref（素材区 embedded 时返回 Fragment，没有根）。
+ * selector 自带板块前缀（.vp-read / .cb-prose / .wbg-prose），三个板块互不串。
+ *
+ * ready 传「当前打开的路径」：换文件时才重新还原，同一个文件的重新渲染不误还原。
+ * 写回放在 setTimeout(0)：正文是异步拉回来的，同步设会被随后到来的内容清掉。
+ */
+function useScrollMemo(bucket, selector, ready) {
+  useEffect(() => {
+    const onScroll = (event) => {
+      const node = event.target
+      if (!node || typeof node.matches !== 'function') return
+      if (!node.matches(selector)) return
+      bucket.scrollTop = node.scrollTop
+    }
+    document.addEventListener('scroll', onScroll, true)
+    return () => document.removeEventListener('scroll', onScroll, true)
+  }, [bucket, selector])
+  useEffect(() => {
+    if (ready === '') return
+    const value = typeof bucket.scrollTop === 'number' ? bucket.scrollTop : 0
+    if (value <= 0) return
+    const timer = setTimeout(() => {
+      const node = document.querySelector(selector)
+      if (node) node.scrollTop = value
+    }, 0)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready])
+}
 
     /**
      * 竖分隔线：拖动调整相邻区域宽度（2026-11-18 大王要求）。
@@ -2452,6 +2504,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       const [mode, setMode] = useState('read')
       const [saveState, setSaveState] = useState('idle')
       const [message, setMessage] = useState('')
+      /*
+       * 切到工作台外再切回来（2026-11-19 大王要求）：把「打开的文件」与
+       * 「阅读还是编辑」写回内存。主面板 main 是 keyed slot，切到会话页时
+       * 整个工作台被卸载，这些 state 随之丢掉 → 切回来是空白首页。
+       */
+      useEffect(() => {
+        BOARD_MEMO.vault.selectedPath = selected && typeof selected.path === 'string' ? selected.path : ''
+      }, [selected])
+      useEffect(() => {
+        BOARD_MEMO.vault.mode = mode
+      }, [mode])
+      /* 正文滚动位置（.vp-read 是阅读态滚动容器） */
+      useScrollMemo(BOARD_MEMO.vault, '.vp-read', doc ? doc.path : '')
       const [error, setError] = useState('')
       const [imageTick, setImageTick] = useState(0)
       const [confirmDelete, setConfirmDelete] = useState(false)
@@ -3277,6 +3342,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         }
         return out
       }
+
+      /** 按路径在树里找节点（切页面回来要重新打开原来那个文件用）。 */
+      const nodeOfPath = (nodes, path) => {
+        for (const node of nodes) {
+          if (!node) continue
+          if (node.path === path) return node
+          if (node.type === 'dir' && Array.isArray(node.children)) {
+            const hit = nodeOfPath(node.children, path)
+            if (hit) return hit
+          }
+        }
+        return null
+      }
       const expandAll = () => {
         const next = {}
         for (const path of collectDirs(flatTree, [])) next[path] = true
@@ -3328,6 +3406,35 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           setError(messageOf(err))
         }
       }
+
+      /*
+       * 切到工作台外再切回来：重新打开上次那个文件（2026-11-19 大王要求）。
+       *
+       * 只在树第一次拉回来时跑一次（restoredRef 闸门）—— 否则用户主动关掉
+       * 文件、或换了库根之后，会被这里悄悄又打开一次。
+       * 路径不在树里（文件被删 / 换了库根）就静默放弃，不报错打扰。
+       */
+      const restoredRef = useRef(false)
+      /*
+       * 恢复用的快照必须在本轮渲染期就抓住（useRef 初值早于所有 effect）：
+       * 下面「写回内存」的 effect 会在组件刚挂载时就把 state 初值写回内存，
+       * 等恢复逻辑读内存时，记录已经被自己清空了。
+       */
+      const memoPathAtMount = useRef(typeof BOARD_MEMO.vault.selectedPath === 'string' ? BOARD_MEMO.vault.selectedPath : '')
+      const memoModeAtMount = useRef(BOARD_MEMO.vault.mode === 'edit' ? 'edit' : 'read')
+      useEffect(() => {
+        if (restoredRef.current) return
+        if (flatTree.length === 0) return
+        restoredRef.current = true
+        const path = typeof memoPathAtMount.current === 'string' ? memoPathAtMount.current : ''
+        if (path === '') return
+        const node = nodeOfPath(flatTree, path)
+        if (!node || node.type !== 'file') return
+        void openFile(node).then(() => {
+          if (memoModeAtMount.current === 'edit') setMode('edit')
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+      }, [flatTree])
 
       const saveDoc = async () => {
         if (!doc) return
@@ -6390,7 +6497,11 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
       function WorkbenchPage(props) {
         const t = props.t
         const ctx = props.ctx
-        const [tab, setTab] = useState('vault')
+        /* 切到工作台外再切回来要落回原板块（2026-11-19 大王要求） */
+        const [tab, setTab] = useState(memoOfTab)
+        useEffect(() => {
+          BOARD_MEMO.workbench.tab = tab
+        }, [tab])
         /*
          * 当前板块里用户选中的那个路径（文件或目录）。
          *
@@ -6414,8 +6525,16 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const onFocusCopy = useMemo(() => focusSetter('copy'), [])
         const onFocusWrite = useMemo(() => focusSetter('write'), [])
         const boardFocusPath = typeof focusPaths[tab] === 'string' ? focusPaths[tab] : ''
-        /* 已访问过的板块：访问过一次就常驻挂载，切走再切回来组件状态还在 */
-        const [mounted, setMounted] = useState({ vault: true })
+        /*
+         * 已访问过的板块：访问过一次就常驻挂载，切走再切回来组件状态还在。
+         * 2026-11-19：这个集合也要进内存 —— 切到会话页时整个工作台被卸载，
+         * 重挂时若退回 { vault: true }，之前打开的文案区/写作区会被卸载，
+         * 里面的稿件与草稿又没了（等于没做）。
+         */
+        const [mounted, setMounted] = useState(memoOfMounted)
+        useEffect(() => {
+          BOARD_MEMO.workbench.mounted = mounted
+        }, [mounted])
         const [root, setRoot] = useState(null)
         /** 顶栏 ⟳ 的计数器：+1 时由当前板块自己决定刷新什么。 */
         const [refreshTick, setRefreshTick] = useState(0)
@@ -8497,6 +8616,15 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [notice, setNotice] = useState('')
         /* AI 请求进行中：按钮转圈、防止连点发两次 */
         const [aiBusy, setAiBusy] = useState(false)
+        /*
+         * 切到工作台外再切回来（2026-11-19 大王要求）：主面板 main 是 keyed
+         * slot，切到会话页时整个工作台被卸载，阅读/编辑模式与滚动位置都会丢。
+         * 这里把它们写回内存，重新挂载时再还原。
+         */
+        useEffect(() => {
+          BOARD_MEMO.copy.mode = mode
+        }, [mode])
+        useScrollMemo(BOARD_MEMO.copy, '.cb-prose', doc ? doc.path : '')
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
@@ -8562,6 +8690,29 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           void reload()
           // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [root])
+
+        /*
+         * 切到工作台外再切回来：重新打开上次那篇稿件（2026-11-19 大王要求）。
+         *
+         * 上面的 root effect 会把 activePath 清空，所以必须等列表拉回来之后，
+         * 再按内存里记的路径重新 pick 一次。restoredRef 保证只跑一次 ——
+         * 否则用户主动关掉稿件后会被这里悄悄又打开。
+         */
+        const copyRestoredRef = useRef(false)
+        const memoCopyModeAtMount = useRef(BOARD_MEMO.copy.mode === 'edit' ? 'edit' : 'read')
+        const memoCopyPathAtMount = useRef(typeof BOARD_MEMO.copy.activePath === 'string' ? BOARD_MEMO.copy.activePath : '')
+        useEffect(() => {
+          if (copyRestoredRef.current) return
+          if (docs.length === 0) return
+          copyRestoredRef.current = true
+          const path = typeof memoCopyPathAtMount.current === 'string' ? memoCopyPathAtMount.current : ''
+          if (path === '') return
+          if (!docs.some((item) => item && item.path === path)) return
+          void pick(path).then(() => {
+            if (memoCopyModeAtMount.current === 'edit') setMode('edit')
+          })
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+        }, [docs])
 
         useEffect(
           () => () => {
@@ -10038,6 +10189,10 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [activeFile, setActiveFile] = useState(() => BOARD_MEMO.write.activeFile || '')
         /* 需求5：选中的文件写回内存 */
         useEffect(() => { BOARD_MEMO.write.activeFile = activeFile }, [activeFile])
+        /* 当前项目写回内存（切到工作台外再切回来要重开它） */
+        useEffect(() => {
+          BOARD_MEMO.write.activeProject = activeProject
+        }, [activeProject])
         const [file, setFile] = useState(null)
         const [draft, setDraft] = useState('')
         /* 阅读设置副本（2026-11-18）：ReaderBar 回调上来，应用到正文 */
@@ -10050,6 +10205,15 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
         const [openVolumes, setOpenVolumes] = useState({})
         /* AI 请求进行中：防止连点把同一条续写发两次 */
         const [aiBusy, setAiBusy] = useState(false)
+        /*
+         * 切到工作台外再切回来（2026-11-19 大王要求）：主面板 main 是 keyed
+         * slot，切到会话页时整个工作台被卸载，阅读/编辑模式与正文滚动位置都会丢。
+         * 这里把它们写回内存，重新挂载时再还原。
+         */
+        useEffect(() => {
+          BOARD_MEMO.write.mode = mode
+        }, [mode])
+        useScrollMemo(BOARD_MEMO.write, '.wbg-prose', file ? file.path : '')
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
@@ -10245,12 +10409,21 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             setError('')
             // 默认展开第一卷
             setOpenVolumes({ 0: true })
+            return data
           } catch (err) {
             setProject(null)
             setError(t('writeLoadFailed') + messageOf(err))
+            return null
           }
         }
 
+        /*
+         * 恢复用的快照（理由同素材区）：activeProject / mode 的初值是空，
+         * 而「写回内存」的 effect 会在挂载时立刻把内存清掉，所以渲染期就抓住。
+         */
+        const memoProjectAtMount = useRef(typeof BOARD_MEMO.write.activeProject === 'string' ? BOARD_MEMO.write.activeProject : '')
+        const memoWriteModeAtMount = useRef(BOARD_MEMO.write.mode === 'edit' ? 'edit' : 'read')
+        const memoFileAtMount = useRef(typeof BOARD_MEMO.write.activeFile === 'string' ? BOARD_MEMO.write.activeFile : '')
         useEffect(() => {
           setActiveProject('')
           setProject(null)
@@ -10260,6 +10433,19 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           setQuery('')
           void (async () => {
             const rows = await reloadProjects()
+            /*
+             * 切到工作台外再切回来（2026-11-19 大王要求）：先把上次那个项目
+             * 与那一章重新打开；只有内存里没有记录时，才退回「单项目自动打开」。
+             */
+            const memoProject = typeof memoProjectAtMount.current === 'string' ? memoProjectAtMount.current : ''
+            const memoFile = typeof memoFileAtMount.current === 'string' ? memoFileAtMount.current : ''
+            const hit = memoProject !== '' ? rows.find((item) => item && item.path === memoProject) : null
+            if (hit) {
+              const data = await loadProject(hit.path)
+              if (data && memoFile !== '') await restoreBody(data, memoFile)
+              if (memoWriteModeAtMount.current === 'edit') setMode('edit')
+              return
+            }
             // 只有一个项目时直接打开，省一次点击
             if (rows.length === 1) await loadProject(rows[0].path)
           })()
@@ -10323,6 +10509,48 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
           } catch (err) {
             setError(t('writeLoadFailed') + messageOf(err))
           }
+        }
+
+        /*
+         * 按正文文件名找回章节并打开（切到工作台外再切回来用）。
+         *
+         * 内存里只记 activeFile（文件名），因为下标会随卷章增删漂移；
+         * 这里拿文件名在刚拉回来的项目结构里定位 (卷下标, 章下标)，找到才开。
+         */
+        const restoreBody = async (data, fileName) => {
+          const volumes = data && Array.isArray(data.volumes) ? data.volumes : []
+          for (let vi = 0; vi < volumes.length; vi += 1) {
+            const chapters = volumes[vi] && Array.isArray(volumes[vi].chapters) ? volumes[vi].chapters : []
+            for (let ci = 0; ci < chapters.length; ci += 1) {
+              const chapter = chapters[ci]
+              if (chapter && chapter.file === fileName) {
+                // openChapter 读的是 project state，而 loadProject 刚 setProject 还没生效，
+                // 所以这里临时借 data.path 拼正文路径，不依赖 state。
+                const path = data.path + '/正文/' + fileName
+                try {
+                  const fileData = await vaultApiGet('/file?path=' + encodeURIComponent(path))
+                  const text = typeof fileData.text === 'string' ? fileData.text : ''
+                  setFile({
+                    path,
+                    name: fileName,
+                    title: chapter.title !== '' ? chapter.title : fileName,
+                    text,
+                    mtime: fileData.mtime,
+                    readOnly: fileData.readOnly === true,
+                  })
+                  setActiveFile(fileName)
+                  setDraft(text)
+                  setSaveState('idle')
+                  setError('')
+                  if (fileData.readOnly === true) setMode('read')
+                } catch (err) {
+                  setError(t('writeLoadFailed') + messageOf(err))
+                }
+                return true
+              }
+            }
+          }
+          return false
         }
 
         // 打开设定文件（人物/地点/情节线）—— 同样可读可编
