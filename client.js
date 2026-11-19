@@ -6399,7 +6399,23 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
          * 三个板块通过 onFocusPath 回调把选中路径报上来，这里收着。
          * 切换板块时清空，避免拿上一板块的路径去开。
          */
-        const [boardFocusPath, setBoardFocusPath] = useState('')
+        const [focusPaths, setFocusPaths] = useState({})
+        /*
+         * 每个板块各自记「我当前选中的路径」，不再切板块清空（2026-11-19）。
+         * 常驻挂载后板块不会重新上报，清空会让「打开文件夹」丢目标。
+         * 三个 setter 用 useMemo 固定身份：板块里 useEffect 依赖它，
+         * 每次渲染换新函数会触发「effect → setState → 渲染」死循环。
+         * setFocusPaths 内部再判等，同一个路径不重复 set。
+         */
+        const focusSetter = (board) => (path) => {
+          setFocusPaths((prev) => (prev[board] === path ? prev : { ...prev, [board]: path }))
+        }
+        const onFocusVault = useMemo(() => focusSetter('vault'), [])
+        const onFocusCopy = useMemo(() => focusSetter('copy'), [])
+        const onFocusWrite = useMemo(() => focusSetter('write'), [])
+        const boardFocusPath = typeof focusPaths[tab] === 'string' ? focusPaths[tab] : ''
+        /* 已访问过的板块：访问过一次就常驻挂载，切走再切回来组件状态还在 */
+        const [mounted, setMounted] = useState({ vault: true })
         const [root, setRoot] = useState(null)
         /** 顶栏 ⟳ 的计数器：+1 时由当前板块自己决定刷新什么。 */
         const [refreshTick, setRefreshTick] = useState(0)
@@ -6508,8 +6524,8 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
                     title: t(item.descKey),
                     onClick: () => {
                       setTab(item.id)
-                      /* 切板块清空选中路径：上一板块的路径在新板块里没有意义 */
-                      setBoardFocusPath('')
+                      /* 记下「这个板块访问过」：之后它就常驻挂载，切走再切回来状态还在 */
+                      setMounted((prev) => (prev[item.id] === true ? prev : { ...prev, [item.id]: true }))
                     },
                   },
                   h(BoardIcon, { name: item.icon }),
@@ -6600,11 +6616,17 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
             h(
               'div',
               { className: 'wb-pane', hidden: tab !== 'vault' },
-              h(VaultPage, { t, ctx, embedded: true, root, refreshTick, onOpenTrash: () => setTab('trash'), onFocusPath: setBoardFocusPath }),
+              h(VaultPage, { t, ctx, embedded: true, root, refreshTick, onOpenTrash: () => setTab('trash'), onFocusPath: onFocusVault }),
             ),
             tab === 'trash' ? h(TrashBoard, { t, root, refreshTick }) : null,
-            tab === 'copy' ? h(CopyBoard, { t, ctx, root, onFocusPath: setBoardFocusPath }) : null,
-            tab === 'write' ? h(WritingBoard, { t, ctx, root, onFocusPath: setBoardFocusPath }) : null,
+            /*
+             * 文案区 / 写作区：首次进入后常驻挂载（2026-11-19 大王报「切回去又是首页」）。
+             * 原来写 tab === 'copy' ? h(CopyBoard…) : null —— 一离开就卸载，
+             * 打开的稿件、草稿、阅读/编辑模式、写作项目与章节全丢，只剩一个路径空壳。
+             * 现在首次访问后不再卸载，只用 hidden 切显隐（素材区一直这么做）。
+             */
+            mounted.copy ? h(CopyBoard, { t, ctx, root, hidden: tab !== 'copy', onFocusPath: onFocusCopy }) : null,
+            mounted.write ? h(WritingBoard, { t, ctx, root, hidden: tab !== 'write', onFocusPath: onFocusWrite }) : null,
           ),
         )
       }
@@ -9051,7 +9073,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
         return h(
           'div',
-          { className: 'wb-pane cb-root' },
+          { className: 'wb-pane cb-root', hidden: props.hidden === true },
           h(CopyList, {
             t,
             docs: filtered,
@@ -10788,7 +10810,7 @@ const BOARD_MEMO = { vault: {}, copy: {}, write: {} }
 
         return h(
           'div',
-          { className: 'wb-pane wbg-root' },
+          { className: 'wb-pane wbg-root', hidden: props.hidden === true },
           h(WritingList, {
             t,
             projects: filteredProjects,
