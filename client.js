@@ -9960,11 +9960,190 @@ function useScrollMemo(bucket, selector, ready) {
                   h('button', { type: 'button', className: 'wbg-empty-btn', onClick: props.onCreate }, t('writeNewProject')),
                 )
               : null,
-            // 卷 → 章 → 场景
+            /*
+             * 设定（2026-11-22 大王要求：排在正文上面）
+             *
+             * 理由：设定是写作前的底稿（人物 / 世界观 / 大纲），
+             * 打开项目先看得到它；正文是产出，放下面按卷章往下排。
+             */
+            project
+              ? h(
+                  'div',
+                  {
+                    className: 'wbg-vol wbg-sect',
+                    'data-kind': 'setting',
+                    'data-open': settingOpen ? 'true' : 'false',
+                    role: 'button',
+                    tabIndex: 0,
+                    title: t('writeSettings'),
+                    onClick: () => setSettingOpen((open) => !open),
+                    onKeyDown: (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSettingOpen((open) => !open)
+                      }
+                    },
+                  },
+                  h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                  h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
+                  h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
+                  /*
+                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
+                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
+                   * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
+                   */
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'wbg-vol-add',
+                      title: t('writeAddSettingKindTip'),
+                      'aria-label': t('writeAddSettingKindTip'),
+                      onClick: (event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (typeof props.onAddSettingKind === 'function') props.onAddSettingKind()
+                      },
+                    },
+                    '＋',
+                  ),
+                )
+              : null,
+            /*
+             * 设定分类与条目（2026-11-22 大王要求：目录即结构）。
+             *
+             * 与旧版的差别：
+             *   ① 固定六类即使为空也显示（旧版有内容才显示，用户看不到「还没写」的类）；
+             *   ② 每个分类标题行右侧一个「＋」直接建条目；
+             *   ③ 分类与条目都给右键菜单（重命名 / 删除）。
+             */
+            project
+              ? (settingOpen
+                ? settingKinds.map((kind) => {
+                  const rows = settings[kind] || []
+                  /* 原地改分类名：正在改的这一类，标题换成输入框 */
+                  const kindRenaming = props.editProj
+                    && props.editProj.kind === 'rename-setting-kind'
+                    && props.editProj.settingKind === kind
+                  return h(
+                    'div',
+                    { key: kind },
+                    h(
+                      'div',
+                      { className: 'wbg-setk-row' },
+                      kindRenaming
+                        ? h('input', {
+                          className: 'wbg-nameinput wbg-setk-input',
+                          autoFocus: true,
+                          value: props.editProj.draft,
+                          onFocus: (event) => event.target.select(),
+                          onClick: (event) => event.stopPropagation(),
+                          onChange: (event) => props.editProj.onDraft(event.target.value),
+                          onKeyDown: (event) => {
+                            event.stopPropagation()
+                            if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                          },
+                          onBlur: () => props.editProj.commit(),
+                        })
+                        : h('span', {
+                          className: 'wbg-setk',
+                          onContextMenu: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setNodeMenu({
+                              kind: 'setting-kind',
+                              settingKind: kind,
+                              title: kind,
+                              path: project ? project.path + '/设定/' + kind : '',
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
+                          },
+                        }, kind),
+                      h('span', { className: 'wbg-setk-n' }, String(rows.length)),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'wbg-vol-add',
+                          title: t('writeAddSettingFileTip'),
+                          'aria-label': t('writeAddSettingFileTip'),
+                          onClick: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            if (typeof props.onAddSettingFile === 'function') props.onAddSettingFile(kind)
+                          },
+                        },
+                        '＋',
+                      ),
+                    ),
+                    rows.map((row) => {
+                      const fileRenaming = props.editProj
+                        && props.editProj.kind === 'rename-setting-file'
+                        && props.editProj.settingKind === kind
+                        && props.editProj.settingName === row.name
+                      return h('div',
+                        {
+                          key: row.path,
+                          className: 'wbg-set',
+                          role: 'button',
+                          tabIndex: 0,
+                          title: row.path,
+                          onClick: () => props.onOpenSetting(row),
+                          onContextMenu: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setNodeMenu({
+                              kind: 'setting-file',
+                              settingKind: kind,
+                              settingRow: row,
+                              title: row.title,
+                              path: row.path,
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
+                          },
+                        },
+                        h(WbgIcon, {
+                          name: SETTING_ICON_OF(kind),
+                          small: true,
+                          className: 'wbg-set-ic',
+                        }),
+                        h(
+                          'div',
+                          { className: 'wbg-set-t' },
+                          fileRenaming
+                            ? h('input', {
+                              className: 'wbg-nameinput',
+                              autoFocus: true,
+                              value: props.editProj.draft,
+                              onFocus: (event) => event.target.select(),
+                              onClick: (event) => event.stopPropagation(),
+                              onChange: (event) => props.editProj.onDraft(event.target.value),
+                              onKeyDown: (event) => {
+                                event.stopPropagation()
+                                if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                              },
+                              onBlur: () => props.editProj.commit(),
+                            })
+                            : h('b', null, row.title),
+                          h('small', null, row.words + ' ' + t('writeWordUnit')),
+                        ),
+                      )
+                    }),
+                  )
+                })
+                : null)
+              : null,
+            // 正文与设定之间的分隔线（2026-11-22 起设定排在正文上面）
+            project
+              ? h('div', { className: 'wbg-sep' })
+              : null,
             /*
              * 「正文」分组头（2026-11-18 大王要求）：
              * 样式照下面的「设定」——同样的 wbg-vol / wbg-vol-t / wbg-vol-n，
-             * 但这里可点、可展开收起（设定那组是静态的）。
+             * 但这里可点、可展开收起（设定那组也是可展开的，各自独立）。
+             * 2026-11-22 起这个分组排在设定后面。
              */
             project
               ? h(
@@ -10140,179 +10319,6 @@ function useScrollMemo(bucket, selector, ready) {
                   : null,
               )
             }) : null,
-            // 设定：人物 / 地点 / 情节线
-            project
-              ? h('div', { className: 'wbg-sep' })
-              : null,
-            project
-              ? h(
-                  'div',
-                  {
-                    className: 'wbg-vol wbg-sect',
-                    'data-kind': 'setting',
-                    'data-open': settingOpen ? 'true' : 'false',
-                    role: 'button',
-                    tabIndex: 0,
-                    title: t('writeSettings'),
-                    onClick: () => setSettingOpen((open) => !open),
-                    onKeyDown: (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setSettingOpen((open) => !open)
-                      }
-                    },
-                  },
-                  h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
-                  h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
-                  h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
-                  /*
-                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
-                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
-                   * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
-                   */
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'wbg-vol-add',
-                      title: t('writeAddSettingKindTip'),
-                      'aria-label': t('writeAddSettingKindTip'),
-                      onClick: (event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        if (typeof props.onAddSettingKind === 'function') props.onAddSettingKind()
-                      },
-                    },
-                    '＋',
-                  ),
-                )
-              : null,
-            /*
-             * 设定分类与条目（2026-11-22 大王要求：目录即结构）。
-             *
-             * 与旧版的差别：
-             *   ① 固定六类即使为空也显示（旧版有内容才显示，用户看不到「还没写」的类）；
-             *   ② 每个分类标题行右侧一个「＋」直接建条目；
-             *   ③ 分类与条目都给右键菜单（重命名 / 删除）。
-             */
-            project
-              ? (settingOpen
-                ? settingKinds.map((kind) => {
-                  const rows = settings[kind] || []
-                  /* 原地改分类名：正在改的这一类，标题换成输入框 */
-                  const kindRenaming = props.editProj
-                    && props.editProj.kind === 'rename-setting-kind'
-                    && props.editProj.settingKind === kind
-                  return h(
-                    'div',
-                    { key: kind },
-                    h(
-                      'div',
-                      { className: 'wbg-setk-row' },
-                      kindRenaming
-                        ? h('input', {
-                          className: 'wbg-nameinput wbg-setk-input',
-                          autoFocus: true,
-                          value: props.editProj.draft,
-                          onFocus: (event) => event.target.select(),
-                          onClick: (event) => event.stopPropagation(),
-                          onChange: (event) => props.editProj.onDraft(event.target.value),
-                          onKeyDown: (event) => {
-                            event.stopPropagation()
-                            if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
-                          },
-                          onBlur: () => props.editProj.commit(),
-                        })
-                        : h('span', {
-                          className: 'wbg-setk',
-                          onContextMenu: (event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            setNodeMenu({
-                              kind: 'setting-kind',
-                              settingKind: kind,
-                              title: kind,
-                              path: project ? project.path + '/设定/' + kind : '',
-                              x: event.clientX,
-                              y: event.clientY,
-                            })
-                          },
-                        }, kind),
-                      h('span', { className: 'wbg-setk-n' }, String(rows.length)),
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'wbg-vol-add',
-                          title: t('writeAddSettingFileTip'),
-                          'aria-label': t('writeAddSettingFileTip'),
-                          onClick: (event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            if (typeof props.onAddSettingFile === 'function') props.onAddSettingFile(kind)
-                          },
-                        },
-                        '＋',
-                      ),
-                    ),
-                    rows.map((row) => {
-                      const fileRenaming = props.editProj
-                        && props.editProj.kind === 'rename-setting-file'
-                        && props.editProj.settingKind === kind
-                        && props.editProj.settingName === row.name
-                      return h('div',
-                        {
-                          key: row.path,
-                          className: 'wbg-set',
-                          role: 'button',
-                          tabIndex: 0,
-                          title: row.path,
-                          onClick: () => props.onOpenSetting(row),
-                          onContextMenu: (event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            setNodeMenu({
-                              kind: 'setting-file',
-                              settingKind: kind,
-                              settingRow: row,
-                              title: row.title,
-                              path: row.path,
-                              x: event.clientX,
-                              y: event.clientY,
-                            })
-                          },
-                        },
-                        h(WbgIcon, {
-                          name: SETTING_ICON_OF(kind),
-                          small: true,
-                          className: 'wbg-set-ic',
-                        }),
-                        h(
-                          'div',
-                          { className: 'wbg-set-t' },
-                          fileRenaming
-                            ? h('input', {
-                              className: 'wbg-nameinput',
-                              autoFocus: true,
-                              value: props.editProj.draft,
-                              onFocus: (event) => event.target.select(),
-                              onClick: (event) => event.stopPropagation(),
-                              onChange: (event) => props.editProj.onDraft(event.target.value),
-                              onKeyDown: (event) => {
-                                event.stopPropagation()
-                                if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
-                              },
-                              onBlur: () => props.editProj.commit(),
-                            })
-                            : h('b', null, row.title),
-                          h('small', null, row.words + ' ' + t('writeWordUnit')),
-                        ),
-                      )
-                    }),
-                  )
-                })
-                : null)
-              : null,
           ),
         )
       }
