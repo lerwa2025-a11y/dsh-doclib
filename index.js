@@ -19,14 +19,20 @@ import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook
 import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import {
+  addSettingFile,
+  addSettingKind,
   addWriteChapter,
   addWriteVolume,
   attachWriteChapterBody,
   createWriteProject,
+  deleteSettingFile,
+  deleteSettingKind,
   deleteWriteChapter,
   deleteWriteVolume,
   listWriteProjects,
   readWriteProject,
+  renameSettingFile,
+  renameSettingKind,
   renameWriteChapter,
   renameWriteProject,
   renameWriteVolume,
@@ -442,6 +448,67 @@ export function apply(ctx) {
                     body && body.volumeIndex,
                     body && body.chapterIndex,
                   )),
+                })
+                return
+              }
+              /*
+               * 设定：分类文件夹与条目文件（2026-11-22 大王要求）。
+               *
+               * 新结构下「设定」下面就是一层分类文件夹，一层条目文件；
+               * 固定的六类（世界背景/大纲/世界地图/情节线/核心冲突设定/人物）
+               * 在新建项目时就建好，之后可自建、可改名、可删。
+               */
+              if (route === '/write-add-setting-kind' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await addSettingKind(root, body && body.path, body && body.kind)),
+                })
+                return
+              }
+              if (route === '/write-rename-setting-kind' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameSettingKind(root, body && body.path, body && body.from, body && body.to)),
+                })
+                return
+              }
+              if (route === '/write-del-setting-kind' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await deleteSettingKind(root, body && body.path, body && body.kind)),
+                })
+                return
+              }
+              if (route === '/write-add-setting-file' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await addSettingFile(root, body && body.path, body && body.kind, body && body.title)),
+                })
+                return
+              }
+              if (route === '/write-rename-setting-file' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameSettingFile(
+                    root,
+                    body && body.path,
+                    body && body.kind,
+                    body && body.name,
+                    body && body.title,
+                  )),
+                })
+                return
+              }
+              if (route === '/write-del-setting-file' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await deleteSettingFile(root, body && body.path, body && body.kind, body && body.name)),
                 })
                 return
               }

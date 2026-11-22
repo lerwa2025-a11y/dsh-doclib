@@ -317,6 +317,24 @@ window.__ModuleLoader__.load({
         writeDeleteChapterSub: '这一章的正文文件会移入回收站，之后可以恢复。',
         writeAddVolumeTip: '在最后追加一卷',
         writeAddChapterTip: '给这一卷加一章',
+        writeAddSettingKindTip: '新建一个设定分类',
+        writeAddSettingFileTip: '在这个分类下新建条目',
+        writeRenameSettingKind: '重命名分类',
+        writeRenameSettingFile: '重命名条目',
+        writeRenameSettingKindPrompt: '分类名',
+        writeRenameSettingFilePrompt: '条目名',
+        writeSettingKindDefault: '新分类',
+        writeSettingFileDefault: '新条目',
+        writeSettingKindAdded: '已新建设定分类',
+        writeSettingFileAdded: '已新建设定条目',
+        writeSettingKindRenamed: '分类名已改',
+        writeSettingFileRenamed: '条目名已改',
+        writeSettingKindDeleted: '分类已移入回收站',
+        writeSettingFileDeleted: '条目已移入回收站',
+        writeDeleteSettingKindConfirm: '确定删除这个设定分类？',
+        writeDeleteSettingKindSub: '这一分类下所有条目文件都会移入回收站。',
+        writeDeleteSettingFileConfirm: '确定删除这条设定？',
+        writeDeleteSettingFileSub: '这一份文件会移入回收站，之后可以恢复。',
         writeProjects: '项目',
         writeLoadFailed: '读取失败：',
         writeSaveFailed: '保存失败：',
@@ -675,6 +693,24 @@ window.__ModuleLoader__.load({
         writeDeleteChapterSub: 'Its body file will be moved to trash and can be restored.',
         writeAddVolumeTip: 'Append a volume',
         writeAddChapterTip: 'Add a chapter to this volume',
+        writeAddSettingKindTip: 'New setting category',
+        writeAddSettingFileTip: 'New entry in this category',
+        writeRenameSettingKind: 'Rename category',
+        writeRenameSettingFile: 'Rename entry',
+        writeRenameSettingKindPrompt: 'Category name',
+        writeRenameSettingFilePrompt: 'Entry name',
+        writeSettingKindDefault: 'New category',
+        writeSettingFileDefault: 'New entry',
+        writeSettingKindAdded: 'Setting category added',
+        writeSettingFileAdded: 'Setting entry added',
+        writeSettingKindRenamed: 'Category renamed',
+        writeSettingFileRenamed: 'Entry renamed',
+        writeSettingKindDeleted: 'Category moved to trash',
+        writeSettingFileDeleted: 'Entry moved to trash',
+        writeDeleteSettingKindConfirm: 'Delete this setting category?',
+        writeDeleteSettingKindSub: 'All entry files in it will be moved to trash.',
+        writeDeleteSettingFileConfirm: 'Delete this setting entry?',
+        writeDeleteSettingFileSub: 'The file will be moved to trash and can be restored.',
         writeProjectCreated: 'Project created',
         writeProjects: 'Projects',
         writeLoadFailed: 'Load failed: ',
@@ -9545,6 +9581,20 @@ function useScrollMemo(bucket, selector, ready) {
       }
 
       // 左栏：搜索 + 项目 / 卷章树 / 设定
+      /*
+       * 设定分类的图标（2026-11-22 新结构）。
+       * 固定的六类各给一个语义相近的图标，自建分类统一用 flag。
+       */
+      function SETTING_ICON_OF(kind) {
+        if (kind === '人物') return 'people'
+        if (kind === '世界地图') return 'map'
+        if (kind === '大纲') return 'grid'
+        if (kind === '情节线') return 'flag'
+        if (kind === '核心冲突设定') return 'star'
+        if (kind === '世界背景') return 'quote'
+        return 'flag'
+      }
+
       function WritingList(props) {
         const t = props.t
 
@@ -9602,6 +9652,16 @@ function useScrollMemo(bucket, selector, ready) {
 
         const volumes = project ? (Array.isArray(project.volumes) ? project.volumes : []) : []
         const settings = project && project.settings ? project.settings : {}
+        /*
+         * 设定分类清单（2026-11-22 大王要求：目录即结构）。
+         * 固定的六类在新建项目时就建好，之后可自建；
+         * 空分类也要显示出来 —— 否则用户看不到「有这一类、只是还没写」。
+         */
+        const FALLBACK_SETTING_KINDS = ['世界背景', '大纲', '世界地图', '情节线', '核心冲突设定', '人物']
+        const settingKinds = project && Array.isArray(project.settingKinds) && project.settingKinds.length > 0
+          ? project.settingKinds
+          : FALLBACK_SETTING_KINDS
+        const settingTotal = settingKinds.reduce((sum, kind) => sum + ((settings[kind] || []).length), 0)
 
         return h(
           'div',
@@ -9792,11 +9852,20 @@ function useScrollMemo(bucket, selector, ready) {
                   setNodeMenu(null)
                   if (menu.kind === 'volume') {
                     if (typeof props.onRenameVolume === 'function') props.onRenameVolume(menu.vi, menu.title)
-                  } else if (typeof props.onRenameChapter === 'function') {
-                    props.onRenameChapter(menu.vi, menu.ci, menu.title)
+                  } else if (menu.kind === 'chapter') {
+                    if (typeof props.onRenameChapter === 'function') props.onRenameChapter(menu.vi, menu.ci, menu.title)
+                  } else if (menu.kind === 'setting-kind') {
+                    if (typeof props.onRenameSettingKind === 'function') props.onRenameSettingKind(menu.settingKind)
+                  } else if (typeof props.onRenameSettingFile === 'function') {
+                    props.onRenameSettingFile(menu.settingKind, menu.settingRow)
                   }
                 },
-              }, t(nodeMenu.kind === 'volume' ? 'writeRenameVolume' : 'writeRenameChapter')),
+              }, t(
+                nodeMenu.kind === 'volume' ? 'writeRenameVolume'
+                  : nodeMenu.kind === 'chapter' ? 'writeRenameChapter'
+                    : nodeMenu.kind === 'setting-kind' ? 'writeRenameSettingKind'
+                      : 'writeRenameSettingFile',
+              )),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -9805,8 +9874,12 @@ function useScrollMemo(bucket, selector, ready) {
                   setNodeMenu(null)
                   if (menu.kind === 'volume') {
                     if (typeof props.onDeleteVolume === 'function') props.onDeleteVolume(menu.vi, menu.title)
-                  } else if (typeof props.onDeleteChapter === 'function') {
-                    props.onDeleteChapter(menu.vi, menu.ci, menu.title)
+                  } else if (menu.kind === 'chapter') {
+                    if (typeof props.onDeleteChapter === 'function') props.onDeleteChapter(menu.vi, menu.ci, menu.title)
+                  } else if (menu.kind === 'setting-kind') {
+                    if (typeof props.onDeleteSettingKind === 'function') props.onDeleteSettingKind(menu.settingKind)
+                  } else if (typeof props.onDeleteSettingFile === 'function') {
+                    props.onDeleteSettingFile(menu.settingKind, menu.settingRow)
                   }
                 },
               }, t('vaultDelete')),
@@ -10035,45 +10108,152 @@ function useScrollMemo(bucket, selector, ready) {
                   },
                   h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
                   h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
-                  h('span', { className: 'wbg-vol-n' }, String(
-                    (settings['人物'] || []).length + (settings['地点'] || []).length + (settings['情节线'] || []).length,
-                  )),
+                  h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
+                  /*
+                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
+                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
+                   * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
+                   */
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'wbg-vol-add',
+                      title: t('writeAddSettingKindTip'),
+                      'aria-label': t('writeAddSettingKindTip'),
+                      onClick: (event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (typeof props.onAddSettingKind === 'function') props.onAddSettingKind()
+                      },
+                    },
+                    '＋',
+                  ),
                 )
               : null,
+            /*
+             * 设定分类与条目（2026-11-22 大王要求：目录即结构）。
+             *
+             * 与旧版的差别：
+             *   ① 固定六类即使为空也显示（旧版有内容才显示，用户看不到「还没写」的类）；
+             *   ② 每个分类标题行右侧一个「＋」直接建条目；
+             *   ③ 分类与条目都给右键菜单（重命名 / 删除）。
+             */
             project
-              ? (settingOpen ? ['人物', '地点', '情节线'].map((kind) =>
-                  (settings[kind] || []).length === 0
-                    ? null
-                    : h(
-                        'div',
-                        { key: kind },
-                        h('div', { className: 'wbg-setk' }, kind),
-                        settings[kind].map((row) =>
-                          h(
-                            'div',
-                            {
-                              key: row.path,
-                              className: 'wbg-set',
-                              role: 'button',
-                              tabIndex: 0,
-                              title: row.path,
-                              onClick: () => props.onOpenSetting(row),
-                            },
-                            h(WbgIcon, {
-                              name: kind === '人物' ? 'people' : kind === '地点' ? 'map' : 'flag',
-                              small: true,
-                              className: 'wbg-set-ic',
-                            }),
-                            h(
-                              'div',
-                              { className: 'wbg-set-t' },
-                              h('b', null, row.title),
-                              h('small', null, row.words + ' ' + t('writeWordUnit')),
-                            ),
-                          ),
-                        ),
+              ? (settingOpen
+                ? settingKinds.map((kind) => {
+                  const rows = settings[kind] || []
+                  /* 原地改分类名：正在改的这一类，标题换成输入框 */
+                  const kindRenaming = props.editProj
+                    && props.editProj.kind === 'rename-setting-kind'
+                    && props.editProj.settingKind === kind
+                  return h(
+                    'div',
+                    { key: kind },
+                    h(
+                      'div',
+                      { className: 'wbg-setk-row' },
+                      kindRenaming
+                        ? h('input', {
+                          className: 'wbg-nameinput wbg-setk-input',
+                          autoFocus: true,
+                          value: props.editProj.draft,
+                          onFocus: (event) => event.target.select(),
+                          onClick: (event) => event.stopPropagation(),
+                          onChange: (event) => props.editProj.onDraft(event.target.value),
+                          onKeyDown: (event) => {
+                            event.stopPropagation()
+                            if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                          },
+                          onBlur: () => props.editProj.commit(),
+                        })
+                        : h('span', {
+                          className: 'wbg-setk',
+                          onContextMenu: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setNodeMenu({
+                              kind: 'setting-kind',
+                              settingKind: kind,
+                              title: kind,
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
+                          },
+                        }, kind),
+                      h('span', { className: 'wbg-setk-n' }, String(rows.length)),
+                      h(
+                        'button',
+                        {
+                          type: 'button',
+                          className: 'wbg-vol-add',
+                          title: t('writeAddSettingFileTip'),
+                          'aria-label': t('writeAddSettingFileTip'),
+                          onClick: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            if (typeof props.onAddSettingFile === 'function') props.onAddSettingFile(kind)
+                          },
+                        },
+                        '＋',
                       ),
-                ) : null)
+                    ),
+                    rows.map((row) => {
+                      const fileRenaming = props.editProj
+                        && props.editProj.kind === 'rename-setting-file'
+                        && props.editProj.settingKind === kind
+                        && props.editProj.settingName === row.name
+                      return h('div',
+                        {
+                          key: row.path,
+                          className: 'wbg-set',
+                          role: 'button',
+                          tabIndex: 0,
+                          title: row.path,
+                          onClick: () => props.onOpenSetting(row),
+                          onContextMenu: (event) => {
+                            event.preventDefault()
+                            event.stopPropagation()
+                            setNodeMenu({
+                              kind: 'setting-file',
+                              settingKind: kind,
+                              settingRow: row,
+                              title: row.title,
+                              x: event.clientX,
+                              y: event.clientY,
+                            })
+                          },
+                        },
+                        h(WbgIcon, {
+                          name: SETTING_ICON_OF(kind),
+                          small: true,
+                          className: 'wbg-set-ic',
+                        }),
+                        h(
+                          'div',
+                          { className: 'wbg-set-t' },
+                          fileRenaming
+                            ? h('input', {
+                              className: 'wbg-nameinput',
+                              autoFocus: true,
+                              value: props.editProj.draft,
+                              onFocus: (event) => event.target.select(),
+                              onClick: (event) => event.stopPropagation(),
+                              onChange: (event) => props.editProj.onDraft(event.target.value),
+                              onKeyDown: (event) => {
+                                event.stopPropagation()
+                                if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                              },
+                              onBlur: () => props.editProj.commit(),
+                            })
+                            : h('b', null, row.title),
+                          h('small', null, row.words + ' ' + t('writeWordUnit')),
+                        ),
+                      )
+                    }),
+                  )
+                })
+                : null)
               : null,
           ),
         )
@@ -10527,6 +10707,104 @@ function useScrollMemo(bucket, selector, ready) {
           } catch (err) {
             flash(t('writeDeleteFailed') + messageOf(err))
           }
+        }
+
+        /*
+         * ── 设定：分类与条目（2026-11-22 新结构）──────────────
+         *
+         * 与卷章一致：新建一键建（不弹输入条），改名/删除走右键菜单。
+         * 固定六类在新建项目时就建好，这里只是追加自建分类。
+         */
+        const addSettingKindNow = async () => {
+          if (!project) {
+            setError(t('writePickProject'))
+            return
+          }
+          try {
+            /* 名字自动避重：已有「新分类」就叫「新分类 2」，绝不覆盖已有分类 */
+            const base = t('writeSettingKindDefault')
+            const taken = project && Array.isArray(project.settingKinds) ? project.settingKinds : []
+            let kindName = base
+            let seq = 2
+            while (taken.includes(kindName)) {
+              kindName = base + ' ' + seq
+              seq += 1
+            }
+            const made = await vaultApiPost('/write-add-setting-kind', {
+              path: project.path,
+              kind: kindName,
+            })
+            await loadProject(project.path)
+            flash(t('writeSettingKindAdded'))
+            /* 建完直接进改名态：新分类默认叫「新分类N」，让用户立刻命名 */
+            if (made && typeof made.kind === 'string' && made.kind !== '') {
+              openEdit('rename-setting-kind', { settingKind: made.kind }, made.kind)
+            }
+          } catch (err) {
+            setError(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
+        const addSettingFileNow = async (kind) => {
+          if (!project) {
+            setError(t('writePickProject'))
+            return
+          }
+          try {
+            const made = await vaultApiPost('/write-add-setting-file', {
+              path: project.path,
+              kind,
+              title: t('writeSettingFileDefault'),
+            })
+            await loadProject(project.path)
+            flash(t('writeSettingFileAdded'))
+            if (made && typeof made.name === 'string' && made.name !== '') {
+              openEdit('rename-setting-file', { settingKind: kind, settingName: made.name }, titleOfSettingFile(made.name))
+            }
+          } catch (err) {
+            setError(t('writeSaveFailed') + messageOf(err))
+          }
+        }
+
+        const deleteSettingKind = async (kind) => {
+          if (!project || kind === '') return
+          if (!window.confirm(t('writeDeleteSettingKindConfirm') + kind + '？\n' + t('writeDeleteSettingKindSub'))) return
+          try {
+            await vaultApiPost('/write-del-setting-kind', { path: project.path, kind })
+            /* 删的是当前打开条目的分类 → 清空右栏 */
+            if (file && typeof file.path === 'string' && file.path.indexOf('/设定/' + kind + '/') >= 0) {
+              setFile(null)
+              setActiveFile('')
+              setDraft('')
+            }
+            await loadProject(project.path)
+            flash(t('writeSettingKindDeleted'))
+          } catch (err) {
+            flash(t('writeDeleteFailed') + messageOf(err))
+          }
+        }
+
+        const deleteSettingFile = async (kind, row) => {
+          if (!project || !row || typeof row.name !== 'string') return
+          if (!window.confirm(t('writeDeleteSettingFileConfirm') + row.title + '？\n' + t('writeDeleteSettingFileSub'))) return
+          try {
+            await vaultApiPost('/write-del-setting-file', { path: project.path, kind, name: row.name })
+            if (file && file.path === row.path) {
+              setFile(null)
+              setActiveFile('')
+              setDraft('')
+            }
+            await loadProject(project.path)
+            flash(t('writeSettingFileDeleted'))
+          } catch (err) {
+            flash(t('writeDeleteFailed') + messageOf(err))
+          }
+        }
+
+        /* 设定条目文件名 → 显示标题（去掉 .md） */
+        function titleOfSettingFile(fileName) {
+          const raw = typeof fileName === 'string' ? fileName : ''
+          return raw.replace(/\.md$/i, '')
         }
 
         // 单项目结构
@@ -11160,6 +11438,8 @@ function useScrollMemo(bucket, selector, ready) {
           if (editPrompt.kind === 'rename-project') return t('writeProjectNamePrompt')
           if (editPrompt.kind === 'rename-volume') return t('writeVolumeNamePrompt')
           if (editPrompt.kind === 'rename-chapter') return t('writeChapterNamePrompt')
+          if (editPrompt.kind === 'rename-setting-kind') return t('writeRenameSettingKindPrompt')
+          if (editPrompt.kind === 'rename-setting-file') return t('writeRenameSettingFilePrompt')
           return ''
         }
 
@@ -11168,6 +11448,8 @@ function useScrollMemo(bucket, selector, ready) {
           if (editPrompt.kind === 'rename-project') return t('writeRenameProject')
           if (editPrompt.kind === 'rename-volume') return t('writeRenameVolume')
           if (editPrompt.kind === 'rename-chapter') return t('writeRenameChapter')
+          if (editPrompt.kind === 'rename-setting-kind') return t('writeRenameSettingKind')
+          if (editPrompt.kind === 'rename-setting-file') return t('writeRenameSettingFile')
           return ''
         }
 
@@ -11226,6 +11508,23 @@ function useScrollMemo(bucket, selector, ready) {
               })
               await loadProject(project.path)
               flash(t('writeChapterRenamed'))
+            } else if (kind === 'rename-setting-kind') {
+              await vaultApiPost('/write-rename-setting-kind', {
+                path: project.path,
+                from: editPrompt.settingKind,
+                to: typed,
+              })
+              await loadProject(project.path)
+              flash(t('writeSettingKindRenamed'))
+            } else if (kind === 'rename-setting-file') {
+              await vaultApiPost('/write-rename-setting-file', {
+                path: project.path,
+                kind: editPrompt.settingKind,
+                name: editPrompt.settingName,
+                title: typed,
+              })
+              await loadProject(project.path)
+              flash(t('writeSettingFileRenamed'))
             }
             closeEdit()
           } catch (err) {
@@ -11258,6 +11557,17 @@ function useScrollMemo(bucket, selector, ready) {
             onProject: (path) => void loadProject(path),
             onOpenChapter: (ch, vi, ci) => void openChapter(ch, vi, ci),
             onOpenSetting: (row) => void openSetting(row),
+            /* 设定分类 / 条目（2026-11-22 新结构）：一键建，改名删除走右键 */
+            onAddSettingKind: () => void addSettingKindNow(),
+            onAddSettingFile: (kind) => void addSettingFileNow(kind),
+            onRenameSettingKind: (kind) => openEdit('rename-setting-kind', { settingKind: kind }, kind),
+            onRenameSettingFile: (kind, row) => openEdit(
+              'rename-setting-file',
+              { settingKind: kind, settingName: row.name },
+              titleOfSettingFile(row.name),
+            ),
+            onDeleteSettingKind: (kind) => void deleteSettingKind(kind),
+            onDeleteSettingFile: (kind, row) => void deleteSettingFile(kind, row),
             onToggleVolume: (vi) => setOpenVolumes((next) => ({ ...next, [vi]: next[vi] === false })),
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
@@ -11286,6 +11596,8 @@ function useScrollMemo(bucket, selector, ready) {
                 vi: editPrompt.index !== undefined ? editPrompt.index : editPrompt.volumeIndex,
                 ci: editPrompt.chapterIndex,
                 path: editPrompt.path,
+                settingKind: editPrompt.settingKind,
+                settingName: editPrompt.settingName,
                 label: editLabelOf(),
                 placeholder: editPlaceholderOf(),
                 draft: editDraft,
@@ -13107,7 +13419,12 @@ mark.df-hit[data-active="true"] {
 .wbg-vol { cursor: pointer; }
 .wbg-ch { cursor: pointer; }
 .wbg-set { cursor: pointer; }
-.wbg-setk { padding: 8px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .03em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-setk { font-size: 10px; font-weight: 600; letter-spacing: .03em; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-setk-row { display: flex; align-items: center; gap: 6px; padding: 8px 8px 4px 8px; }
+.wbg-setk-row .wbg-setk { flex: 0 1 auto; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wbg-setk-n { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.wbg-setk-row .wbg-vol-add { margin-left: auto; }
+.wbg-setk-input { flex: 1 1 auto; min-width: 0; font-size: 11px; font-weight: 600; }
 /* 未写的章（没有正文文件）看着是灰的，但仍可点（只是点了没反应） */
 
 /* 中栏空状态 */

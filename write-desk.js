@@ -1,34 +1,49 @@
 // write-desk.js —— 写作台的项目结构（Host 侧）
 //
-// 存法照抄需求定案 §3.4：
+// 2026-11-22 大王定案：磁盘目录就是结构本身，不再用 项目.md 记卷章。
 //
 //   写作\项目名\
-//   ├── 项目.md          ← 只放卷/章/场景的 order 与归属
-//   ├── 人物\<名>.md      ← 设定，可写长文
-//   ├── 地点\<名>.md
-//   ├── 情节线\<名>.md
-//   └── 正文\
-//       ├── 0001-场景.md  ← 纯正文，agent 直接 write
-//       └── ...
+//   ├── 项目.md              ← 只放元数据（书名），不再记卷章
+//   ├── 正文\
+//   │   ├── 第一卷\          ← 一个卷 = 一个文件夹
+//   │   │   ├── 0001-第一章.md
+//   │   │   └── 0002-第二章.md
+//   │   └── 第二卷\
+//   └── 设定\                ← 固定六类 + 用户自建
+//       ├── 世界背景\
+//       ├── 大纲\
+//       ├── 世界地图\
+//       ├── 情节线\
+//       ├── 核心冲突设定\
+//       └── 人物\
 //
-// 为什么正文与结构分开：手改结构不碰正文，正文损坏也不影响结构（文档原话）。
+// 为什么「目录即结构」：
+//   原来的 项目.md 结构段与 正文\ 里的文件是两份真相，两边一对不上就要写
+//   「已声明文件对位」「结构为空按文件名推」这类补丁（见 2026-11-18 的两次
+//   修 bug）。目录即结构以后：改名文件夹 = 改卷名，删文件夹 = 删卷，
+//   外部编辑器里移动文件界面直接反映，没有第二份数据可以对不上。
 //
-// 三条硬约束（来自需求 §1.5 / §3.5）：
-//   1. 正文永远独立成文件，项目.md 里只有结构与 order
-//   2. 结构只读不猜：项目.md 格式不对就退回「按文件名前缀推」，绝不回写修补
+// 三条硬约束（沿用需求 §1.5 / §3.5）：
+//   1. 正文永远独立成文件，且只落在 正文\<卷>\ 下面
+//   2. 章/卷标题从文件名与文件夹名来，解析不出来就用原名兜底，不报错
 //   3. 零元数据是正常状态，不报错
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises'
+import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve, sep } from 'node:path'
 import { deleteToTrash } from './vault.js'
 
 /** 写作台在库根下的目录名。 */
 export const WRITE_DIR = '写作'
-/** 项目结构文件名。 */
+/** 项目元数据文件名（只放书名等，不记结构）。 */
 export const PROJECT_FILE = '项目.md'
 /** 正文目录名。 */
 export const BODY_DIR = '正文'
-/** 三个设定目录。 */
-export const SETTING_DIRS = ['人物', '地点', '情节线']
+/** 设定目录名。 */
+export const SETTING_DIR = '设定'
+/**
+ * 固定的设定分类（2026-11-22 大王定：世界背景 / 大纲 / 世界地图 / 情节线 / 核心冲突设定 / 人物）。
+ * 新建项目时全部建出来；之后用户可以再自建别的分类。
+ */
+export const SETTING_DIRS = ['世界背景', '大纲', '世界地图', '情节线', '核心冲突设定', '人物']
 
 /** 库内相对路径（/ 分隔），并挡 `..` 逃逸。 */
 function safeChild(root, rel) {
@@ -85,70 +100,61 @@ function titleFromFile(name) {
   return bare.replace(/^\d{1,4}[-_.\s]+/, '').trim() || bare
 }
 
+/** 中文小数字：1 → 一，12 → 十二，20 → 二十。只管 1~99，够用了。 */
+function cnNum(n) {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+  const v = Math.max(1, Math.min(99, Math.floor(n)))
+  if (v < 10) return digits[v]
+  if (v === 10) return '十'
+  if (v < 20) return '十' + digits[v - 10]
+  const tens = Math.floor(v / 10)
+  const ones = v % 10
+  return digits[tens] + '十' + (ones === 0 ? '' : digits[ones])
+}
+
+/** 中文数字认回来（一 → 1，十二 → 12，二十三 → 23）。认不出返回 0。 */
+function cnParse(text) {
+  const digits = { 零: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 }
+  const raw = String(text || '').trim()
+  if (raw === '') return 0
+  if (/^\d+$/.test(raw)) return Number(raw)
+  const ten = raw.indexOf('十')
+  if (ten < 0) return digits[raw] === undefined ? 0 : digits[raw]
+  const left = raw.slice(0, ten)
+  const right = raw.slice(ten + 1)
+  const tens = left === '' ? 1 : (digits[left] === undefined ? 0 : digits[left])
+  const ones = right === '' ? 0 : (digits[right] === undefined ? 0 : digits[right])
+  return tens * 10 + ones
+}
+
 /**
- * 解析 项目.md 的结构段。
- *
- * 认这种最朴素的写法（不引 YAML 依赖）：
- *
- *   # 卷名
- *   ## 章名
- *   - 场景名
- *
- * 也认显式的 `- 章节名`。解析不出来就返回空，交给上层退回按文件名推。
+ * 排序键：`第一卷`→1、`第12卷`→12、`0003-xxx.md`→3。
+ * 认不出序号的排在有号数的后面（按名字词典序），免得自定义名字被挤到前面。
  */
-function parseProjectStructure(text) {
-  const { body } = splitFrontMatter(text)
-  const volumes = []
-  let volume = null
-  let chapter = null
-  for (const raw of body.replace(/\r\n/g, '\n').split('\n')) {
-    const line = raw.trimEnd()
-    if (line.trim() === '') continue
-    const h1 = /^#\s+(.+)$/.exec(line)
-    const h2 = /^##\s+(.+)$/.exec(line)
-    const bullet = /^[-*+]\s+(.+)$/.exec(line)
-    if (h1) {
-      volume = { title: h1[1].trim(), chapters: [] }
-      volumes.push(volume)
-      chapter = null
-      continue
-    }
-    if (h2) {
-      if (!volume) {
-        volume = { title: '', chapters: [] }
-        volumes.push(volume)
-      }
-      /*
-       * 章标题允许带正文文件名：`## 第1章 | 0001-第1章.md`
-       * 前面是给人看的标题，竖线后面是给程序看的文件。
-       * 不带竖线就是老写法，仍然按顺序对位（见下面 readWriteProject）。
-       */
-      const raw = h2[1].trim()
-      const bar = raw.lastIndexOf('|')
-      let title = raw
-      let file = ''
-      if (bar > 0) {
-        const tail = raw.slice(bar + 1).trim()
-        if (/\.md$/i.test(tail)) {
-          title = raw.slice(0, bar).trim()
-          file = tail
-        }
-      }
-      chapter = { title, scenes: [] }
-      if (file !== '') chapter.file = file
-      volume.chapters.push(chapter)
-      continue
-    }
-    if (bullet) {
-      const title = bullet[1].trim()
-      if (chapter) chapter.scenes.push({ title })
-      else if (volume) {
-        chapter = { title, scenes: [] }
-        volume.chapters.push(chapter)
-      }
-    }
+function orderKey(name) {
+  const dir = /^第(.+)卷$/.exec(name)
+  if (dir) {
+    const n = cnParse(dir[1])
+    if (n > 0) return { rank: 0, n, name }
   }
-  return volumes
+  const num = /^(\d{1,4})[-_.\s]/.exec(name)
+  if (num) return { rank: 0, n: parseInt(num[1], 10), name }
+  return { rank: 1, n: 0, name }
+}
+
+function compareNames(a, b) {
+  const ka = orderKey(a)
+  const kb = orderKey(b)
+  if (ka.rank !== kb.rank) return ka.rank - kb.rank
+  if (ka.n !== kb.n) return ka.n - kb.n
+  return ka.name < kb.name ? -1 : ka.name > kb.name ? 1 : 0
+}
+
+/** 目录名/文件名清洗：去掉 Windows 保留字符，限长。 */
+function safeTitle(input, fallback) {
+  const raw = String(input === undefined || input === null ? '' : input).trim()
+  const cleaned = raw.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80)
+  return cleaned === '' ? fallback : cleaned
 }
 
 /** 读一个目录下的 .md 清单（只第一层）。不存在返回空数组。 */
@@ -159,7 +165,7 @@ async function listMd(dirAbsolute) {
   } catch {
     return []
   }
-  const out = []
+  const rows = []
   for (const item of items) {
     if (!item.isFile()) continue
     if (item.name.startsWith('.')) continue
@@ -177,7 +183,7 @@ async function listMd(dirAbsolute) {
     } catch {
       text = ''
     }
-    out.push({
+    rows.push({
       name: item.name,
       path: absolute,
       title: titleFromFile(item.name),
@@ -186,9 +192,220 @@ async function listMd(dirAbsolute) {
       mtime: info.mtimeMs,
     })
   }
-  out.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  return out
+  rows.sort((a, b) => compareNames(a.name, b.name))
+  return rows
 }
+
+/** 读一个目录下的子目录名（只第一层，跳过点开头）。不存在返回空数组。 */
+async function listDirs(dirAbsolute) {
+  let items
+  try {
+    items = await readdir(dirAbsolute, { withFileTypes: true })
+  } catch {
+    return []
+  }
+  const names = []
+  for (const item of items) {
+    if (!item.isDirectory()) continue
+    if (item.name.startsWith('.')) continue
+    names.push(item.name)
+  }
+  names.sort(compareNames)
+  return names
+}
+
+/** 把项目路径解析成绝对目录，并校验它在 写作\ 下。 */
+async function projectDir(root, projectRel) {
+  if (typeof root !== 'string' || root.trim() === '') throw new Error('还没有设置笔记库文件夹')
+  const rel = String(projectRel === undefined || projectRel === null ? '' : projectRel)
+    .replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  if (!rel.startsWith(WRITE_DIR + '/')) throw new Error('不是写作台项目路径')
+  const base = safeChild(root, rel)
+  const info = await stat(base)
+  if (!info.isDirectory()) throw new Error('项目不存在')
+  return base
+}
+
+/** 读 项目.md 原文；不存在返回空串。 */
+async function readProjectFile(base) {
+  try {
+    const info = await stat(join(base, PROJECT_FILE))
+    if (!info.isFile()) return ''
+    return await readFile(join(base, PROJECT_FILE), 'utf8')
+  } catch {
+    return ''
+  }
+}
+
+/** 写回 项目.md。统一 LF —— 我们自己生成的，不混 CRLF。 */
+async function writeProjectFile(base, text) {
+  await writeFile(join(base, PROJECT_FILE), text, 'utf8')
+}
+
+/**
+ * 改 front-matter 里的一个键（没有 front-matter 就造一个，有就替换/补一行）。
+ *
+ * 只用于「书名」这类元数据 —— 卷章结构现在全在目录上，不进 项目.md。
+ */
+function setFrontMatter(text, key, value) {
+  const source = String(text === undefined || text === null ? '' : text)
+  const line = key + ': ' + value
+  if (!source.startsWith('---')) return ['---', line, '---', '', source].join('\n')
+  const end = source.indexOf('\n---', 3)
+  if (end < 0) return ['---', line, '---', '', source].join('\n')
+  const head = source.slice(3, end).replace(/^\r?\n/, '')
+  const tail = source.slice(end + 4)
+  const rows = head.split(/\r?\n/)
+  const pattern = new RegExp('^\\s*' + key + '\\s*:')
+  let hit = false
+  const nextRows = rows.map((row) => {
+    if (pattern.test(row)) { hit = true; return line }
+    return row
+  })
+  if (!hit) nextRows.push(line)
+  const body = nextRows.filter((row, i, arr) => !(row === '' && i === arr.length - 1)).join('\n')
+  return ['---', body, '---', tail].join('\n')
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   旧结构迁移（2026-11-22）
+
+   老结构长这样：
+     正文\0001-第一章.md          ← 正文文件直接躺在 正文\ 根下
+     人物\ 地点\ 情节线\          ← 三个设定目录在项目根下
+
+   新结构要求正文进卷文件夹、设定进 设定\。
+
+   迁移是幂等的：只有检测到「正文\ 根下有 .md」或「项目根下有老设定目录」
+   才动手，做完就不会再触发。动手前先把整份项目复制到
+   `<项目>\.迁移备份-<时间戳>\`（点开头，列表与统计都会跳过）。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** 老的三个设定目录名 —— 迁移时并进 设定\ 下同名分类。 */
+const LEGACY_SETTING_DIRS = ['人物', '地点', '情节线']
+
+/**
+ * 检测并执行迁移。返回 true 表示这次真的迁移了。
+ *
+ * 任何一步失败都只在内部吞掉（界面不该因为迁移失败就打不开项目），
+ * 但会尽力把能挪的挪完 —— 挪不动的那部分老代码仍能按旧路径读。
+ */
+async function migrateIfNeeded(base) {
+  const bodyRoot = join(base, BODY_DIR)
+  const settingRoot = join(base, SETTING_DIR)
+
+  const looseBodies = await listMd(bodyRoot)
+  const legacyDirs = []
+  for (const name of LEGACY_SETTING_DIRS) {
+    try {
+      const info = await stat(join(base, name))
+      if (info.isDirectory()) legacyDirs.push(name)
+    } catch {
+      /* 没有就算了 */
+    }
+  }
+  if (looseBodies.length === 0 && legacyDirs.length === 0) return false
+
+  /*
+   * 先整份备份（点开头，列表与统计都会跳过）。
+   * 注意不能直接 cp(base, 里面一个新目录) —— 目标在源里面会递归到自己，
+   * 所以先建目录，再逐个把顶层的条目复制进去（跳过备份目录本身）。
+   */
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const backupName = '.迁移备份-' + stamp
+  const backup = join(base, backupName)
+  let backedUp = false
+  try {
+    await mkdir(backup, { recursive: true })
+    const entries = await readdir(base, { withFileTypes: true })
+    let allOk = true
+    for (const entry of entries) {
+      if (entry.name === backupName) continue
+      try {
+        await cp(join(base, entry.name), join(backup, entry.name), { recursive: true, force: true })
+      } catch {
+        allOk = false
+      }
+    }
+    backedUp = allOk
+  } catch {
+    backedUp = false
+  }
+
+  // 1) 正文\ 根下的 .md → 正文\第一卷\
+  if (looseBodies.length > 0) {
+    const volDir = join(bodyRoot, '第一卷')
+    await mkdir(volDir, { recursive: true })
+    for (const row of looseBodies) {
+      let target = join(volDir, row.name)
+      // 目标已存在同名文件就加序号，绝不覆盖
+      let n = 2
+      for (;;) {
+        try {
+          await stat(target)
+          target = join(volDir, row.name.replace(/\.md$/i, '') + ' (' + n + ').md')
+          n += 1
+        } catch {
+          break
+        }
+      }
+      try {
+        await rename(row.path, target)
+      } catch {
+        /* 挪不动就留着，旧路径仍可读 */
+      }
+    }
+  }
+
+  // 2) 项目根下的老设定目录 → 设定\<同名>\
+  if (legacyDirs.length > 0) {
+    await mkdir(settingRoot, { recursive: true })
+    for (const name of legacyDirs) {
+      const from = join(base, name)
+      const to = join(settingRoot, name)
+      try {
+        await stat(to)
+        // 目标已存在：把文件逐个挪进去
+        const rows = await listMd(from)
+        await mkdir(to, { recursive: true })
+        for (const row of rows) {
+          try {
+            await rename(row.path, join(to, row.name))
+          } catch {
+            /* 单个文件失败不拦整体 */
+          }
+        }
+      } catch {
+        try {
+          await rename(from, to)
+        } catch {
+          /* 挪不动就算了 */
+        }
+      }
+    }
+  }
+
+  // 3) 迁移记录（放在备份目录里，点开头不会被列出来）
+  if (backedUp) {
+    const lines = [
+      '迁移时间: ' + new Date().toISOString(),
+      '正文根下的文件: ' + (looseBodies.length > 0 ? looseBodies.map((r) => r.name).join(', ') : '无'),
+      '并入 设定\\ 的旧目录: ' + (legacyDirs.length > 0 ? legacyDirs.join(', ') : '无'),
+      '',
+      '迁移前的完整副本在同目录的 .迁移备份-* 里（隐藏目录，界面不显示）。',
+    ]
+    try {
+      await writeFile(join(backup, '迁移记录.txt'), lines.join('\n'), 'utf8')
+    } catch {
+      /* 记录写不了不影响迁移结果 */
+    }
+  }
+  return true
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   读
+   ══════════════════════════════════════════════════════════════════════ */
 
 /**
  * 列出写作台的全部项目（写作\ 下的第一层目录）。
@@ -208,7 +425,7 @@ export async function listWriteProjects(root) {
   }
   const projects = []
   for (const item of items) {
-    if (!item.isDirectory()) continue
+    if (!item.isDirectory()) continue;
     if (item.name.startsWith('.')) continue
     const absolute = join(dirAbsolute, item.name)
     let hasProjectFile = false
@@ -218,14 +435,25 @@ export async function listWriteProjects(root) {
     } catch {
       hasProjectFile = false
     }
-    // 正文目录里的文件数与总字数：左栏项目卡片上要显示
-    const bodies = await listMd(join(absolute, BODY_DIR))
-    const words = bodies.reduce((sum, row) => sum + row.words, 0)
+    // 卡片上的「N 篇 / 字数」：数全部卷里的正文
+    const volumeDirs = await listDirs(join(absolute, BODY_DIR))
+    let scenes = 0
+    let words = 0
+    const loose = await listMd(join(absolute, BODY_DIR))
+    for (const row of loose) {
+      scenes += 1
+      words += row.words
+    }
+    for (const volume of volumeDirs) {
+      const rows = await listMd(join(absolute, BODY_DIR, volume))
+      scenes += rows.length
+      words += rows.reduce((sum, row2) => sum + row2.words, 0)
+    }
     projects.push({
       name: item.name,
       path: `${WRITE_DIR}/${item.name}`,
       hasProjectFile,
-      scenes: bodies.length,
+      scenes,
       words,
     })
   }
@@ -234,116 +462,124 @@ export async function listWriteProjects(root) {
 }
 
 /**
- * 读一个项目的完整结构：卷 / 章 / 场景 + 正文清单 + 设定清单。
+ * 读一个项目的完整结构：卷（= 正文下的文件夹）/ 章（= 卷里的 .md）+ 设定。
  *
- * 结构来源优先级：
- *   1. 项目.md 里解析出来的卷章结构
- *   2. 解析不出来（或没有 项目.md）→ 退回「正文\ 下每个文件当一章」
- *
- * 第 2 条是必须的：用户可能先写正文、后补结构，这时界面不能空着。
+ * 卷标题就是文件夹名，章标题就是去掉序号前缀的文件名。
+ * 正文\ 根下若还有没进卷的文件，也会被当作「未归档」列出来（迁移失败时的兜底），
+ * 保证界面不空。
  */
 export async function readWriteProject(root, projectRel) {
-  const base = safeChild(root, projectRel)
-  const projectAbsolute = join(base, WRITE_DIR === projectRel ? '' : '')
-  // projectRel 形如 写作/项目名
+  const base = await projectDir(root, projectRel)
   const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!rel.startsWith(WRITE_DIR + '/')) throw new Error('不是写作台项目路径')
-  const info = await stat(base)
-  if (!info.isDirectory()) throw new Error('项目不存在')
+  await migrateIfNeeded(base)
 
-  // 项目.md
-  let projectText = ''
-  let hasProjectFile = false
-  try {
-    const fileInfo = await stat(join(base, PROJECT_FILE))
-    if (fileInfo.isFile()) {
-      hasProjectFile = true
-      projectText = await readFile(join(base, PROJECT_FILE), 'utf8')
-    }
-  } catch {
-    hasProjectFile = false
-  }
+  const projectText = await readProjectFile(base)
+  const hasProjectFile = projectText !== ''
   const meta = splitFrontMatter(projectText).meta
-  let volumes = parseProjectStructure(projectText)
+  const fallbackName = rel.slice(WRITE_DIR.length + 1)
 
-  // 正文清单
-  const bodies = await listMd(join(base, BODY_DIR))
-
-  // 结构为空 → 按正文文件推：一个文件 = 一章
-  if (volumes.length === 0 && bodies.length > 0) {
-    volumes = [{
-      title: typeof meta.书名 === 'string' ? meta.书名 : '',
-      chapters: bodies.map((row) => ({
+  const volumes = []
+  for (const volumeName of await listDirs(join(base, BODY_DIR))) {
+    const rows = await listMd(join(base, BODY_DIR, volumeName))
+    volumes.push({
+      title: volumeName,
+      dir: volumeName,
+      chapters: rows.map((row) => ({
+        title: row.title,
+        scenes: [],
+        file: `${volumeName}/${row.name}`,
+        words: row.words,
+      })),
+    })
+  }
+  // 兜底：正文根下还没归卷的文件，当成一个「未归档」卷，不让它们凭空消失
+  const loose = await listMd(join(base, BODY_DIR))
+  if (loose.length > 0) {
+    volumes.push({
+      title: '未归档',
+      dir: '',
+      chapters: loose.map((row) => ({
         title: row.title,
         scenes: [],
         file: row.name,
         words: row.words,
       })),
-    }]
-  } else if (volumes.length > 0) {
-    /*
-     * 结构有了，把正文文件按序号挂到章上（顺序对位，不强求文件名一致）。
-     *
-     * 2026-11-18 修：原来 cursor 只在对位成功时 ++，而「已经带竖线文件名」的章
-     * 直接 continue 掉 —— 于是它后面那些没写文件名的章全从同一个 cursor 取值，
-     * 出现两个章挂同一个正文文件（暗号：列表里两章点开是同一篇）。
-     * 现在先把显式声明的文件收进 claimed，对位时跳过它们再往下走。
-     */
-    const claimed = new Set()
-    for (const volume of volumes) {
-      for (const chapter of volume.chapters) {
-        if (chapter.file) claimed.add(chapter.file)
-      }
-    }
-    let cursor = 0
-    for (const volume of volumes) {
-      for (const chapter of volume.chapters) {
-        if (chapter.file) continue
-        while (cursor < bodies.length && claimed.has(bodies[cursor].name)) cursor += 1
-        const row = bodies[cursor]
-        if (row) {
-          chapter.file = row.name
-          chapter.words = row.words
-          claimed.add(row.name)
-          cursor += 1
-        }
-      }
-    }
+    })
   }
 
-  // 设定清单：人物 / 地点 / 情节线
+  // 设定：固定六类永远在（空也显示），外加用户自建的分类
+  const settingRoot = join(base, SETTING_DIR)
+  const settingNames = await listDirs(settingRoot)
+  const ordered = SETTING_DIRS.slice()
+  for (const name of settingNames) if (!ordered.includes(name)) ordered.push(name)
   const settings = {}
-  for (const kind of SETTING_DIRS) {
-    const rows = await listMd(join(base, kind))
+  for (const kind of ordered) {
+    const rows = await listMd(join(settingRoot, kind))
     settings[kind] = rows.map((row) => ({
       name: row.name,
       title: row.title,
       words: row.words,
-      path: `${rel}/${kind}/${row.name}`,
+      path: `${rel}/${SETTING_DIR}/${kind}/${row.name}`,
     }))
   }
 
+  const bodies = []
+  for (const volume of volumes) {
+    for (const chapter of volume.chapters) {
+      const row = { name: chapter.file, title: chapter.title, words: chapter.words, path: `${rel}/${BODY_DIR}/${chapter.file}` }
+      bodies.push(row)
+    }
+  }
+
   return {
-    name: rel.slice(WRITE_DIR.length + 1),
+    name: fallbackName,
     path: rel,
     hasProjectFile,
-    title: typeof meta.书名 === 'string' && meta.书名 !== '' ? meta.书名 : rel.slice(WRITE_DIR.length + 1),
+    title: typeof meta.书名 === 'string' && meta.书名 !== '' ? meta.书名 : fallbackName,
     volumes,
-    bodies: bodies.map((row) => ({
-      name: row.name,
-      title: row.title,
-      words: row.words,
-      path: `${rel}/${BODY_DIR}/${row.name}`,
-    })),
+    bodies,
     settings,
+    /* 固定的设定分类清单：界面按它把空的分类也画出来 */
+    settingKinds: ordered,
+    fixedSettingKinds: SETTING_DIRS.slice(),
   }
 }
 
-/** 新建项目：建目录骨架 + 一份空 项目.md。名字撞车时自动加序号。 */
+/* ══════════════════════════════════════════════════════════════════════
+   改项目名
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 改书名：只改 项目.md 的 front-matter，磁盘目录名不动。
+ *
+ * 为什么不动目录名：目录一动，正文相对链接、回收站记录、
+ * 外部编辑器的打开标签全要跟着变，风险远大于收益（2026-11-18 大王定）。
+ */
+export async function renameWriteProject(root, projectRel, title) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const name = safeTitle(title, '')
+  if (name === '') throw new Error('书名不能为空')
+  const text = await readProjectFile(base)
+  const next = setFrontMatter(text, '书名', name)
+  await writeProjectFile(base, next)
+  return { ok: true, title: name }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   建
+   ══════════════════════════════════════════════════════════════════════ */
+
+/**
+ * 新建项目：建目录骨架 + 一份 项目.md。
+ *
+ * 骨架（2026-11-22 大王定）：
+ *   项目\正文\第一卷\0001-第一章.md
+ *   项目\设定\{世界背景 大纲 世界地图 情节线 核心冲突设定 人物}\
+ */
 export async function createWriteProject(root, nameInput) {
   if (typeof root !== 'string' || root.trim() === '') throw new Error('还没有设置笔记库文件夹')
   const base = String(nameInput || '').trim() || '未命名项目'
-  // 目录名不能带路径分隔符与 Windows 保留字符
   const cleaned = base.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80)
   const rootAbsolute = resolve(root)
   const writeDir = join(rootAbsolute, WRITE_DIR)
@@ -361,438 +597,325 @@ export async function createWriteProject(root, nameInput) {
   }
   const projectAbsolute = join(writeDir, name)
   await mkdir(projectAbsolute, { recursive: false })
-  for (const kind of SETTING_DIRS) await mkdir(join(projectAbsolute, kind), { recursive: true })
-  await mkdir(join(projectAbsolute, BODY_DIR), { recursive: true })
-  // 项目.md 只放结构与 order，正文不写进来
+  await mkdir(join(projectAbsolute, BODY_DIR, '第一卷'), { recursive: true })
+  for (const kind of SETTING_DIRS) await mkdir(join(projectAbsolute, SETTING_DIR, kind), { recursive: true })
   const stamp = new Date().toISOString().slice(0, 10)
-  /*
-   * 第一章直接带好正文文件（2026-11-18 大王报障）：
-   * 原来模板只写「## 第一章」不给文件，新建出来点第一章没反应。
-   */
-  const firstBody = '0001-第一章.md'
   const template = [
     '---',
     '书名: ' + name,
     '创建: ' + stamp,
     '---',
     '',
-    '# 第一卷',
-    '',
-    '## 第一章 | ' + firstBody,
-    '',
-    '- 场景一',
+    '正文与设定都在磁盘上：正文\\<卷>\\<章>.md，设定\\<分类>\\<条目>.md。',
+    '这个文件只放元数据，卷章结构以目录为准。',
     '',
   ].join('\n')
   await writeFile(join(projectAbsolute, PROJECT_FILE), template, 'utf8')
-  await writeFile(join(projectAbsolute, BODY_DIR, firstBody), '', 'utf8')
+  await writeFile(join(projectAbsolute, BODY_DIR, '第一卷', '0001-第一章.md'), '', { encoding: 'utf8', flag: 'wx' })
   return { name, path: `${WRITE_DIR}/${name}` }
 }
+
 /* ══════════════════════════════════════════════════════════════════════
-   结构编辑（2026-11-18 大王需求）
-
-   大王定的三条规矩：
-     1. 项目改名**只改显示名**（书名），磁盘上的目录名不动 ——
-        因为目录一动，正文/设定里的相对路径、回收站记录、外部编辑器
-        打开的标签全跟着变，风险远大于收益。
-     2. 新增**章**要在 正文\ 里真建一个空文件，点开就能写；
-        新增**卷**只是分组，不建目录。
-     3. 卷名/章名可以改。
-
-   实现要点：所有操作都是「读 项目.md 全文 → 改某几行 → 整份写回」。
-   不做行内字符串替换（容易撞名），也不引 YAML 依赖。
+   卷（= 正文\ 下的文件夹）
    ══════════════════════════════════════════════════════════════════════ */
 
-/** 中文小数字：1 → 一，12 → 十二，20 → 二十。只管 1~99，够用了。 */
-function cnNum(n) {
-  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
-  const v = Math.max(1, Math.min(99, Math.floor(n)))
-  if (v < 10) return digits[v]
-  if (v === 10) return '十'
-  if (v < 20) return '十' + digits[v - 10]
-  const tens = Math.floor(v / 10)
-  const ones = v % 10
-  return digits[tens] + '十' + (ones === 0 ? '' : digits[ones])
-}
-
-/** 目录名/文件名清洗：去掉 Windows 保留字符，限长。 */
-function safeTitle(input, fallback) {
-  const raw = String(input === undefined || input === null ? '' : input).trim()
-  const cleaned = raw.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80)
-  return cleaned === '' ? fallback : cleaned
-}
-
-/** 读 项目.md 原文；不存在返回空串。 */
-async function readProjectFile(base) {
-  try {
-    const info = await stat(join(base, PROJECT_FILE))
-    if (!info.isFile()) return ''
-    return await readFile(join(base, PROJECT_FILE), 'utf8')
-  } catch {
-    return ''
-  }
-}
-
-/** 写回 项目.md。统一 LF —— 项目.md 是我们自己生成的，不混 CRLF。 */
-async function writeProjectFile(base, text) {
-  await writeFile(join(base, PROJECT_FILE), text, 'utf8')
-}
-
-/** 判断某行是不是卷标题（`# x`，但不吃 `## x`）。 */
-function isVolumeLine(line) { return /^#\s+\S/.test(line) }
-/** 判断某行是不是章标题。 */
-function isChapterLine(line) { return /^##\s+\S/.test(line) }
-
-/** 第 vi 个卷标题所在行号；找不到返回 -1。 */
-function volumeLineIndex(lines, vi) {
-  let seen = -1
-  for (let i = 0; i < lines.length; i++) {
-    if (!isVolumeLine(lines[i])) continue
-    seen += 1
-    if (seen === vi) return i
-  }
-  return -1
-}
-
-/** 第 vi 卷里第 ci 章所在行号；找不到返回 -1。 */
-function chapterLineIndex(lines, vi, ci) {
-  const start = volumeLineIndex(lines, vi)
-  if (start < 0) return -1
-  let seen = -1
-  for (let i = start + 1; i < lines.length; i++) {
-    if (isVolumeLine(lines[i])) break
-    if (!isChapterLine(lines[i])) continue
-    seen += 1
-    if (seen === ci) return i
-  }
-  return -1
-}
-
-/** 从章标题行取出「标题 + 竖线后的文件名」。 */
-function splitChapterLine(line) {
-  const m = /^##\s+(.*)$/.exec(line)
-  const raw = m ? m[1].trim() : ''
-  const bar = raw.lastIndexOf('|')
-  if (bar > 0) {
-    const tail = raw.slice(bar + 1).trim()
-    if (/\.md$/i.test(tail)) return { title: raw.slice(0, bar).trim(), file: tail }
-  }
-  return { title: raw, file: '' }
-}
-
-/** 卷标题行 → 纯标题。 */
-function volumeTitleOf(line) {
-  const m = /^#\s+(.*)$/.exec(line)
-  return m ? m[1].trim() : ''
-}
-
-/**
- * 把 front-matter 里的某个键设成新值。
- * 没有 front-matter 就造一个；有但没有这个键就补在最前面。
- */
-function setFrontMatter(text, key, value) {
-  const normalized = text.replace(/\r\n/g, '\n')
-  const line = key + ': ' + value
-  if (!normalized.startsWith('---')) {
-    return '---\n' + line + '\n---\n\n' + normalized.replace(/^\n+/, '')
-  }
-  const end = normalized.indexOf('\n---', 3)
-  if (end < 0) return '---\n' + line + '\n---\n\n' + normalized.slice(3).replace(/^\n+/, '')
-  const head = normalized.slice(0, end).split('\n')
-  // head[0] 是 '---'，之后是键值行
-  const keyRe = new RegExp('^\\s*' + key + '\\s*:')
-  let replaced = false
-  for (let i = 1; i < head.length; i++) {
-    if (keyRe.test(head[i])) { head[i] = line; replaced = true; break }
-  }
-  if (!replaced) head.splice(1, 0, line)
-  return head.join('\n') + normalized.slice(end)
-}
-
-/** 取 项目.md 里的结构行（去 front-matter），返回正文行数组。 */
-function structureLinesOf(text) {
-  const normalized = String(text).replace(/\r\n/g, '\n')
-  if (!normalized.startsWith('---')) return normalized.split('\n')
-  const end = normalized.indexOf('\n---', 3)
-  if (end < 0) return normalized.split('\n')
-  const bodyStart = normalized.indexOf('\n', end + 1)
-  if (bodyStart < 0) return ['']
-  return normalized.slice(bodyStart + 1).split('\n')
-}
-
-/** 把「结构行」拼回完整文件（前面补 front-matter）。 */
-function joinProjectText(frontSource, structureLines) {
-  const normalized = String(frontSource).replace(/\r\n/g, '\n')
-  let head = ''
-  if (normalized.startsWith('---')) {
-    const end = normalized.indexOf('\n---', 3)
-    if (end >= 0) {
-      const bodyStart = normalized.indexOf('\n', end + 1)
-      head = bodyStart < 0 ? normalized + '\n' : normalized.slice(0, bodyStart + 1)
+/** 卷文件夹名：一卷 → 第N卷。盘上已经有第 N 卷名字就顺延。 */
+async function nextVolumeDirName(base) {
+  const existing = await listDirs(join(base, BODY_DIR))
+  const used = new Set(existing)
+  let n = existing.length + 1
+  for (const name of existing) {
+    const m = /^第(.+)卷$/.exec(name)
+    if (m) {
+      const parsed = cnParse(m[1])
+      if (parsed > 0) n = Math.max(n, parsed + 1)
     }
   }
-  return head + structureLines.join('\n')
-}
-
-/** 删掉尾部多余空行，保证「以单个换行结尾」。 */
-function tidyTail(lines) {
-  const out = lines.slice()
-  while (out.length > 0 && out[out.length - 1].trim() === '') out.pop()
-  out.push('')
-  return out
-}
-
-/**
- * 项目.md 里一条结构都没有、但盘上已有正文时：
- * 先把现在的卷章写进 项目.md，再按行号改。
- * 不这么做的话，「给第 1 卷加章」找不到可插入的位置。
- */
-function materializeIfEmpty(text, volumes) {
-  const lines = structureLinesOf(text)
-  if (lines.some((line) => isVolumeLine(line))) return text
-  if (!Array.isArray(volumes) || volumes.length === 0) return text
-  const built = []
-  for (const vol of volumes) {
-    built.push('# ' + (vol.title !== '' ? vol.title : '未命名卷'))
-    built.push('')
-    for (const ch of (vol.chapters || [])) {
-      built.push('## ' + (ch.title !== '' ? ch.title : '未命名章'))
-      built.push('')
-    }
+  for (let guard = 0; guard < 1000; guard += 1) {
+    const candidate = '第' + cnNum(n) + '卷'
+    if (!used.has(candidate)) return candidate
+    n += 1
   }
-  return joinProjectText(text, tidyTail(built))
+  return '第' + cnNum(existing.length + 1) + '卷'
 }
 
-/** 把项目路径解析成绝对目录，并校验它在 写作\ 下。 */
-async function projectDir(root, projectRel) {
-  if (typeof root !== 'string' || root.trim() === '') throw new Error('还没有设置笔记库文件夹')
-  const rel = String(projectRel === undefined || projectRel === null ? '' : projectRel)
-    .replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!rel.startsWith(WRITE_DIR + '/')) throw new Error('不是写作台项目路径')
-  const base = safeChild(root, rel)
-  const info = await stat(base)
-  if (!info.isDirectory()) throw new Error('项目不存在')
-  return base
-}
-
-/** 1) 改项目显示名：只动 书名:，不碰目录名。 */
-export async function renameWriteProject(root, projectRel, title) {
-  const base = await projectDir(root, projectRel)
-  const name = safeTitle(title, '')
-  if (name === '') throw new Error('项目名不能为空')
-  const text = await readProjectFile(base)
-  await writeProjectFile(base, setFrontMatter(text, '书名', name))
-  return { ok: true, title: name, path: String(projectRel).replaceAll('\\', '/') }
-}
-
-/** 2) 新增卷。afterIndex 是「插在第几卷之后」，-1 表示追加到最后。 */
+/** 新增卷：在 正文\ 下建文件夹。afterIndex 保留兼容（-1 = 追加到最后）。 */
 export async function addWriteVolume(root, projectRel, afterIndex) {
   const base = await projectDir(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
-  const lines = structureLinesOf(text)
-  const volumes = parseProjectStructure(text)
-  const at = Number.isInteger(afterIndex) ? afterIndex : -1
-  const title = '第' + cnNum(volumes.length + 1) + '卷'
-  if (at < 0 || at >= volumes.length) {
-    const out = tidyTail(lines)
-    out.pop()
-    out.push('# ' + title, '')
-    await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
-  } else {
-    // 插在「第 at 卷」这一段之后：找到 at 卷里最后一个结构行
-    const start = volumeLineIndex(lines, at)
-    const next = volumeLineIndex(lines, at + 1)
-    const end = next < 0 ? lines.length : next
-    let insertAt = end
-    for (let i = end - 1; i > start; i--) {
-      if (lines[i].trim() !== '') { insertAt = i + 1; break }
-    }
-    const out = lines.slice()
-    out.splice(insertAt, 0, '', '# ' + title, '')
-    await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
-  }
-  return { ok: true, title }
+  await migrateIfNeeded(base)
+  const bodyRoot = join(base, BODY_DIR)
+  await mkdir(bodyRoot, { recursive: true })
+  const dirName = await nextVolumeDirName(base)
+  await mkdir(join(bodyRoot, dirName), { recursive: false })
+  return { ok: true, title: dirName, dir: dirName, afterIndex: Number.isInteger(afterIndex) ? afterIndex : -1 }
 }
 
-/** 3) 改卷名。index 从 0 开始。 */
+/** 改卷名 = 改文件夹名。 */
 export async function renameWriteVolume(root, projectRel, index, title) {
   const base = await projectDir(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
-  const lines = structureLinesOf(text)
-  const at = volumeLineIndex(lines, Number(index))
-  if (at < 0) throw new Error('找不到这一卷')
+  await migrateIfNeeded(base)
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const current = dirs[Number(index)]
+  if (current === undefined) throw new Error('找不到这一卷')
   const name = safeTitle(title, '')
   if (name === '') throw new Error('卷名不能为空')
-  const out = lines.slice()
-  out[at] = '# ' + name
-  await writeProjectFile(base, joinProjectText(text, out))
-  return { ok: true, title: name }
+  if (name === current) return { ok: true, title: name, dir: current }
+  const from = join(base, BODY_DIR, current)
+  const to = join(base, BODY_DIR, name)
+  try {
+    await stat(to)
+    throw new Error('同名卷已存在')
+  } catch (err) {
+    if (err && err.message === '同名卷已存在') throw err
+  }
+  await rename(from, to)
+  return { ok: true, title: name, dir: name, renamedFrom: current }
 }
 
+/** 删卷：整个文件夹丢进回收站（含里面所有章）。 */
+export async function deleteWriteVolume(root, projectRel, volumeIndex) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const name = dirs[Number(volumeIndex)]
+  if (name === undefined) throw new Error('找不到这一卷')
+  const rows = await listMd(join(base, BODY_DIR, name))
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  try {
+    await deleteToTrash(root, rel + '/' + BODY_DIR + '/' + name)
+  } catch {
+    /* 回收站进不去就硬删，用户要的是删掉 */
+    await rm(join(base, BODY_DIR, name), { recursive: true, force: true })
+  }
+  return { ok: true, title: name, chapters: rows.length }
+}
+
+/* ══════════════════════════════════════════════════════════════════════
+   章（= 卷文件夹里的 .md）
+   ══════════════════════════════════════════════════════════════════════ */
+
 /**
- * 盘上正文目录里「下一个」文件名：最大数字前缀 + 1，四位补零。
- * 新建章和「给已有章补正文」都用它，两处编号规则必须一致，
- * 否则会出现两个 0002- 开头、或者序号跳号。
+ * 卷内的下一个正文文件名：最大数字前缀 + 1，四位补零。
+ * 每卷独立从 0001 开始（2026-11-22 大王定）。
  */
-async function makeBodyFileName(base, title) {
-  const bodyDir = join(base, BODY_DIR)
-  await mkdir(bodyDir, { recursive: true })
-  const bodies = await listMd(bodyDir)
-  let next = bodies.length + 1
-  for (const row of bodies) {
+async function makeChapterFileName(volumeDir, title) {
+  await mkdir(volumeDir, { recursive: true })
+  const rows = await listMd(volumeDir)
+  let next = rows.length + 1
+  for (const row of rows) {
     const m = /^(\d{1,4})[-_.\s]/.exec(row.name)
     if (m) next = Math.max(next, parseInt(m[1], 10) + 1)
   }
   return String(next).padStart(4, '0') + '-' + safeTitle(title, '未命名章') + '.md'
 }
 
+/** 新增章：在指定卷文件夹里建一个空 .md，标题「第N章」（N 是本卷已有章数 + 1）。 */
+export async function addWriteChapter(root, projectRel, volumeIndex) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const volumeName = dirs[Number.isInteger(volumeIndex) ? volumeIndex : 0]
+  if (volumeName === undefined) throw new Error('找不到这一卷')
+  const volumeDir = join(base, BODY_DIR, volumeName)
+  const rows = await listMd(volumeDir)
+  const chapterTitle = '第' + cnNum(rows.length + 1) + '章'
+  const fileName = await makeChapterFileName(volumeDir, chapterTitle)
+  // 'wx' = 已存在就报错，绝不覆盖别人的正文
+  await writeFile(join(volumeDir, fileName), '', { encoding: 'utf8', flag: 'wx' })
+  return { ok: true, title: chapterTitle, file: `${volumeName}/${fileName}`, volumeDir: volumeName }
+}
+
 /**
- * 4b) 给「已经存在但还没有正文文件」的章补一个空正文（2026-11-18 大王报障）。
+ * 给「已经存在但没有正文文件」的章补一个空正文。
  *
- * 症状：新建项目模板里只有「## 第一章」这一行标题，没有正文文件，
- * 于是左栏这一章是灰的、点不动 —— 大王说「我第一章不能编辑」。
- * 现在点它就自动建文件再打开，不用让人自己去 正文\ 里手建。
- * 已经有文件的章直接返回原文件，不重复建。
+ * 新结构下章一定对应盘上的文件，这个接口留着是为了兼容老调用点：
+ * 指定卷的第 ci 章如果越界，就按「追加一章」处理。
  */
 export async function attachWriteChapterBody(root, projectRel, volumeIndex, chapterIndex) {
   const base = await projectDir(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
-  const lines = structureLinesOf(text)
-  const at = chapterLineIndex(lines, Number(volumeIndex), Number(chapterIndex))
-  if (at < 0) throw new Error('找不到这一章')
-  const parsed = splitChapterLine(lines[at])
-  if (parsed.file !== '') return { ok: true, title: parsed.title, file: parsed.file, created: false }
-  const fileName = await makeBodyFileName(base, parsed.title)
-  await writeFile(join(base, BODY_DIR, fileName), '', { encoding: 'utf8', flag: 'wx' })
-  const out = lines.slice()
-  out[at] = '## ' + parsed.title + ' | ' + fileName
-  await writeProjectFile(base, joinProjectText(text, out))
-  return { ok: true, title: parsed.title, file: fileName, created: true }
+  await migrateIfNeeded(base)
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const volumeName = dirs[Number(volumeIndex)]
+  if (volumeName === undefined) throw new Error('找不到这一卷')
+  const rows = await listMd(join(base, BODY_DIR, volumeName))
+  const row = rows[Number(chapterIndex)]
+  if (row) return { ok: true, title: row.title, file: `${volumeName}/${row.name}`, created: false }
+  const added = await addWriteChapter(root, projectRel, volumeIndex)
+  return { ok: true, title: added.title, file: added.file, created: true }
 }
 
-/** 4) 新增章：写进 项目.md + 在 正文\ 建一个空文件。 */
-export async function addWriteChapter(root, projectRel, volumeIndex) {
-  const base = await projectDir(root, projectRel)
-  const current = await readWriteProject(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), current.volumes)
-  const lines = structureLinesOf(text)
-  const volumes = parseProjectStructure(text)
-  const vi = Number.isInteger(volumeIndex) ? volumeIndex : 0
-  const vol = volumes[vi]
-  if (!vol) throw new Error('找不到这一卷')
-
-  // 章序号：本卷已有章数 + 1
-  const ordinal = (vol.chapters || []).length + 1
-  const chapterTitle = '第' + cnNum(ordinal) + '章'
-
-  // 正文文件序号：盘上已有文件里最大的数字前缀 + 1
-  const bodyDir = join(base, BODY_DIR)
-  await mkdir(bodyDir, { recursive: true })
-  const fileName = await makeBodyFileName(base, chapterTitle)
-  const bodyAbsolute = join(bodyDir, fileName)
-  // 'wx' = 已存在就报错，绝不覆盖别人的正文
-  await writeFile(bodyAbsolute, '', { encoding: 'utf8', flag: 'wx' })
-
-  // 插到本卷最后一个结构行之后
-  const start = volumeLineIndex(lines, vi)
-  const nextVol = volumeLineIndex(lines, vi + 1)
-  const end = nextVol < 0 ? lines.length : nextVol
-  let insertAt = end
-  for (let i = end - 1; i > start; i--) {
-    if (lines[i].trim() !== '') { insertAt = i + 1; break }
-  }
-  const out = lines.slice()
-  out.splice(insertAt, 0, '', '## ' + chapterTitle + ' | ' + fileName, '')
-  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
-  return { ok: true, title: chapterTitle, file: fileName }
-}
-
-/** 5) 改章名。保留竖线后面的正文文件名。 */
+/**
+ * 改章名 = 改文件名，保留数字前缀（顺序不乱）。
+ *
+ * `chapter.file` 是「卷名/文件名.md」这种相对 正文\ 的路径，
+ * 也接受纯文件名（靠 volumeIndex 找卷）。
+ */
 export async function renameWriteChapter(root, projectRel, volumeIndex, chapterIndex, title) {
   const base = await projectDir(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
-  const lines = structureLinesOf(text)
-  const at = chapterLineIndex(lines, Number(volumeIndex), Number(chapterIndex))
-  if (at < 0) throw new Error('找不到这一章')
+  await migrateIfNeeded(base)
   const name = safeTitle(title, '')
   if (name === '') throw new Error('章名不能为空')
-  const { file } = splitChapterLine(lines[at])
-  const out = lines.slice()
-  out[at] = '## ' + name + (file === '' ? '' : ' | ' + file)
-  await writeProjectFile(base, joinProjectText(text, out))
-  return { ok: true, title: name, file }
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const volumeName = dirs[Number(volumeIndex)]
+  if (volumeName === undefined) throw new Error('找不到这一卷')
+  const volumeDir = join(base, BODY_DIR, volumeName)
+  const rows = await listMd(volumeDir)
+  const row = rows[Number(chapterIndex)]
+  if (!row) throw new Error('找不到这一章')
+  const m = /^(\d{1,4})[-_.\s]/.exec(row.name)
+  const prefix = m ? m[1] + '-' : ''
+  const nextName = prefix + name + '.md'
+  if (nextName === row.name) return { ok: true, title: name, file: `${volumeName}/${nextName}` }
+  try {
+    await stat(join(volumeDir, nextName))
+    throw new Error('同名章已存在')
+  } catch (err) {
+    if (err && err.message === '同名章已存在') throw err
+  }
+  await rename(join(volumeDir, row.name), join(volumeDir, nextName))
+  return { ok: true, title: name, file: `${volumeName}/${nextName}`, renamedFrom: row.name }
+}
+
+/** 删章：正文文件丢进回收站。 */
+export async function deleteWriteChapter(root, projectRel, volumeIndex, chapterIndex) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const dirs = await listDirs(join(base, BODY_DIR))
+  const volumeName = dirs[Number(volumeIndex)]
+  if (volumeName === undefined) throw new Error('找不到这一卷')
+  const rows = await listMd(join(base, BODY_DIR, volumeName))
+  const row = rows[Number(chapterIndex)]
+  if (!row) throw new Error('找不到这一章')
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  try {
+    await deleteToTrash(root, rel + '/' + BODY_DIR + '/' + volumeName + '/' + row.name)
+  } catch {
+    await rm(join(base, BODY_DIR, volumeName, row.name), { force: true })
+  }
+  return { ok: true, title: row.title }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   删除（2026-11-18 大王要求：章要能删，卷同理）
-
-   两个都走回收站，不直接 rm：
-     · 结构行删掉（卷还连带删掉它下面的所有章与场景）
-     · 对应的正文 .md 一起丢进 .trash —— 否则结构没了、文件还躺在 正文\ 里，
-       下次「按文件名前缀推」会把它当成一章又冒出来
+   设定（= 设定\ 下的分类文件夹与条目文件）
    ══════════════════════════════════════════════════════════════════════ */
 
-/** 把项目里的某个相对路径丢进回收站；路径为空或失败都静默跳过。 */
-async function trashOne(root, projectRel, relPath) {
-  const rel = String(relPath === undefined || relPath === null ? '' : relPath)
-    .replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (rel === '') return
-  const projectRel2 = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+/** 设定分类目录的绝对路径，顺带校验分类名合法。 */
+function settingKindDir(base, kind) {
+  const name = safeTitle(kind, '')
+  if (name === '') throw new Error('分类名不能为空')
+  return { name, dir: join(base, SETTING_DIR, name) }
+}
+
+/** 新建设定分类（文件夹）。已经存在就当成功。 */
+export async function addSettingKind(root, projectRel, kind) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const { name, dir } = settingKindDir(base, kind)
+  await mkdir(dir, { recursive: true })
+  return { ok: true, kind: name }
+}
+
+/** 改设定分类名 = 改文件夹名。固定的六类也允许改（用户改名后按新名字认）。 */
+export async function renameSettingKind(root, projectRel, from, to) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const src = settingKindDir(base, from)
+  const dst = settingKindDir(base, to)
+  if (src.name === dst.name) return { ok: true, kind: dst.name }
   try {
-    await deleteToTrash(root, projectRel2 + '/' + rel)
+    const info = await stat(src.dir)
+    if (!info.isDirectory()) throw new Error('分类不存在')
   } catch {
-    /* 回收站都进不去就别拦着删结构了，用户要的是删掉 */
+    throw new Error('分类不存在')
   }
+  try {
+    await stat(dst.dir)
+    throw new Error('同名分类已存在')
+  } catch (err) {
+    if (err && err.message === '同名分类已存在') throw err
+  }
+  await rename(src.dir, dst.dir)
+  return { ok: true, kind: dst.name, renamedFrom: src.name }
 }
 
-/**
- * 删章：结构行 + 该章的场景行 + 正文文件。
- * volumeIndex / chapterIndex 都从 0 开始。
- */
-export async function deleteWriteChapter(root, projectRel, volumeIndex, chapterIndex) {
+/** 删设定分类：整个文件夹进回收站。固定六类也可以删（删了就不再显示该分类）。 */
+export async function deleteSettingKind(root, projectRel, kind) {
   const base = await projectDir(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), (await readWriteProject(root, projectRel)).volumes)
-  const lines = structureLinesOf(text)
-  const vi = Number(volumeIndex)
-  const ci = Number(chapterIndex)
-  const at = chapterLineIndex(lines, vi, ci)
-  if (at < 0) throw new Error('找不到这一章')
-  const { title, file } = splitChapterLine(lines[at])
-
-  // 这一章的作用域：从标题行到下一个卷/章标题之前
-  let end = lines.length
-  for (let i = at + 1; i < lines.length; i++) {
-    if (isVolumeLine(lines[i]) || isChapterLine(lines[i])) { end = i; break }
+  await migrateIfNeeded(base)
+  const { name, dir } = settingKindDir(base, kind)
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  const rows = await listMd(dir)
+  try {
+    await deleteToTrash(root, rel + '/' + SETTING_DIR + '/' + name)
+  } catch {
+    await rm(dir, { recursive: true, force: true })
   }
-  const out = lines.slice(0, at).concat(lines.slice(end))
-  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
-  await trashOne(root, projectRel, BODY_DIR + '/' + file)
-  return { ok: true, title }
+  return { ok: true, kind: name, files: rows.length }
 }
 
-/**
- * 删卷：整卷的结构行（含所有章与场景）+ 卷内所有正文文件。
- */
-export async function deleteWriteVolume(root, projectRel, volumeIndex) {
+/** 新建设定条目：在分类下建一个空 .md，返回相对路径。 */
+export async function addSettingFile(root, projectRel, kind, title) {
   const base = await projectDir(root, projectRel)
-  const current = await readWriteProject(root, projectRel)
-  const text = materializeIfEmpty(await readProjectFile(base), current.volumes)
-  const lines = structureLinesOf(text)
-  const vi = Number(volumeIndex)
-  const start = volumeLineIndex(lines, vi)
-  if (start < 0) throw new Error('找不到这一卷')
-
-  // 先把正文文件名收齐，再删行 —— 顺序反了就拿不到 file 了
-  const files = []
-  let end = lines.length
-  for (let i = start + 1; i < lines.length; i++) {
-    if (isVolumeLine(lines[i])) { end = i; break }
-    if (!isChapterLine(lines[i])) continue
-    const { file } = splitChapterLine(lines[i])
-    if (file !== '') files.push(file)
+  await migrateIfNeeded(base)
+  const { name, dir } = settingKindDir(base, kind)
+  await mkdir(dir, { recursive: true })
+  const base2 = safeTitle(title, '未命名')
+  let fileName = base2 + '.md'
+  let n = 2
+  for (;;) {
+    try {
+      await stat(join(dir, fileName))
+      fileName = base2 + ' ' + n + '.md'
+      n += 1
+    } catch {
+      break
+    }
   }
-  const title = volumeTitleOf(lines[start])
-  const out = lines.slice(0, start).concat(lines.slice(end))
-  await writeProjectFile(base, joinProjectText(text, tidyTail(out)))
-  for (const file of files) await trashOne(root, projectRel, BODY_DIR + '/' + file)
-  return { ok: true, title, chapters: files.length }
+  await writeFile(join(dir, fileName), '', { encoding: 'utf8', flag: 'wx' })
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  return { ok: true, kind: name, name: fileName, path: `${rel}/${SETTING_DIR}/${name}/${fileName}` }
+}
+
+/** 改设定条目名 = 改文件名。传的是文件名（带 .md）。 */
+export async function renameSettingFile(root, projectRel, kind, fileName, title) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const { name, dir } = settingKindDir(base, kind)
+  const oldName = String(fileName || '').trim()
+  if (oldName === '') throw new Error('文件名不能为空')
+  const clean = safeTitle(title, '')
+  if (clean === '') throw new Error('名称不能为空')
+  const nextName = /\.md$/i.test(clean) ? clean : clean + '.md'
+  if (nextName === oldName) return { ok: true, name: nextName }
+  try {
+    const info = await stat(join(dir, oldName))
+    if (!info.isFile()) throw new Error('条目不存在')
+  } catch {
+    throw new Error('条目不存在')
+  }
+  try {
+    await stat(join(dir, nextName))
+    throw new Error('同名条目已存在')
+  } catch (err) {
+    if (err && err.message === '同名条目已存在') throw err
+  }
+  await rename(join(dir, oldName), join(dir, nextName))
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  return { ok: true, name: nextName, path: `${rel}/${SETTING_DIR}/${name}/${nextName}` }
+}
+
+/** 删设定条目：文件进回收站。 */
+export async function deleteSettingFile(root, projectRel, kind, fileName) {
+  const base = await projectDir(root, projectRel)
+  await migrateIfNeeded(base)
+  const { name, dir } = settingKindDir(base, kind)
+  const oldName = String(fileName || '').trim()
+  if (oldName === '') throw new Error('文件名不能为空')
+  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
+  try {
+    await deleteToTrash(root, rel + '/' + SETTING_DIR + '/' + name + '/' + oldName)
+  } catch {
+    await rm(join(dir, oldName), { force: true })
+  }
+  return { ok: true, name: oldName }
 }
