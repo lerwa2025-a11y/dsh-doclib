@@ -2751,21 +2751,6 @@ function useScrollMemo(bucket, selector, ready) {
       /** 大纲轨是否收起。跟 reader-settings 的 tocCollapsed 同步。
        *  初始 true = 与 reader-settings 的默认值一致，避免「先展开一帧再收起」的闪烁。 */
       const [outlineCollapsed, setOutlineCollapsed] = useState(true)
-      /** 树面板「新建」下拉是否打开。 */
-      const [newMenuOpen, setNewMenuOpen] = useState(false)
-      /** 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算）。 */
-      const [newMenuPos, setNewMenuPos] = useState(null)
-      /** 加号按钮的 ref —— 算菜单位置要用它的 getBoundingClientRect。 */
-      const newBtnRef = useRef(null)
-      /**
-       * 点下拉以外任何地方 / 按 Esc → 收起「新建」下拉。
-       *
-       * 之前它只能靠再点一次按钮收起，点别处都留在那儿；而它是绝对定位浮在文件树上，
-       * 挡着列表很碍事。写法和下面 openMenu 那套一致（监听挂 document、卸载摘掉），
-       * 判断「在不在下拉里」用 closest() 认容器 class —— 按钮和弹出的菜单都在这个容器内。
-       * 容器换过两次名字（vp-newmenu → vp-newfloat → vp-newinline），三个都写上，
-       * 免得再出现「点加号被当成点外面、菜单开不了」。
-       */
       /**
        * 把当前选中的路径报给顶栏，让「打开文件夹」能开对地方。
        *
@@ -2778,25 +2763,6 @@ function useScrollMemo(bucket, selector, ready) {
         props.onFocusPath(selected && typeof selected.path === 'string' ? selected.path : '')
       }, [selected, props.onFocusPath])
 
-      useEffect(() => {
-        if (!newMenuOpen) return undefined
-        const onDocDown = (event) => {
-          const target = event && event.target
-          /* 加号容器叫 .vp-newfloat（原 .vp-newmenu），两个都认，挪位置不会再踩 */
-          if (target && typeof target.closest === 'function' && target.closest('.vp-newinline, .vp-newfloat, .vp-newmenu') !== null) return
-          setNewMenuOpen(false)
-          setNewMenuPos(null)
-        }
-        const onKey = (event) => {
-          if (event && event.key === 'Escape') setNewMenuOpen(false); setNewMenuPos(null)
-        }
-        document.addEventListener('mousedown', onDocDown)
-        document.addEventListener('keydown', onKey)
-        return () => {
-          document.removeEventListener('mousedown', onDocDown)
-          document.removeEventListener('keydown', onKey)
-        }
-      }, [newMenuOpen])
       /** 文档工具条自绘下拉的互斥开关：'' = 全收起；否则是当前打开的那个（font / line / bg）。
        *  docBar 是常量 JSX（不是组件），不能在里面调 hook，所以展开状态必须提到这里。 */
       const [openMenu, setOpenMenu] = useState('')
@@ -3758,6 +3724,19 @@ function useScrollMemo(bucket, selector, ready) {
        * 导入的其它类型由服务端按后缀归位（2026-11-22 大王要求）。
        */
       const MATERIAL_NOTE_GROUP = '笔记'
+      /*
+       * 五个固定分类（2026-11-22 大王要求：做成写作区「正文 / 设定」那样的固定分组）。
+       * 它们是结构不是内容：不能改名、不能删除，右键只有「复制路径」；
+       * 真被删了服务端下一轮 ensureMaterialGroups 也会补回来。
+       * 顺序就是界面顺序，和 Host 侧 MATERIAL_GROUPS 必须一致。
+       */
+      const MATERIAL_GROUPS = ['视频', '音频', '图片', '笔记', '电子书']
+      /** 判断某个路径是不是素材库的固定分类（只认 素材\分类 这一层）。 */
+      const isMaterialGroupPath = (path) => {
+        if (typeof path !== 'string') return false
+        const parts = path.split('/')
+        return parts.length === 2 && parts[0] === MATERIAL_ROOT && MATERIAL_GROUPS.includes(parts[1])
+      }
 
       /** 某个目录下已用的名字（给新建项取不撞车的默认名）。dirPath 为空时取顶层。 */
       const namesInDir = (dirPath) => {
@@ -3781,24 +3760,27 @@ function useScrollMemo(bucket, selector, ready) {
        * 不再弹底部输入条 —— 直接用默认名建出来，然后跳到标题处原地命名。
        * 用户按 Esc 就保留默认名，等于「建好了没改名」。
        */
-      const askCreate = async (kind) => {
+      const askCreate = async (kind, targetDir) => {
         if (root === '') { setError(t('assistNeedWorkspace')); return }
-        // 选中的是文件夹 → 建在它里面；选中的是文件 → 建在它所在目录；
-        // 没选 → 建在素材库根（不能是库根，库根不在三库内会被守卫拒）。
-        const dir = selected
+        const isDir = kind === 'dir'
+        const ext = isDir ? '' : '.md'
+        /*
+         * 落点规则（2026-11-22 大王要求：新建文件夹只能落到五个固定分类下面）：
+         *  · 新建文件夹 → 只能用分类行右侧的 ＋ 指定落点；没指定就默认「笔记」。
+         *    绝不再落到素材根层，那样会冒出一个不属于任何分类的孤儿目录。
+         *  · 新建文件 → 选中文件夹里面 / 选中文件所在目录 / 素材根
+         *    （根层的文件由服务端按后缀归位，md 归「笔记」）。
+         */
+        const pickedDir = selected
           ? selected.type === 'dir'
             ? selected.path
             : selected.path.includes('/')
               ? selected.path.slice(0, selected.path.lastIndexOf('/'))
               : MATERIAL_ROOT
           : MATERIAL_ROOT
-        const isDir = kind === 'dir'
-        const ext = isDir ? '' : '.md'
-        /*
-         * 新建文件落在素材根层时，服务端会按后缀把它归进分类（md 归「笔记」）。
-         * 这里预先把命名目录对齐到「笔记」，免得默认名和分类里已有的撞车
-         * （2026-11-22 素材库自动分组）。
-         */
+        const dir = isDir
+          ? (typeof targetDir === 'string' && targetDir !== '' ? targetDir : `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`)
+          : pickedDir
         const nameDir = !isDir && dir === MATERIAL_ROOT ? `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}` : dir
         const base = isDir ? t('vaultNewDir') : t('vaultNewFile')
         const taken = namesInDir(nameDir)
@@ -3838,8 +3820,8 @@ function useScrollMemo(bucket, selector, ready) {
       }
 
       const deleteSelected = async () => {
-        /* 三个固定库不可删除 */
-        if (selected && isFixedLib(selected.path)) { setConfirmDelete(false); setError(t('vaultLibFixed')); return }
+        /* 三个固定库与素材库五个固定分类都不可删除 */
+        if (selected && (isFixedLib(selected.path) || isMaterialGroupPath(selected.path))) { setConfirmDelete(false); setError(t('vaultLibFixed')); return }
         if (!selected) return
         try {
           await vaultApiPost('/delete', { path: selected.path })
@@ -3871,7 +3853,7 @@ function useScrollMemo(bucket, selector, ready) {
       const startRename = (node) => {
         const target = node || selected
         if (!target) return
-        if (isFixedLib(target.path)) {
+        if (isFixedLib(target.path) || isMaterialGroupPath(target.path)) {
           setError(t('vaultLibFixed'))
           return
         }
@@ -4350,8 +4332,76 @@ function useScrollMemo(bucket, selector, ready) {
         }
       }, [ctxMenu])
 
+      /**
+       * 素材库固定分类行（2026-11-22 大王要求）。
+       *
+       * 样式对齐写作区的分组标题行：折叠箭头 + 名称 + 条目数 + 右侧 ＋。
+       * 为什么用 div 而不是 button：里面还要放一个 ＋ 按钮，button 套 button 是非法结构，
+       * 点 ＋ 会连带触发整行的折叠（写作区 正文 / 设定 也是这么处理的）。
+       */
+      const materialGroupNode = (node, depth) => {
+        const isOpen = expanded[node.path] === true
+        const groupActive = selected !== null && selected.path === node.path
+        const children = Array.isArray(node.children) ? node.children : []
+        return h(
+          'div',
+          { key: node.path, className: 'vp-tree-dir' },
+          h(
+            'div',
+            {
+              className: 'vp-group-row',
+              'data-active': groupActive,
+              'data-open': isOpen ? 'true' : 'false',
+              role: 'button',
+              tabIndex: 0,
+              title: node.path,
+              onClick: () => {
+                setExpanded((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                setSelected(node)
+                setConfirmDelete(false)
+                setRenaming(false)
+                setMoveOpen(false)
+                setCtxMenu(null)
+              },
+              onContextMenu: (event) => openCtxMenu(event, node),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setExpanded((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                }
+              },
+            },
+            h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸'),
+            h('span', { className: 'vp-group-t' }, node.name),
+            h('span', { className: 'vp-group-n' }, String(children.length)),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vp-group-add',
+                title: t('vaultNewDir'),
+                'aria-label': t('vaultNewDir'),
+                onClick: (event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void askCreate('dir', node.path)
+                },
+              },
+              '＋',
+            ),
+          ),
+          isOpen
+            ? children.length === 0
+              ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, t('vaultEmptyDir'))
+              : children.map((child) => treeNode(child, depth + 1))
+            : null,
+        )
+      }
+
       const treeNode = (node, depth) => {
         if (node.type === 'dir') {
+          /* 五个固定分类走独立渲染（折叠 + 计数 + ＋），其余目录还是老样子 */
+          if (isMaterialGroupPath(node.path)) return materialGroupNode(node, depth)
           const isOpen = expanded[node.path] === true
           const dirActive = selected !== null && selected.path === node.path
           /* 三个固定库：图标换成库别、样式加粗、不可删（见下方工具栏的禁用逻辑） */
@@ -4675,7 +4725,7 @@ function useScrollMemo(bucket, selector, ready) {
               ),
               h(
                 'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('dir') },
+                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('dir', `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`) },
                 h('span', { className: 'vp-qcard-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic-lg' })),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewDir')),
               ),
@@ -5166,7 +5216,14 @@ function useScrollMemo(bucket, selector, ready) {
              * 否则点菜单项的那一刻就被自己的关闭监听吃掉了。
              */
             ctxMenu
-              ? h(
+              ? (() => {
+                  /*
+                   * 素材库五个固定分类：不可改名、不可删除、不可移动，
+                   * 右键只留「复制路径」（2026-11-22 大王要求）。
+                   */
+                  const node = ctxMenu.node
+                  const groupNode = isMaterialGroupPath(node.path)
+                  return h(
                 'div',
                 {
                   className: 'vp-ctxmenu',
@@ -5174,54 +5231,63 @@ function useScrollMemo(bucket, selector, ready) {
                   onMouseDown: (event) => event.stopPropagation(),
                   onContextMenu: (event) => event.preventDefault(),
                 },
-                /* 固定库：只能重命名以外的操作受限，这里直接不给删 */
-                h('div', { className: 'vp-ctxmenu-h' }, ctxMenu.node.name),
+                h('div', { className: 'vp-ctxmenu-h' }, node.name),
+                groupNode
+                  ? null
+                  : h('button', {
+                      type: 'button',
+                      className: 'vp-ctxmenu-item',
+                      disabled: isFixedLib(node.path),
+                      onClick: () => {
+                        setCtxMenu(null)
+                        startRename(node)
+                      },
+                    }, t('vaultRename')),
+                groupNode
+                  ? null
+                  : h('button', {
+                      type: 'button',
+                      className: 'vp-ctxmenu-item',
+                      onClick: () => {
+                        setCtxMenu(null)
+                        openMovePicker(node)
+                      },
+                    }, t('vaultMoveTo')),
+                /* 复制绝对路径（2026-11-22）：文件夹与文件都支持，固定分类也支持 */
                 h('button', {
                   type: 'button',
                   className: 'vp-ctxmenu-item',
-                  disabled: isFixedLib(ctxMenu.node.path),
                   onClick: () => {
-                    const node = ctxMenu.node
-                    setCtxMenu(null)
-                    startRename(node)
-                  },
-                }, t('vaultRename')),
-                h('button', {
-                  type: 'button',
-                  className: 'vp-ctxmenu-item',
-                  onClick: () => {
-                    const node = ctxMenu.node
-                    setCtxMenu(null)
-                    openMovePicker(node)
-                  },
-                }, t('vaultMoveTo')),
-                /* 复制绝对路径（2026-11-22）：文件夹与文件都支持 */
-                h('button', {
-                  type: 'button',
-                  className: 'vp-ctxmenu-item',
-                  onClick: () => {
-                    const node = ctxMenu.node
                     setCtxMenu(null)
                     void copyNodePath(node)
                   },
                 }, t('vaultCopyPath')),
-                h('i', { className: 'vp-ctxmenu-sep' }),
-                h('button', {
-                  type: 'button',
-                  className: 'vp-ctxmenu-item vp-ctxmenu-danger',
-                  disabled: isFixedLib(ctxMenu.node.path),
-                  onClick: () => {
-                    setCtxMenu(null)
-                    setConfirmDelete(true)
-                  },
-                }, t('vaultDelete')),
-              )
+                groupNode
+                  ? null
+                  : h('i', { className: 'vp-ctxmenu-sep' }),
+                groupNode
+                  ? null
+                  : h('button', {
+                      type: 'button',
+                      className: 'vp-ctxmenu-item vp-ctxmenu-danger',
+                      disabled: isFixedLib(node.path),
+                      onClick: () => {
+                        setCtxMenu(null)
+                        setConfirmDelete(true)
+                      },
+                    }, t('vaultDelete')),
+                  )
+                })()
               : null,
 
             h(
               'div',
               { className: 'vp-treehead' },
               h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
+            /*
+             * 顶部加号（2026-11-22）：新建文件夹改由各分类行右侧的 ＋ 建，
+             * 这里只剩「新建文件」一件事，所以直接建，不再弹一层只有一项的下拉。
+             */
             h(
               'div',
               { className: 'vp-newinline' },
@@ -5230,51 +5296,12 @@ function useScrollMemo(bucket, selector, ready) {
                 {
                   type: 'button',
                   className: 'vp-newbtn-round',
-                  ref: newBtnRef,
-                  'data-open': newMenuOpen ? 'true' : 'false',
-                  onClick: () => {
-                    /* 2026-11-18：fixed 定位，打开时用加号的 rect 算坐标并夹在视口内 */
-                    if (newMenuOpen) { setNewMenuOpen(false); setNewMenuPos(null); return }
-                    const pos = dropPositionOf(newBtnRef.current, DROP_W)
-                    if (pos === null) return
-                    setNewMenuPos(pos)
-                    setNewMenuOpen(true)
-                  },
-                  title: t('vaultNew'),
-                  'aria-label': t('vaultNew'),
+                  onClick: () => { void askCreate('file') },
+                  title: t('vaultNewMd'),
+                  'aria-label': t('vaultNewMd'),
                 },
                 '＋',
               ),
-              newMenuOpen && newMenuPos
-                ? h(
-                  'div',
-                  {
-                    className: 'vp-newdrop',
-                    /* fixed 坐标由 dropPositionOf 算好（右对齐加号、夹在视口内） */
-                    style: { left: newMenuPos.left + 'px', top: newMenuPos.top + 'px', width: DROP_W + 'px' },
-                  },
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'vp-newdrop-item',
-                      onClick: () => { setNewMenuOpen(false); void askCreate('file') },
-                    },
-                    h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
-                    h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
-                  ),
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'vp-newdrop-item',
-                      onClick: () => { setNewMenuOpen(false); void askCreate('dir') },
-                    },
-                    h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
-                    h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
-                  ),
-                )
-                : null,
             ),
               h(
                 'button',
@@ -12241,6 +12268,15 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-tree-icon-lib { font-size: 13px; line-height: 1; }
 /* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
 .vp-iconbtn-off { opacity: .3; pointer-events: none; }
+/* 素材库固定分类行（2026-11-22）：观感对齐写作区的分组标题行 */
+.vp-group-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.vp-group-row:hover { background: var(--dsw-alias-bg-layer-2); }
+.vp-group-row[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
+.vp-group-row .vp-tree-caret { flex: none; width: 10px; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-group-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vp-group-n { flex: none; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-group-add { flex: none; margin-left: auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; }
+.vp-group-add:hover { opacity: 1; background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-brand-primary); }
 .vp-tree-empty { font-size: 12px; color: var(--dsw-alias-label-secondary); padding: 6px 8px; }
 .vp-editor { flex: 1; min-width: 0; min-height: 0; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); display: flex; flex-direction: column; }
 .vp-doc { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 24px 16px; gap: 8px; }
