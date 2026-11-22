@@ -2028,6 +2028,9 @@ function useScrollMemo(bucket, selector, ready) {
 
           /* ── 光标换行：只切属性，不重画（整块重画会掉帧、还会抖光标）── */
           const onSelect = () => {
+            /* 组合中不动 DOM（连属性也不改）：改 data-active 会让隐藏符号显隐
+               切换，正在组的字会被重排。2026-11-22 修。 */
+            if (composingRef.current) return
             const node = el()
             if (!node) return
             const spot = mdCaretSpot(node)
@@ -2040,6 +2043,8 @@ function useScrollMemo(bucket, selector, ready) {
           }
 
           const onFocus = () => {
+            /* 组合中不重画（聚焦时会整块重画，会把正在组的拼音打散）。 */
+            if (composingRef.current) return
             const node = el()
             if (!node) return
             const spot = mdCaretSpot(node)
@@ -2650,7 +2655,6 @@ function useScrollMemo(bucket, selector, ready) {
       // ── [t10 · 编辑态 contenteditable] ── 见下方 helper 区的详细注释
       const editorRef = useRef(null)
       /** 输入法组合进行中：期间冻结 draft 更新，否则中文打字每个字母都触发一次保存。 */
-      const vaultComposing = useRef(false)
       /** 最近一次由我们写进 DOM 的文本，用来区分「外部换文」与「用户输入」。 */
       const editorEcho = useRef('')
       /** 阅读面板本体：滚动挂起等交互靠它捕获。 */
@@ -3002,7 +3006,10 @@ function useScrollMemo(bucket, selector, ready) {
         if (mode !== 'edit') return
         const node = editorRef.current
         if (!node) return
-        if (vaultComposing.current) return
+        /* 组合中一律不动 DOM：读节点的 data-composing（2026-11-22 修）。
+           原来判 vaultComposing.current，而那个 ref 从没被置过 true，
+           于是中文输入法组合期间照样重画，正在组的拼音会被挪走。 */
+        if (node.getAttribute('data-composing') === 'true') return
         if (editorToText(node) === draft) return
         editorEcho.current = draft
         /* 走 sync：它会保住当前行与光标，不会把正在打字的行符号藏起来 */
@@ -4876,13 +4883,15 @@ function useScrollMemo(bucket, selector, ready) {
                       // 不能用 editorEcho 做闸门：切字体/切字号会让 React 重渲染，
                       // 重渲染可能重建这个节点，新节点是空的，但 editorEcho 仍等于 draft，
                       // 于是旧的「相等就跳过」逻辑会跳过填充 → 正文整块消失（用户实测 bug）。
-                      if (vaultComposing.current) return
+                      /* 组合中不动 DOM：读节点属性，不看 vaultComposing（那个 ref 从没被置 true）。 */
+                      if (node.getAttribute('data-composing') === 'true') return
                       if (editorToText(node) === draft) {
                         editorEcho.current = draft
                         return
                       }
                       editorEcho.current = draft
-                      textToEditor(node, draft)
+                      /* 走 sync：保住当前行与光标，不按 DOM 位置重推（2026-11-22） */
+                      mdPreview.sync()
                     },
                     className: 'vp-editor-surface dn-edit-surface',
                     contentEditable: true,
@@ -8743,7 +8752,6 @@ function useScrollMemo(bucket, selector, ready) {
         const [asideW, setAsideW] = useState(268)
 
         const editorRef = useRef(null)
-        const composing = useRef(false)
         const noticeTimer = useRef(null)
         const saveTimer = useRef(null)
 
@@ -9516,9 +9524,11 @@ function useScrollMemo(bucket, selector, ready) {
               ref: (node) => {
                 editorRef.current = node
                 if (!node) return
-                if (composing.current) return
+                /* 组合中不动 DOM：读节点属性，不看 composing（那个 ref 从没被置 true）。 */
+                if (node.getAttribute('data-composing') === 'true') return
                 if (editorToText(node) === draft) return
-                textToEditor(node, draft)
+                /* 走 sync：保住当前行与光标，不按 DOM 位置重推（2026-11-22） */
+                mdPreview.sync()
               },
               className: 'cb-editor-surface',
               contentEditable: true,
@@ -10611,7 +10621,6 @@ function useScrollMemo(bucket, selector, ready) {
         const [editTip, setEditTip] = useState('')
 
         const editorRef = useRef(null)
-        const composing = useRef(false)
         const noticeTimer = useRef(null)
         const saveTimer = useRef(null)
 
@@ -11735,9 +11744,11 @@ function useScrollMemo(bucket, selector, ready) {
               ref: (node) => {
                 editorRef.current = node
                 if (!node) return
-                if (composing.current) return
+                /* 组合中不动 DOM：读节点属性，不看 composing（那个 ref 从没被置 true）。 */
+                if (node.getAttribute('data-composing') === 'true') return
                 if (editorToText(node) === draft) return
-                textToEditor(node, draft)
+                /* 走 sync：保住当前行与光标，不按 DOM 位置重推（2026-11-22） */
+                mdPreview.sync()
               },
               className: 'wbg-editor-surface',
               contentEditable: true,
