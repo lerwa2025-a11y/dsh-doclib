@@ -3752,6 +3752,12 @@ function useScrollMemo(bucket, selector, ready) {
        * 库根不在三库内，服务端守卫会拒。
        */
       const MATERIAL_ROOT = '素材'
+      /*
+       * 素材库分类名（与 Host 侧 material-groups.js 的 MATERIAL_GROUPS 一致）：
+       * 视频 / 音频 / 图片 / 笔记 / 电子书。新建的 md 一律落「笔记」，
+       * 导入的其它类型由服务端按后缀归位（2026-11-22 大王要求）。
+       */
+      const MATERIAL_NOTE_GROUP = '笔记'
 
       /** 某个目录下已用的名字（给新建项取不撞车的默认名）。dirPath 为空时取顶层。 */
       const namesInDir = (dirPath) => {
@@ -3788,19 +3794,34 @@ function useScrollMemo(bucket, selector, ready) {
           : MATERIAL_ROOT
         const isDir = kind === 'dir'
         const ext = isDir ? '' : '.md'
+        /*
+         * 新建文件落在素材根层时，服务端会按后缀把它归进分类（md 归「笔记」）。
+         * 这里预先把命名目录对齐到「笔记」，免得默认名和分类里已有的撞车
+         * （2026-11-22 素材库自动分组）。
+         */
+        const nameDir = !isDir && dir === MATERIAL_ROOT ? `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}` : dir
         const base = isDir ? t('vaultNewDir') : t('vaultNewFile')
-        const taken = namesInDir(dir)
+        const taken = namesInDir(nameDir)
         let name = base
         let n = 2
         while (taken.has(name + ext)) { name = base + ' ' + n; n += 1 }
-        const path = dir === '' ? name + ext : `${dir}/${name}${ext}`
+        let path = nameDir === '' ? name + ext : `${nameDir}/${name}${ext}`
         try {
-          if (isDir) await vaultApiPost('/mkdir', { path })
-          else await vaultApiPost('/newfile', { path })
+          const created = isDir
+            ? await vaultApiPost('/mkdir', { path })
+            : await vaultApiPost('/newfile', { path })
+          /*
+           * 真实落点以服务端返回的 path 为准：素材根层的新文件会被重定向进
+           * 视频 / 音频 / 图片 / 笔记 / 电子书 分类，客户端再按旧路径找就找不到，
+           * 也就进不了原地改名态（2026-11-22）。
+           */
+          if (created && typeof created.path === 'string' && created.path !== '') path = created.path
           await reloadTree()
+          const parentDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
           /* 父目录展开，否则新建的东西在树上看不见 */
-          if (dir !== '') setExpanded((prev) => ({ ...prev, [dir]: true }))
-          const entry = { path, name: name + ext, type: isDir ? 'dir' : 'file', image: false }
+          if (parentDir !== '') setExpanded((prev) => ({ ...prev, [parentDir]: true }))
+          const fileName = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
+          const entry = { path, name: fileName, type: isDir ? 'dir' : 'file', image: false }
           setConfirmDelete(false)
           setMoveOpen(false)
           setCtxMenu(null)

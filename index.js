@@ -41,6 +41,7 @@ import { readTail, waitReply } from './ai-edit.js'
 import { readHistory } from './history.js'
 import { awaitReply, closeSession, currentModel, modelCatalog, openSession, selectModel, sendToSession, sessionState, warmSession } from './studio-session.js'
 import { ensureLibraries, insideLibraries, listLibraries, requireInside, treeOf } from './libraries.js'
+import { MATERIAL_GROUPS, MATERIAL_NOTE_GROUP, ensureMaterialGroups, groupOfName, isMaterialGroupName, migrateMaterialGroups } from './material-groups.js'
 import { shapeCatalog } from './skills-list.js'
 import {
   clearOrder,
@@ -120,6 +121,26 @@ function assertTargetDir(rel, what) {
   return normalized
 }
 
+/**
+ * 新建文件时按扩展名自动归到 素材\<分类>\ 下（2026-11-22 大王要求）。
+ *
+ * 只在「父目录正好是 素材 本身」这一层重定向：
+ *   · 素材\新文件.md          → 素材\笔记\新文件.md
+ *   · 素材\clip.mp4           → 素材\视频\clip.mp4
+ *   · 素材\笔记\新文件.md     → 不动（已经在分类里，尊重用户的显式选择）
+ *   · 素材\图片\人物\a.png    → 不动（分类内的子目录也是用户的显式选择）
+ *
+ * 不重定向文件夹（mkdir）：分组是给「东西」分的，文件夹想放哪就放哪。
+ */
+function routeNewFileIntoGroup(rel) {
+  const text = typeof rel === 'string' ? rel : ''
+  const parts = text.split('/').filter((part) => part !== '')
+  if (parts.length !== 2 || parts[0] !== '素材') return text
+  const group = groupOfName(parts[1])
+  if (!isMaterialGroupName(group)) return text
+  return '素材/' + group + '/' + parts[1]
+}
+
 async function readBody(req, limitBytes) {
   const chunks = []
   let total = 0
@@ -196,6 +217,14 @@ export function apply(ctx) {
                */
               if (typeof root === 'string' && root !== '') {
                 try { await ensureLibraries(root) } catch { /* 库建不出来不该让整个请求挂掉 */ }
+                /*
+                 * 素材库的五个类型分组（2026-11-22 大王要求）：
+                 * 视频 \ 音频 \ 图片 \ 笔记 \ 电子书。
+                 * 和三个库一样「每次请求顺手 ensure 一次」，这样任何入口都不会
+                 * 遇到「分类还不存在」的分支。ensureMaterialGroups 内部按库根去重，
+                 * 同一次进程里每个库根只 stat 一轮。
+                 */
+                try { await ensureMaterialGroups(root) } catch { /* 同上 */ }
               }
 
               // 库根目录的读取与设置（不要求已设置）
@@ -297,6 +326,25 @@ export function apply(ctx) {
               /* 三个固定库的清单（左栏顶部用）。不依赖库根已设置。 */
               if (route === '/libraries' && req.method === 'GET') {
                 sendJson(res, 200, await listLibraries(root))
+                return
+              }
+
+              /*
+               * 素材库一次性归档：把 素材\ 顶层的东西按类型搬进五个分类
+               * （视频 / 音频 / 图片 / 笔记 / 电子书）。
+               *
+               * 为什么不放在请求路径上自动跑：用户以后自己建的文件夹不该被
+               * 插件偷偷搬走。所以只在显式调用时跑一次，幂等（已经在分类里的不动）。
+               * 迁移前请自己备份 —— 这条路由只搬「顶层条目」，不动分类内部结构。
+               */
+              if (route === '/material-migrate' && req.method === 'POST') {
+                sendJson(res, 200, { ok: true, groups: MATERIAL_GROUPS, ...(await migrateMaterialGroups(root)) })
+                return
+              }
+
+              /* 素材库分类清单（客户端要知道有哪几个分类、按什么顺序画）。 */
+              if (route === '/material-groups' && req.method === 'GET') {
+                sendJson(res, 200, { groups: MATERIAL_GROUPS, note: MATERIAL_NOTE_GROUP })
                 return
               }
 
@@ -783,7 +831,13 @@ export function apply(ctx) {
               // 写二进制（粘贴保存图片等）
               if (route === '/raw' && (req.method === 'PUT' || req.method === 'POST')) {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, { ok: true, ...(await writeBinary(root, assertInLibrary(body.path, '写入路径'), body.dataBase64)) })
+                /*
+                 * 同样是「按类型归位」：客户端如果直接写到 素材\x.png，
+                 * 这里重定向到 素材\图片\x.png（见 routeNewFileIntoGroup）。
+                 * 返回里带 path，客户端拿它当真实落点。
+                 */
+                const rawPath = routeNewFileIntoGroup(assertInLibrary(body.path, '写入路径'))
+                sendJson(res, 200, { ok: true, path: rawPath, ...(await writeBinary(root, rawPath, body.dataBase64)) })
                 return
               }
 
@@ -793,7 +847,17 @@ export function apply(ctx) {
                 let result
                 const safePath = assertInLibrary(body.path, '路径')
                 if (route === '/mkdir') result = await makeDir(root, safePath)
-                else if (route === '/newfile') result = await newFile(root, safePath)
+                else if (route === '/newfile') {
+                  /*
+                   * 新建文件按后缀自动进分类（2026-11-22 大王要求）：
+                   * 素材\新文件.md → 素材\笔记\新文件.md。
+                   * 返回真实落点，客户端据此定位「刚建的那个」去原地改名 ——
+                   * 不返回的话客户端会按旧路径找，找不到就不进改名态。
+                   */
+                  const targetPath = routeNewFileIntoGroup(safePath)
+                  result = await newFile(root, targetPath)
+                  result = { ...(result || {}), path: targetPath }
+                }
                 else if (route === '/delete') result = await deleteToTrash(root, safePath)
                 else result = await renameEntry(root, safePath, body.name)
                 sendJson(res, 200, { ok: true, ...(result || {}) })
