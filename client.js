@@ -1920,6 +1920,48 @@ function useScrollMemo(bucket, selector, ready) {
       const lines = String(text).split('\n')
       return line >= 0 && line < lines.length ? lines[line] : ''
     }
+
+    /**
+     * 阅读态双击 → 编辑态：把「点在正文第几个字」换算成 draft 里的全局偏移。
+     *
+     * 阅读视图是渲染后的结果（md 符号被吃掉、连续行被并成一段、空行被丢掉），
+     * 与 draft 不是一一对应，没法用块下标直接换算。这里改用「块内文本在 draft
+     * 里找第一次出现」的近似：块文本本就是 draft 的连续片段，命中率很高；
+     * 实在找不到就落回 0（文首）—— 光标丢在文首也比丢在无关的位置好。
+     */
+    function mdReadOffsetOf(container, draft) {
+      const text = String(draft === undefined || draft === null ? '' : draft)
+      if (!container) return 0
+      const selection = typeof window === 'undefined' ? null : window.getSelection()
+      if (!selection || selection.rangeCount === 0) return 0
+      const range = selection.getRangeAt(0)
+      const start = range.startContainer
+      if (!start || !container.contains(start)) return 0
+      /* 找被点的那一个块（阅读容器的一级子节点）。start 就是容器本身时
+         （双击落在容器内边距上），用 startOffset 取对应的子节点。 */
+      let block = start === container ? container.childNodes[range.startOffset] : start
+      while (block && block.parentNode !== container) block = block.parentNode
+      if (!block) return 0
+      const raw = block.textContent || ''
+      if (raw.trim() === '') return 0
+      /* 块内偏移：从块首到双击处 */
+      let local = 0
+      try {
+        const inner = document.createRange()
+        inner.selectNodeContents(block)
+        inner.setEnd(range.startContainer, range.startOffset)
+        local = inner.toString().length
+      } catch (err) {
+        return 0
+      }
+      /* 块文本在 draft 里定位：整块优先，命中不了退到前 12 个可见字符 */
+      let at = text.indexOf(raw)
+      if (at < 0) at = text.indexOf(raw.slice(0, 24))
+      if (at < 0) at = text.indexOf(raw.trim().slice(0, 12))
+      if (at < 0) return 0
+      const lead = raw.length - raw.replace(/^\s+/, '').length
+      return Math.max(0, Math.min(at + Math.max(0, local - lead), text.length))
+    }
         /* ══════════════════════════════════════════════════════════════════════
          * 编辑区接线（三处共用）
          *
@@ -2224,6 +2266,22 @@ function useScrollMemo(bucket, selector, ready) {
             pushUndo,
             activeLine: () => activeRef.current,
             caretGlobal: () => caretRef.current,
+            /**
+             * 把光标放到 draft 的全局偏移处并聚焦（阅读态双击进编辑时用，2026-11-22）。
+             * 走 mdPaintEditor 而不是直接 mdPlaceCaret：刚挂载的编辑区里还没有
+             * .md-line 结构，必须先画一遍才有落点。
+             */
+            caretTo: (global) => {
+              const node = el()
+              if (!node) return
+              const limit = draftRef.current.length
+              const at = Math.max(0, Math.min(typeof global === 'number' ? global : 0, limit))
+              const spot = mdSpotOfGlobal(draftRef.current, at)
+              activeRef.current = spot.line
+              caretRef.current = at
+              mdPaintEditor(node, draftRef.current, spot.line, at)
+              if (typeof node.focus === 'function') node.focus()
+            },
           }
         }
 
@@ -4036,6 +4094,26 @@ function useScrollMemo(bucket, selector, ready) {
         onSave: () => void saveDoc(),
       })
 
+      /*
+       * 阅读态双击进编辑（2026-11-22 大王要求）：在正文上连点两下直接开始写，
+       * 光标尽量落在点中的那一段。只读文档（电子书）与图片不进。
+       * 划线标注靠拖选（mouseup）触发，双击不会影响它。
+       */
+      const pendingCaretRef = useRef(null)
+      const startEditAtClick = (event) => {
+        if (mode === 'edit') return
+        if (!canEdit) return
+        pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
+        setMode('edit')
+      }
+      useLayoutEffect(() => {
+        if (mode !== 'edit') return
+        if (pendingCaretRef.current === null) return
+        const at = pendingCaretRef.current
+        pendingCaretRef.current = null
+        mdPreview.caretTo(at)
+      }, [mode])
+
       /** 在编辑框里插入/包裹格式标记。 */
       const applyFormat = (kind) => {
         const el = textareaRef.current
@@ -4795,7 +4873,11 @@ function useScrollMemo(bucket, selector, ready) {
               ? h(
                 Fragment,
                 null,
-                h('div', { className: 'vp-read' }, readNodes),
+                h(
+                  'div',
+                  { className: 'vp-read', onDoubleClick: startEditAtClick },
+                  readNodes,
+                ),
                 // ── [t5 划线标注] 选中后浮出的工具条
                 markBar
                   ? h(
@@ -8662,7 +8744,7 @@ function useScrollMemo(bucket, selector, ready) {
             ? h('div', { className: 'cb-edit-wrap' }, props.editor)
             : h(
                 'div',
-                { className: 'cb-prose' },
+                { className: 'cb-prose', onDoubleClick: props.onBodyDoubleClick },
                 blocks.map((block, index) => {
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
                   if (block.t === 'quote') return h('p', { key: index, className: 'cb-quote' }, block.text)
@@ -9155,6 +9237,22 @@ function useScrollMemo(bucket, selector, ready) {
           onSave: () => void save(true),
         })
 
+        /* 阅读态双击进编辑（2026-11-22 大王要求）：同素材区。 */
+        const pendingCaretRef = useRef(null)
+        const startEditAtClick = (event) => {
+          if (mode === 'edit') return
+          if (!doc || doc.readOnly === true) return
+          pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
+          setMode('edit')
+        }
+        useLayoutEffect(() => {
+          if (mode !== 'edit') return
+          if (pendingCaretRef.current === null) return
+          const at = pendingCaretRef.current
+          pendingCaretRef.current = null
+          mdPreview.caretTo(at)
+        }, [mode])
+
         /**
          * 格式按钮：往纯文本里插 markdown 标记。
          * 绝不生成 HTML —— 磁盘只存 md，编辑器是纯文本（契约底线 2）。
@@ -9519,6 +9617,8 @@ function useScrollMemo(bucket, selector, ready) {
             onTitleChange: (value) => setTitleEdit({ value }),
             onTitleCommit: commitTitleEdit,
             onTitleCancel: closeTitleEdit,
+            /* 阅读态双击进编辑（2026-11-22 大王要求） */
+            onBodyDoubleClick: (event) => startEditAtClick(event),
             editor: h('div', {
               key: 'cb-edit-surface',
               ref: (node) => {
@@ -10486,7 +10586,7 @@ function useScrollMemo(bucket, selector, ready) {
             ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
             : h(
                 'div',
-                { className: 'wbg-prose' },
+                { className: 'wbg-prose', onDoubleClick: props.onBodyDoubleClick },
                 blocks.map((block, index) => {
                   if (block.t === 'sep') return h('div', { key: index, className: 'wbg-scene-sep' }, '◆')
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
@@ -11292,6 +11392,22 @@ function useScrollMemo(bucket, selector, ready) {
           onSave: () => void save(true),
         })
 
+        /* 阅读态双击进编辑（2026-11-22 大王要求）：同素材区。 */
+        const pendingCaretRef = useRef(null)
+        const startEditAtClick = (event) => {
+          if (mode === 'edit') return
+          if (!file) return
+          pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
+          setMode('edit')
+        }
+        useLayoutEffect(() => {
+          if (mode !== 'edit') return
+          if (pendingCaretRef.current === null) return
+          const at = pendingCaretRef.current
+          pendingCaretRef.current = null
+          mdPreview.caretTo(at)
+        }, [mode])
+
         /** 格式按钮：插 markdown 标记，绝不生成 HTML。 */
         const applyFormat = (kind) => {
           if (!file) return
@@ -11739,6 +11855,8 @@ function useScrollMemo(bucket, selector, ready) {
             onTitleChange: (value) => setTitleEdit({ value }),
             onTitleCommit: commitTitleEdit,
             onTitleCancel: closeTitleEdit,
+            /* 阅读态双击进编辑（2026-11-22 大王要求） */
+            onBodyDoubleClick: (event) => startEditAtClick(event),
             editor: h('div', {
               key: 'wbg-edit-surface',
               ref: (node) => {
