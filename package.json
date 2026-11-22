@@ -36,7 +36,8 @@
     "LICENSE",
     "history.js",
     "studio-session.js",
-    "skills-list.js"
+    "skills-list.js",
+    "material-groups.js"
   ],
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
