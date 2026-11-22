@@ -19,19 +19,16 @@ import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook
 import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import {
-  addSettingFile,
   addSettingKind,
   addWriteChapter,
   addWriteVolume,
   attachWriteChapterBody,
   createWriteProject,
-  deleteSettingFile,
   deleteSettingKind,
   deleteWriteChapter,
   deleteWriteVolume,
   listWriteProjects,
   readWriteProject,
-  renameSettingFile,
   renameSettingKind,
   renameWriteChapter,
   renameWriteProject,
@@ -527,36 +524,6 @@ export function apply(ctx) {
                 sendJson(res, 200, {
                   ok: true,
                   ...(await deleteSettingKind(root, body && body.path, body && body.kind)),
-                })
-                return
-              }
-              if (route === '/write-add-setting-file' && req.method === 'POST') {
-                const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, {
-                  ok: true,
-                  ...(await addSettingFile(root, body && body.path, body && body.kind, body && body.title)),
-                })
-                return
-              }
-              if (route === '/write-rename-setting-file' && req.method === 'POST') {
-                const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, {
-                  ok: true,
-                  ...(await renameSettingFile(
-                    root,
-                    body && body.path,
-                    body && body.kind,
-                    body && body.name,
-                    body && body.title,
-                  )),
-                })
-                return
-              }
-              if (route === '/write-del-setting-file' && req.method === 'POST') {
-                const body = JSON.parse(await readBody(req, BODY_LIMIT))
-                sendJson(res, 200, {
-                  ok: true,
-                  ...(await deleteSettingFile(root, body && body.path, body && body.kind, body && body.name)),
                 })
                 return
               }
