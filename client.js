@@ -4372,6 +4372,7 @@ function useScrollMemo(bucket, selector, ready) {
               },
             },
             h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸'),
+            h('span', { className: 'vp-group-ic' }, h(BoardIcon, { name: MATERIAL_ICON_OF(node.name), className: 'wb-ic' })),
             h('span', { className: 'vp-group-t' }, node.name),
             h('span', { className: 'vp-group-n' }, String(children.length)),
             h(
@@ -5874,6 +5875,17 @@ function useScrollMemo(bucket, selector, ready) {
           'M16 5h6v14H2V5h6',
           'M8 5a2 2 0 1 1 4 0 2 2 0 0 1-4 0',
           'm2 15 5-5 4 4 3-3 5 5',
+        ],
+        // Lucide video —— 视频类（素材库固定分类的胶囊图标）
+        video: [
+          'M2 6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2Z',
+          'm16 10.5 4.5-3v9l-4.5-3',
+        ],
+        // Lucide music —— 音频类
+        music: [
+          'M9 18V5l12-2v13',
+          'M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+          'M21 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
         ],
         // Lucide search —— 查找
         search: [
@@ -9750,6 +9762,10 @@ function useScrollMemo(bucket, selector, ready) {
         clock: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z', 'M12 8v5l3.5 2'],
         checkCircle: ['M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0', 'm8 12.5 2.6 2.6L16 9.5'],
         arrowUp: ['M12 19V5M6 11l6-6 6 6'],
+        // Lucide file-text —— 「正文」分区
+        fileText: ['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z', 'M14 2v4a2 2 0 0 0 2 2h4', 'M16 13H8', 'M16 17H8'],
+        // Lucide layers —— 「设定」分区（设定是多层底稿，不是单篇）
+        layers: ['m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z', 'm22 12.5-9.17 4.16a2 2 0 0 1-1.66 0L2 12.5', 'm22 17.5-9.17 4.16a2 2 0 0 1-1.66 0L2 17.5'],
       }
 
       function WbgIcon(props) {
@@ -9770,6 +9786,20 @@ function useScrollMemo(bucket, selector, ready) {
       /** 正文字数：与 Host 侧 write-desk 同一口径（剥掉 markdown 标记）。 */
       function writeWordCount(text) {
         return copyWordCount(text)
+      }
+
+      /*
+       * 素材库固定分类的图标（2026-11-22 胶囊方案）。
+       * 分类名是中文的「图片 / 视频 / 音频 / 笔记 / 电子书」，配一个语义相同的线性图标，
+       * 让五个胶囊一眼能分出类型，而不是只能读字。
+       */
+      function MATERIAL_ICON_OF(name) {
+        if (name === '图片') return 'image'
+        if (name === '视频') return 'video'
+        if (name === '音频') return 'music'
+        if (name === '笔记') return 'fileText'
+        if (name === '电子书') return 'bookOpen'
+        return 'folder'
       }
 
       // 左栏：搜索 + 项目 / 卷章树 / 设定
@@ -10143,6 +10173,7 @@ function useScrollMemo(bucket, selector, ready) {
                     },
                   },
                   h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                  h(WbgIcon, { name: 'layers', className: 'wbg-sect-ic' }),
                   h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
                   h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
                   /*
@@ -10322,6 +10353,7 @@ function useScrollMemo(bucket, selector, ready) {
                   },
                 },
                 h(WbgIcon, { name: bodyOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                h(WbgIcon, { name: 'fileText', className: 'wbg-sect-ic' }),
                 h('span', { className: 'wbg-vol-t' }, t('writeBodyGroup')),
                 h('span', { className: 'wbg-vol-n' }, String(volumes.reduce((sum, v) => sum + (v.chapters || []).length, 0))),
                 /*
@@ -12268,13 +12300,19 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-tree-icon-lib { font-size: 13px; line-height: 1; }
 /* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
 .vp-iconbtn-off { opacity: .3; pointer-events: none; }
-/* 素材库固定分类行（2026-11-22）：观感对齐写作区的分组标题行 */
-.vp-group-row { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-radius: 6px; font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-secondary); cursor: pointer; }
-.vp-group-row:hover { background: var(--dsw-alias-bg-layer-2); }
-.vp-group-row[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
+/*
+ * 素材库固定分类行（2026-11-22 大王选定方案 B「图标胶囊」）：
+ * 每个分类做成一张小卡片 —— 1px 描边 + 8px 圆角 + 卡片底，配上类型图标和圆角计数徽章。
+ * 与写作区的「设定 / 正文」两个分区同构（那边也是胶囊），三个板块的左栏因此是同一套语言。
+ * 选中态用「描边变品牌色 + 左侧 3px 竖条」，不用整行铺底色 —— 胶囊本身已经有底色了。
+ */
+.vp-group-row { display: flex; align-items: center; gap: 6px; margin: 3px 4px; padding: 6px 8px; min-height: 30px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-secondary); cursor: pointer; }
+.vp-group-row:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.vp-group-row[data-active="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
 .vp-group-row .vp-tree-caret { flex: none; width: 10px; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-group-ic { flex: none; display: inline-flex; align-items: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .vp-group-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-group-n { flex: none; font-size: 11px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.vp-group-n { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .vp-group-add { flex: none; margin-left: auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; }
 .vp-group-add:hover { opacity: 1; background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-brand-primary); }
 .vp-tree-empty { font-size: 12px; color: var(--dsw-alias-label-secondary); padding: 6px 8px; }
@@ -13595,15 +13633,26 @@ mark.df-hit[data-active="true"] {
  * 左栏分区标题（2026-11-18 需求10）：
  * 「正文」「设定」两个大区，原来和卷章用同一档 11px 灰字，分不出来。
  * 现在放大到 13px、加粗、上色区分：正文蓝（主角）、设定琥珀（辅助）。
+ *
+ * 2026-11-22 大王选定方案 B：改成和素材库固定分类同款的「图标胶囊」——
+ * 1px 描边 + 8px 圆角 + 卡片底 + 前置类型图标，分区线（.wbg-sep）因此不再需要。
+ * 选择器写成 .wbg-vol.wbg-sect（特异度 0,2,0）：这两行同时挂着 .wbg-vol，
+ * 而 .wbg-vol 在本文件里排得更靠后，单类选择器会被它的 padding 覆盖掉。
  */
-.wbg-sect {
-  margin-top: 6px;
-  padding: 10px 6px 6px;
-  border-top: 1px solid var(--dsw-alias-border-l1);
+.wbg-vol.wbg-sect {
+  margin: 3px 4px;
+  padding: 6px 8px;
+  min-height: 30px;
+  box-sizing: border-box;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-1);
   font-size: 13px;
 }
+.wbg-vol.wbg-sect:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.wbg-sect-ic { color: currentColor; opacity: .85; }
 .wbg-sect .wbg-vol-t { font-size: 13px; font-weight: 700; letter-spacing: .01em; }
-.wbg-sect .wbg-vol-n { font-size: 11px; }
+.wbg-sect .wbg-vol-n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .wbg-sect[data-kind="body"] { color: var(--dsw-alias-brand-primary); }
 .wbg-sect[data-kind="setting"] { color: var(--dsw-alias-state-warn-primary); }
 .wbg-sect[data-kind="body"] .wbg-vol-t,
@@ -13623,7 +13672,8 @@ mark.df-hit[data-active="true"] {
 .wbg-ch-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dsw-alias-label-primary); }
 .wbg-ch[data-active="true"] .wbg-ch-t { color: var(--dsw-alias-brand-primary); font-weight: 600; }
 .wbg-ch-w { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.wbg-sep { height: 1px; margin: 8px 6px 0; background: var(--dsw-alias-border-l1); }
+/* 2026-11-22 起两个分区都是胶囊，不再需要分隔线；保留元素只为留一点垂直间距 */
+.wbg-sep { height: 0; margin: 6px 0 0; background: none; }
 .wbg-set { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--dsw-radius-sm, 8px); }
 .wbg-set:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
 .wbg-set-ic { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
