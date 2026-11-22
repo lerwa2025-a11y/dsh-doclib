@@ -797,6 +797,19 @@ window.__ModuleLoader__.load({
       return error && typeof error.message === 'string' ? error.message : String(error)
     }
 
+    /**
+     * 库内相对路径 → 绝对路径（Windows 反斜杠）。
+     *
+     * 复制路径的入口统一走它：三个板块的右键菜单都只拿到「相对库根的路径」
+     * （例如 素材/图片/a.png、写作/小说/正文/第一卷/0001-第一章.md），
+     * 库根在各自的 Board 里，所以这里只做拼接，不碰 DOM。
+     */
+    function absolutePathOf(root, relPath) {
+      const base = typeof root === 'string' ? root.replace(/[\\/]+$/, '') : ''
+      const relative = String(relPath === undefined || relPath === null ? '' : relPath).replaceAll('/', '\\')
+      return base === '' ? relative : `${base}\\${relative}`
+    }
+
     /** 复制文本：优先标准剪贴板 API，失败退回老式 execCommand。 */
     async function writeClipboard(text) {
       try {
@@ -4079,13 +4092,16 @@ function useScrollMemo(bucket, selector, ready) {
         if (ok) flashMessage(t('copied'))
       }
 
-      /** 复制当前文件的绝对路径（库根 + 相对路径）。 */
-      const copyPath = async () => {
-        if (!doc) return
-        const base = typeof root === 'string' ? root.replace(/[\\/]+$/, '') : ''
-        const relative = doc.path.replaceAll('/', '\\')
-        const absolute = base === '' ? relative : `${base}\\${relative}`
-        const ok = await writeClipboard(absolute)
+      /**
+       * 复制某个节点的绝对路径（库根 + 相对路径）。
+       *
+       * 2026-11-22 大王要求：入口从标题行那一栏挪进左栏右键菜单，
+       * 并且文件夹也要能复制 —— 所以从「只认 doc」改成按节点，不传时退回当前选中项。
+       */
+      const copyNodePath = async (node) => {
+        const target = node || selected
+        if (!target || typeof target.path !== 'string' || target.path === '') return
+        const ok = await writeClipboard(absolutePathOf(root, target.path))
         if (ok) flashMessage(t('vaultPathCopied'))
       }
 
@@ -4685,18 +4701,7 @@ function useScrollMemo(bucket, selector, ready) {
             /* 改名入口同文件夹分支：阅读模式纯文本，编辑模式点标题原地改 */
             h('span', { className: 'dn-spacer' }),
 
-            /* 复制路径：从阅读工具条挪到「阅读 / 编辑」这一栏（2026-11-17） */
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'vp-pathbtn',
-                disabled: !doc,
-                title: t('vaultCopyPath'),
-                onClick: () => void copyPath(),
-              },
-              t('vaultCopyPath'),
-            ),
+            /* 复制路径按钮已删（2026-11-22）：入口挪进左栏右键菜单，文件夹也能复制 */
             h(
               'div',
               { className: 'vp-mode' },
@@ -5078,6 +5083,16 @@ function useScrollMemo(bucket, selector, ready) {
                     openMovePicker(node)
                   },
                 }, t('vaultMoveTo')),
+                /* 复制绝对路径（2026-11-22）：文件夹与文件都支持 */
+                h('button', {
+                  type: 'button',
+                  className: 'vp-ctxmenu-item',
+                  onClick: () => {
+                    const node = ctxMenu.node
+                    setCtxMenu(null)
+                    void copyNodePath(node)
+                  },
+                }, t('vaultCopyPath')),
                 h('i', { className: 'vp-ctxmenu-sep' }),
                 h('button', {
                   type: 'button',
@@ -6265,6 +6280,16 @@ function useScrollMemo(bucket, selector, ready) {
                   if (typeof props.onMove === 'function') props.onMove(node)
                 },
               }, t('vaultMoveTo')),
+              /* 复制绝对路径（2026-11-22）：文件夹与文件都支持 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const node = ctxMenu.node
+                  setCtxMenu(null)
+                  if (typeof props.onCopyPath === 'function') props.onCopyPath(node)
+                },
+              }, t('vaultCopyPath')),
               h('i', { className: 'vp-ctxmenu-sep' }),
               h('button', {
                 type: 'button',
@@ -8428,6 +8453,7 @@ function useScrollMemo(bucket, selector, ready) {
             onPickDir: (node) => { if (typeof props.onPickDir === 'function') props.onPickDir(node) },
             onRename: (node) => { if (typeof props.onRename === 'function') props.onRename(node) },
             onMove: (node) => { if (typeof props.onMove === 'function') props.onMove(node) },
+            onCopyPath: (node) => { if (typeof props.onCopyPath === 'function') props.onCopyPath(node) },
             onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
             /* 原地改名（2026-11-19）：把「正在改哪一行」交给树，树负责画输入框 */
             rename: props.rename || null,
@@ -8728,6 +8754,13 @@ function useScrollMemo(bucket, selector, ready) {
             noticeTimer.current = null
             setNotice('')
           }, 1800)
+        }
+
+        /** 复制某个节点的绝对路径（文案区左树右键菜单用，文件夹与文件都行）。 */
+        const copyEntryPath = async (node) => {
+          if (!node || typeof node.path !== 'string' || node.path === '') return
+          const ok = await writeClipboard(absolutePathOf(root, node.path))
+          if (ok) flash(t('vaultPathCopied'))
         }
 
         /** 把当前打开的稿件路径报给顶栏（「打开文件夹」用）。 */
@@ -9391,6 +9424,7 @@ function useScrollMemo(bucket, selector, ready) {
             onPickDir: (node) => setActivePath(node.path),
             onRename: (node) => void renameNode(node),
             onMove: (node) => void moveNode(node),
+            onCopyPath: (node) => void copyEntryPath(node),
             onDelete: (node) => void deleteNode(node),
             /*
              * 原地改名（2026-11-19 大王要求）：不再弹底部输入条，
@@ -9822,6 +9856,16 @@ function useScrollMemo(bucket, selector, ready) {
                   if (typeof props.onRenameProject === 'function') props.onRenameProject(item)
                 },
               }, t('writeRenameProject')),
+              /* 复制绝对路径（2026-11-22）：复制项目文件夹的路径 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const item = projMenu.item
+                  setProjMenu(null)
+                  if (typeof props.onCopyPath === 'function') props.onCopyPath(item.path)
+                },
+              }, t('vaultCopyPath')),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -9866,6 +9910,16 @@ function useScrollMemo(bucket, selector, ready) {
                     : nodeMenu.kind === 'setting-kind' ? 'writeRenameSettingKind'
                       : 'writeRenameSettingFile',
               )),
+              /* 复制绝对路径（2026-11-22）：卷 / 章 / 设定分类 / 设定条目 都支持 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const menu = nodeMenu
+                  setNodeMenu(null)
+                  if (typeof props.onCopyPath === 'function' && typeof menu.path === 'string' && menu.path !== '') props.onCopyPath(menu.path)
+                },
+              }, t('vaultCopyPath')),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -9977,6 +10031,7 @@ function useScrollMemo(bucket, selector, ready) {
                         kind: 'volume',
                         vi,
                         title: vol.title !== '' ? vol.title : t('writeUntitledVolume'),
+                        path: project && vol.dir !== '' ? project.path + '/正文/' + vol.dir : '',
                         x: event.clientX,
                         y: event.clientY,
                       })
@@ -10055,6 +10110,7 @@ function useScrollMemo(bucket, selector, ready) {
                               vi,
                               ci,
                               title: ch.title !== '' ? ch.title : t('writeUntitledChapter'),
+                              path: project && ch.file !== '' ? project.path + '/正文/' + ch.file : '',
                               x: event.clientX,
                               y: event.clientY,
                             })
@@ -10176,6 +10232,7 @@ function useScrollMemo(bucket, selector, ready) {
                               kind: 'setting-kind',
                               settingKind: kind,
                               title: kind,
+                              path: project ? project.path + '/设定/' + kind : '',
                               x: event.clientX,
                               y: event.clientY,
                             })
@@ -10219,6 +10276,7 @@ function useScrollMemo(bucket, selector, ready) {
                               settingKind: kind,
                               settingRow: row,
                               title: row.title,
+                              path: row.path,
                               x: event.clientX,
                               y: event.clientY,
                             })
@@ -10558,6 +10616,16 @@ function useScrollMemo(bucket, selector, ready) {
             noticeTimer.current = null
             setNotice('')
           }, 1800)
+        }
+
+        /**
+         * 复制绝对路径（2026-11-22 大王要求：入口从标题行按钮挪进左栏右键菜单）。
+         * 项目 / 卷 / 章 / 设定分类 / 设定条目 都只传「相对库根的路径」进来。
+         */
+        const copyRelPath = async (relPath) => {
+          if (typeof relPath !== 'string' || relPath === '') return
+          const ok = await writeClipboard(absolutePathOf(root, relPath))
+          if (ok) flash(t('vaultPathCopied'))
         }
 
         /**
@@ -11572,6 +11640,8 @@ function useScrollMemo(bucket, selector, ready) {
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
             onDeleteProject: (item) => void deleteProject(item),
+            /* 复制绝对路径（2026-11-22 大王要求）：入口在左栏右键菜单，文件夹与文件都能复制 */
+            onCopyPath: (relPath) => void copyRelPath(relPath),
             /* 结构编辑（2026-11-18）：项目改名 / 加卷 / 改卷名 / 加章 / 改章名 */
             onRenameProject: (item) => openEdit('rename-project', { path: item.path, item }, item.name),
             onAddVolume: () => void addVolumeNow(),
@@ -12019,10 +12089,7 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-editor { flex: 1; min-width: 0; min-height: 0; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); display: flex; flex-direction: column; }
 .vp-doc { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 24px 16px; gap: 8px; }
 .vp-dochead { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
-/* 复制路径按钮：挪进标题行后跟 .vp-mode 并排，观感照 vp-mode 的描边 pill */
-.vp-pathbtn { display: inline-flex; align-items: center; height: 26px; padding: 0 8px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; line-height: 1; white-space: nowrap; cursor: pointer; }
-.vp-pathbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
-.vp-pathbtn:disabled { opacity: .4; cursor: default; }
+/* 复制路径按钮已删（2026-11-22 大王要求）：入口改到左栏右键菜单 */
 .vp-mode { display: flex; gap: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 2px; }
 .vp-modebtn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
 .vp-modebtn[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
