@@ -3852,6 +3852,7 @@ function useScrollMemo(bucket, selector, ready) {
             {
               className: 'vp-group-row',
               'data-active': groupActive,
+              'data-group': node.name,
               'data-open': isOpen ? 'true' : 'false',
               role: 'button',
               tabIndex: 0,
@@ -4549,26 +4550,36 @@ function useScrollMemo(bucket, selector, ready) {
              * 搜索框：结构与文案台 .cb-search 一致（描边容器 + 🔍 图标 + 透明 input）。
              * 图标内联 SVG，因为 CbIcon 定义在文件后半段，素材库作用域里拿不到。
              */
-            h('div', { className: 'vp-search' },
-              h('svg', {
-                className: 'vp-search-ic',
-                viewBox: '0 0 24 24',
-                'aria-hidden': 'true',
-                focusable: 'false',
-              },
-                h('path', { d: 'M10.5 3.5a7 7 0 1 0 .01 14.01A7 7 0 0 0 10.5 3.5Z' }),
-                h('path', { d: 'm20 20-4.2-4.2' }),
-              ),
-              h('input', {
-                className: 'vp-search-field',
-                type: 'text',
-                value: query,
-                placeholder: t('vaultSearch'),
-                onChange: (event) => {
-                  setQuery(event.target.value)
-                  void runSearch(event.target.value)
+            /* 搜索框 + 收起左栏按钮同一行（2026-11-24 大王要求：按钮挪到搜索栏右侧） */
+            h('div', { className: 'vp-searchrow' },
+              h('div', { className: 'vp-search' },
+                h('svg', {
+                  className: 'vp-search-ic',
+                  viewBox: '0 0 24 24',
+                  'aria-hidden': 'true',
+                  focusable: 'false',
                 },
-              }),
+                  h('path', { d: 'M10.5 3.5a7 7 0 1 0 .01 14.01A7 7 0 0 0 10.5 3.5Z' }),
+                  h('path', { d: 'm20 20-4.2-4.2' }),
+                ),
+                h('input', {
+                  className: 'vp-search-field',
+                  type: 'text',
+                  value: query,
+                  placeholder: t('vaultSearch'),
+                  onChange: (event) => {
+                    setQuery(event.target.value)
+                    void runSearch(event.target.value)
+                  },
+                }),
+              ),
+              h('button', {
+                type: 'button',
+                className: 'cb-fold',
+                title: t('panelHide'),
+                'aria-label': t('panelHide'),
+                onClick: () => setTreeHidden((hidden) => !hidden),
+              }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
             ),
 
             /*
@@ -4659,13 +4670,6 @@ function useScrollMemo(bucket, selector, ready) {
             h(
               'div',
               { className: 'vp-treehead' },
-              h('button', {
-                type: 'button',
-                className: 'cb-fold',
-                title: t('panelHide'),
-                'aria-label': t('panelHide'),
-                onClick: () => setTreeHidden((hidden) => !hidden),
-              }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
               h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
             /*
              * 顶部加号（2026-11-22）：新建文件夹改由各分类行右侧的 ＋ 建，
@@ -7904,25 +7908,20 @@ function useScrollMemo(bucket, selector, ready) {
         return h(
           'div',
           { className: 'cb-list', style: props.style },
-          h(
-            'div',
-            { className: 'cb-search' },
-            h(CbIcon, { name: 'search', small: true }),
-            h('input', {
-              className: 'cb-search-field',
-              type: 'text',
-              value: query,
-              placeholder: t('copySearch'),
-              onChange: (event) => setQuery(event.target.value),
-            }),
-          ),
-          /*
-           * 标题行（2026-11-24 大王定）：
-           *   · 最左一个「收起/展开左栏」按钮（DSH 侧边栏同款图标）
-           *   · 标题「稿件」右边仍是加号，点开给「新建分组 / 新建稿件」两项
-           *     （大王复定：这两项继续用加号打开，不铺开成两个按钮）
-           */
-          h('div', { className: 'cb-head' },
+          /* 搜索框 + 收起左栏按钮同一行（2026-11-24 大王要求：按钮挪到搜索栏右侧） */
+          h('div', { className: 'cb-searchrow' },
+            h(
+              'div',
+              { className: 'cb-search' },
+              h(CbIcon, { name: 'search', small: true }),
+              h('input', {
+                className: 'cb-search-field',
+                type: 'text',
+                value: query,
+                placeholder: t('copySearch'),
+                onChange: (event) => setQuery(event.target.value),
+              }),
+            ),
             h('button', {
               type: 'button',
               className: 'cb-fold',
@@ -7930,6 +7929,14 @@ function useScrollMemo(bucket, selector, ready) {
               'aria-label': t('panelHide'),
               onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
             }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
+          ),
+          /*
+           * 标题行（2026-11-24 大王定）：
+           *   · 收起/展开左栏的按钮挪到上面的搜索栏右侧（大王要求）
+           *   · 标题「稿件」右边仍是加号，点开给「新建分组 / 新建稿件」两项
+           *     （大王复定：这两项继续用加号打开，不铺开成两个按钮）
+           */
+          h('div', { className: 'cb-head' },
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
             h('div', { className: 'vp-newinline' },
               h('button', {
@@ -9287,21 +9294,20 @@ function useScrollMemo(bucket, selector, ready) {
         return h(
           'div',
           { className: 'wbg-list', style: props.style },
-          h(
-            'div',
-            { className: 'wbg-search' },
-            h(WbgIcon, { name: 'search', small: true }),
-            h('input', {
-              className: 'wbg-search-field',
-              type: 'text',
-              value: query,
-              placeholder: t('writeSearch'),
-              onChange: (event) => props.onQuery(event.target.value),
-            }),
-          ),
-          /* 标题行「项目」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
-          h('div', { className: 'wbg-head' },
-            /* 收起/展开左栏（2026-11-24 大王要求，与文案区同一个按钮样式） */
+          /* 搜索框 + 收起左栏按钮同一行（2026-11-24 大王要求：按钮挪到搜索栏右侧） */
+          h('div', { className: 'wbg-searchrow' },
+            h(
+              'div',
+              { className: 'wbg-search' },
+              h(WbgIcon, { name: 'search', small: true }),
+              h('input', {
+                className: 'wbg-search-field',
+                type: 'text',
+                value: query,
+                placeholder: t('writeSearch'),
+                onChange: (event) => props.onQuery(event.target.value),
+              }),
+            ),
             h('button', {
               type: 'button',
               className: 'cb-fold',
@@ -9309,6 +9315,9 @@ function useScrollMemo(bucket, selector, ready) {
               'aria-label': t('panelHide'),
               onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
             }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
+          ),
+          /* 标题行「项目」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
+          h('div', { className: 'wbg-head' },
             h('span', { className: 'wbg-head-title' }, t('writeProjects')),
             h('button', {
               type: 'button',
@@ -11566,15 +11575,35 @@ body.dsh-resizing, body.dsh-resizing * {
  * 与写作区的「设定 / 正文」两个分区同构（那边也是胶囊），三个板块的左栏因此是同一套语言。
  * 选中态用「描边变品牌色 + 左侧 3px 竖条」，不用整行铺底色 —— 胶囊本身已经有底色了。
  */
-.vp-group-row { display: flex; align-items: center; gap: 6px; margin: 3px 4px; padding: 6px 8px; min-height: 30px; box-sizing: border-box; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); font-size: 12px; font-weight: 700; color: var(--dsw-alias-label-secondary); cursor: pointer; }
-.vp-group-row:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
-.vp-group-row[data-active="true"] { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
-.vp-group-row .vp-tree-caret { flex: none; width: 10px; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.vp-group-ic { flex: none; display: inline-flex; align-items: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/* ── 五个固定分组各配一个强调色（2026-11-24 大王要求：和普通文件夹区别开）────
+ * 只用主题的语义色令牌，不写死色值：亮色/深色两套主题由主题自己翻转。
+ * 变量挂在行上，图标、标题、底色、选中竖条共用一份，改一处全变。 */
+.vp-group-row[data-group="视频"] { --vp-group-accent: var(--dsw-alias-state-error-primary, var(--dsw-alias-brand-primary)); }
+.vp-group-row[data-group="音频"] { --vp-group-accent: var(--dsw-alias-state-done-primary, var(--dsw-alias-brand-primary)); }
+.vp-group-row[data-group="图片"] { --vp-group-accent: var(--dsw-alias-state-success-primary, var(--dsw-alias-brand-primary)); }
+.vp-group-row[data-group="笔记"] { --vp-group-accent: var(--dsw-alias-state-warn-primary, var(--dsw-alias-brand-primary)); }
+.vp-group-row[data-group="电子书"] { --vp-group-accent: var(--dsw-alias-state-business-primary, var(--dsw-alias-brand-primary)); }
+
+.vp-group-row { display: flex; align-items: center; gap: 6px; margin: 3px 4px; padding: 6px 8px; min-height: 30px; box-sizing: border-box; border: 1px solid color-mix(in srgb, var(--vp-group-accent, var(--dsw-alias-border-l1)) 38%, var(--dsw-alias-border-l1)); border-radius: var(--dsw-radius-sm, 8px); background: color-mix(in srgb, var(--vp-group-accent, transparent) 7%, var(--dsw-alias-bg-layer-1)); font-size: 12px; font-weight: 700; color: var(--vp-group-accent, var(--dsw-alias-label-secondary)); cursor: pointer; }
+.vp-group-row:hover { background: color-mix(in srgb, var(--vp-group-accent, transparent) 14%, var(--dsw-alias-bg-layer-1)); }
+.vp-group-row[data-active="true"] { border-color: var(--vp-group-accent, var(--dsw-alias-brand-primary)); color: var(--vp-group-accent, var(--dsw-alias-brand-primary)); box-shadow: inset 3px 0 0 0 var(--vp-group-accent, var(--dsw-alias-brand-primary)); }
+.vp-group-row .vp-tree-caret { flex: none; width: 10px; font-size: 10px; color: color-mix(in srgb, var(--vp-group-accent, var(--dsw-alias-label-tertiary)) 70%, var(--dsw-alias-label-secondary)); }
+.vp-group-ic { flex: none; display: inline-flex; align-items: center; color: var(--vp-group-accent, var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))); }
 .vp-group-t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.vp-group-n { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.vp-group-add { flex: none; margin-left: auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 13px; line-height: 1; cursor: pointer; opacity: .55; }
+.vp-group-n { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: color-mix(in srgb, var(--vp-group-accent, transparent) 16%, var(--dsw-alias-bg-layer-2)); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--vp-group-accent, var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))); }
+.vp-group-add { flex: none; margin-left: auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--vp-group-accent, var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))); font-size: 13px; line-height: 1; cursor: pointer; opacity: .7; }
 .vp-group-add:hover { opacity: 1; background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-brand-primary); }
+
+/* ── 搜索框 + 收起左栏按钮同一行（2026-11-24 大王要求：按钮挪到搜索栏右侧）──────
+ * 三个板块结构一致：外层 searchrow 负责外边距与横排，里面的搜索框改成 margin:0 + flex:1。
+ * 素材库那条 .vp-tree .vp-search 的外边距规则排在文件更后，所以这里必须写三层选择器压过它，
+ * 否则搜索框会同时吃两套外边距、把折叠按钮挤出行外。 */
+.vp-searchrow, .cb-searchrow, .wbg-searchrow { display: flex; align-items: center; gap: 6px; flex: none; }
+.vp-tree .vp-searchrow { margin: 12px 12px 6px; }
+.cb-searchrow { margin: 12px 12px 4px; }
+.wbg-searchrow { margin: 12px 12px 4px; }
+.cb-searchrow .cb-fold, .wbg-searchrow .cb-fold, .vp-searchrow .cb-fold { margin-left: 0; }
+.vp-tree .vp-searchrow .vp-search, .cb-searchrow .cb-search, .wbg-searchrow .wbg-search { margin: 0; flex: 1 1 auto; min-width: 0; }
 .vp-tree-empty { font-size: 12px; color: var(--dsw-alias-label-secondary); padding: 6px 8px; }
 .vp-editor { flex: 1; min-width: 0; min-height: 0; overflow: auto; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); display: flex; flex-direction: column; }
 .vp-doc { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 24px 16px; gap: 8px; }
