@@ -230,6 +230,9 @@ window.__ModuleLoader__.load({
         copyNewDraft: '新建稿件',
         copyDrafts: '稿件',
         copyNewDraftName: '新稿件',
+        copyNewGroup: '新建分组',
+        copyPanelHide: '收起左栏',
+        copyPanelShow: '展开左栏',
         copyLoadFailed: '稿件读取失败：',
         copyNoMetaHint: '这篇没有元数据，状态按「草稿」显示',
         copyStatusDraft: '草稿',
@@ -585,6 +588,9 @@ window.__ModuleLoader__.load({
         copyNewDraft: 'New draft',
         copyDrafts: 'Drafts',
         copyNewDraftName: 'New draft',
+        copyNewGroup: 'New group',
+        copyPanelHide: 'Hide list',
+        copyPanelShow: 'Show list',
         copyLoadFailed: 'Failed to load draft: ',
         copyNoMetaHint: 'This draft has no metadata; status shows as Draft',
         copyStatusDraft: 'Draft',
@@ -5279,6 +5285,11 @@ function useScrollMemo(bucket, selector, ready) {
           'M5 11h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2z',
           'M7 11V7a5 5 0 0 1 10 0v4',
         ],
+        // Lucide panel-left（照抄 DSH 侧边栏收起图标 panel-left-outline，16 网格按 1.5 缩放到 24）
+        panelLeft: [
+          'M20.25 2.25H3.75C2.92158 2.25 2.25 2.92158 2.25 3.75V20.25C2.25 21.0784 2.92158 21.75 3.75 21.75H20.25C21.0784 21.75 21.75 21.0784 21.75 20.25V3.75C21.75 2.92158 21.0784 2.25 20.25 2.25Z',
+          'M8.25 2.25V21.75',
+        ],
         // Lucide book-open —— 写作库（库级图标）
         bookOpen: [
           'M12 7v14',
@@ -7811,29 +7822,36 @@ function useScrollMemo(bucket, selector, ready) {
         /* 加号下拉：新建分组 / 新建文案 */
         /* 树的实际展开状态由父组件传入（见 CopyBoard 里的说明） */
         const treeExpanded = props.treeExpanded || {}
-        const [newOpen, setNewOpen] = useState(false)
-        /* 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算） */
-        const [newMenuPos, setNewMenuPos] = useState(null)
-        /* 加号按钮 ref —— 算菜单位置要用它的 getBoundingClientRect */
-        const newBtnRef = useRef(null)
         /* 排序下拉开合（2026-11-18 修黑屏：以前漏定义，读 sortOpen 直接崩） */
         const [sortOpen, setSortOpen] = useState(false)
 
-        /* 点外面收起加号菜单 */
-        useEffect(() => {
-          if (!newOpen) return undefined
-          const onDown = (event) => {
-            const node = event.target
-            if (node && typeof node.closest === 'function' && node.closest('.vp-newinline') !== null) return
-            setNewOpen(false)
-            setNewMenuPos(null)
-          }
-          document.addEventListener('mousedown', onDown)
-          return () => document.removeEventListener('mousedown', onDown)
-        }, [newOpen])
+
+
         /* 只要有目录展开过，按钮就显示「全部收起」（点它收起全部） */
         const hasAnyExpanded = Object.keys(treeExpanded).length > 0
 
+
+        /*
+         * 收起状态（2026-11-24 大王要求）：整条左栏缩成 30px 窄栏，
+         * 只留一个按钮，点它还原。照抄右栏 .cb-aside-rail 的做法，
+         * 这样左右两侧的「收起」是同一套观感。
+         */
+        if (props.panelHidden === true) {
+          return h(
+            'div',
+            { className: 'cb-list cb-list-fold', style: props.style },
+            h('button', {
+              type: 'button',
+              className: 'cb-list-rail',
+              title: t('copyPanelShow'),
+              'aria-label': t('copyPanelShow'),
+              onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
+            },
+              h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }),
+              h('span', { className: 'cb-list-rail-t' }, t('copyDrafts')),
+            ),
+          )
+        }
 
         return h(
           'div',
@@ -7851,66 +7869,36 @@ function useScrollMemo(bucket, selector, ready) {
             }),
           ),
           /*
-           * 标题行「稿件」+ 新建加号（2026-11-18 简化）：
-           * 去掉「目录/分组」切换和状态分组 —— 左栏就是纯文件树。
-           * 加号点开给两个选项：新建分组（真文件夹）/ 新建文案（md 文件）。
+           * 标题行（2026-11-24 大王改定）：
+           * 最左一个「收起/展开左栏」按钮（DSH 侧边栏同款图标）；
+           * 「新建分组」「新建稿件」直接露在标题旁边，不再走加号下拉 ——
+           * 只有两项、点开还要多一次点击，不如铺开。
            */
           h('div', { className: 'cb-head' },
+            h('button', {
+              type: 'button',
+              className: 'cb-fold',
+              title: t('copyPanelHide'),
+              'aria-label': t('copyPanelHide'),
+              onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
+            }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
-            h('div', { className: 'vp-newinline' },
-              h('button', {
-                type: 'button',
-                className: 'vp-newbtn-round',
-                  ref: newBtnRef,
-                'data-open': newOpen ? 'true' : 'false',
-                title: t('vaultNew'),
-                'aria-label': t('vaultNew'),
-                  onClick: () => {
-                    /* fixed 定位：打开时用加号 rect 算坐标并夹在视口内 */
-                    if (newOpen) { setNewOpen(false); setNewMenuPos(null); return }
-                    const pos = dropPositionOf(newBtnRef.current, DROP_W)
-                    if (pos === null) return
-                    setNewMenuPos(pos)
-                    setNewOpen(true)
-                  },
-              }, '＋'),
-              newOpen && newMenuPos
-                ? h(
-                  'div',
-                  {
-                    className: 'vp-newdrop',
-                    /* fixed 坐标由 dropPositionOf 算好（右对齐加号、夹在视口内） */
-                    style: { left: newMenuPos.left + 'px', top: newMenuPos.top + 'px', width: DROP_W + 'px' },
-                  },
-                  h('button', {
-                    type: 'button',
-                    className: 'vp-newdrop-item',
-                    onClick: () => {
-                      setNewOpen(false)
-                      if (typeof props.onCreateDir === 'function') props.onCreateDir()
-                    },
-                  },
-                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
-                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
-                  ),
-                  h('button', {
-                    type: 'button',
-                    className: 'vp-newdrop-item',
-                    onClick: () => {
-                      setNewOpen(false)
-                      if (typeof props.onCreate === 'function') props.onCreate()
-                    },
-                  },
-                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
-                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewMd')),
-                  ),
-                )
-                : null,
-            ),
+            h('button', {
+              type: 'button',
+              className: 'cb-newbtn',
+              title: t('copyNewGroup'),
+              onClick: () => { if (typeof props.onCreateDir === 'function') props.onCreateDir() },
+            }, h(BoardIcon, { name: 'folder', className: 'wb-ic-xs' }), h('span', null, t('copyNewGroup'))),
+            h('button', {
+              type: 'button',
+              className: 'cb-newbtn',
+              title: t('copyNewDraft'),
+              onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
+            }, h(BoardIcon, { name: 'fileText', className: 'wb-ic-xs' }), h('span', null, t('copyNewDraft'))),
           /* 全部展开/收起 + 排序（2026-11-18 大王要求，与素材库一致） */
           h('button', {
             type: 'button',
-            className: 'vp-treehead-btn',
+            className: 'vp-treehead-btn cb-head-tail',
             onClick: () => {
               if (typeof props.onToggleExpand === 'function') props.onToggleExpand()
             },
@@ -8219,6 +8207,8 @@ function useScrollMemo(bucket, selector, ready) {
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
+        /* 左栏收起（2026-11-24 大王要求）：整条缩成 30px 窄栏，只留一个展开按钮 */
+        const [panelHidden, setPanelHidden] = useState(false)
 
         const editorRef = useRef(null)
         const noticeTimer = useRef(null)
@@ -8909,10 +8899,12 @@ function useScrollMemo(bucket, selector, ready) {
                 cancel: () => { renameGuard.current.done = true; setTreePrompt(null) },
               }
               : null,
-            style: { width: listW + 'px' },
+            style: { width: (panelHidden ? 30 : listW) + 'px' },
+            panelHidden,
+            onTogglePanel: () => setPanelHidden((hidden) => !hidden),
           }),
-          /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
-          h(Splitter, {
+          /* 左栏收起时不渲染分隔线（没有可拖的东西了） */
+          panelHidden ? null : h(Splitter, {
             className: 'cb-split',
             width: listW,
             applyWidth: setListW,
@@ -11429,14 +11421,22 @@ body.dsh-resizing, body.dsh-resizing * {
 /* 目录与文件同字号（shadcn 原则：靠图标区分，不靠加粗放大）。
    原来目录 700/15px，比文件大一档，看着笨重。 */
 .vp-tree-row[data-kind="dir"] .vp-tree-name { font-weight: 500; }
-/* 左栏目录行做成带边框的小卡片（2026-11-23 大王要求）：
-   与素材库五个固定分类（.vp-group-row）同一套观感 —— 1px 描边 + 8px 圆角 + 浅底，
-   这样「分组」和「文件」一眼分得开；文件行仍是无边框的扁平样式。
-   描边用 outline + 负 offset 而不是 border：border 会占掉 1px 内宽，把目录名相对
-   文件行整体右移一格（2026-11-19 刚把两侧缩进调成 0px 差值，不能被这个破掉）。 */
-.vp-tree-row[data-kind="dir"] { margin: 2px 0; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); outline: 1px solid var(--dsw-alias-border-l1); outline-offset: -1px; }
+/* 左栏分组行做成实心胶囊（2026-11-24 大王改定，取代 2026-11-23 那版描边卡片）：
+   平时是一颗浅胶囊（浅底 + 8px 圆角），选中时整颗填成品牌色、文字与图标一起反白 ——
+   Finder / Notion 侧栏的「实心选中条」，比描边更容易一眼看出当前在哪一组。
+   颜色只用主题令牌：--dsw-alias-brand-primary 亮色是近黑、深色是近白，
+   配 --dsw-alias-label-primary-inverted（亮色白 / 深色灰）两套主题自动翻转，不需要写死色值。
+   不用 border 描边（会占 1px 内宽把目录名右移）；也不用 outline（胶囊不需要边）。
+   横向缩进由行内 style 的 paddingLeft 决定，这里一律不动。 */
+.vp-tree-row[data-kind="dir"] { margin: 2px 0; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); }
 .vp-tree-row[data-kind="dir"]:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
-.vp-tree-row[data-kind="dir"][data-active="true"] { background: var(--dsw-alias-bg-layer-1); outline-color: var(--dsw-alias-brand-primary); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
+/* 选中：整颗实心。同时把全局那条「左边 3px 品牌竖条」关掉 —— 胶囊已经整条是品牌色，
+   再叠一根竖条会变成一条更浅的边。box-shadow: none 靠 0,3,0 的特异性压过 0,2,0 的全局规则。 */
+.vp-tree-row[data-kind="dir"][data-active="true"] { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-inverted); box-shadow: none; }
+.vp-tree-row[data-kind="dir"][data-active="true"]:hover { background: var(--dsw-alias-brand-primary); }
+.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-name { color: var(--dsw-alias-label-primary-inverted); font-weight: 600; }
+.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-caret,
+.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-icon { color: var(--dsw-alias-label-primary-inverted); }
 /* 原地改名的树行（2026-11-19）：整行换成 div，只剩输入框能动，所以不要 hover 底色 */
 .vp-tree-row-edit { cursor: default; background: transparent; }
 .vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
@@ -12316,6 +12316,40 @@ mark.df-hit[data-active="true"] {
 .cb-head-title, .wbg-head-title { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* 文案台：紧跟加号的那个按钮顶到行尾（写作台后面没有按钮，不命中） */
 .cb-head-title + .vp-newinline + .vp-treehead-btn { margin-left: auto; }
+/* 文案区标题行（2026-11-24 大王改定）：收起按钮 + 「稿件」+ 两个露出式新建按钮，
+   末尾的「全部展开/收起」推到行尾。素材区/写作区仍走原来的加号下拉，不受影响。 */
+.cb-head-tail { margin-left: auto; }
+.cb-fold {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; margin-left: -4px;
+  border: 0; border-radius: 4px; background: transparent;
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  cursor: pointer; transition: background .12s ease, color .12s ease;
+}
+.cb-fold:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
+.cb-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+.cb-newbtn {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 3px;
+  height: 20px; padding: 0 7px; border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 4px; background: transparent;
+  color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px;
+  line-height: 1; white-space: nowrap; cursor: pointer;
+  transition: background .12s ease, color .12s ease, border-color .12s ease;
+}
+.cb-newbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l1); }
+.cb-newbtn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+/* 收起状态的左栏：整条只剩 30px 窄栏，一个按钮点回来（2026-11-24 大王要求） */
+/* 两条 .cb-list 规则同特异性、而 .cb-list 排在文件更后面，所以这里必须用复合选择器 .cb-list.cb-list-fold 提特异性，否则宽度压不过 240px */
+.cb-list.cb-list-fold { width: 30px; padding: 0; align-items: stretch; border-right: 1px solid var(--dsw-alias-border-l1); }
+.cb-list-rail {
+  flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 12px 0; border: 0; background: transparent;
+  color: var(--dsw-alias-label-secondary); cursor: pointer;
+  transition: background .12s ease, color .12s ease;
+}
+.cb-list-rail:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
+.cb-list-rail:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+.cb-list-rail-t { writing-mode: vertical-rl; text-orientation: upright; font-size: 11px; letter-spacing: 1px; white-space: nowrap; }
 /* 写作台只有一个加号，其余留白；加号自己贴住标题 */
 
 .cb-search-field { flex: 1; min-width: 0; border: 0; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; outline: none; padding: 0; }
