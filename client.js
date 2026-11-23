@@ -12388,11 +12388,23 @@ mark.df-hit[data-active="true"] {
 .cb-list-t small { font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-doc { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--dsw-alias-bg-base); /* 边距统一由容器给（照素材库 .vp-doc 的做法，2026-11-18） */ padding: 12px 24px 16px;
   /* 兜底：子元素不许伸出中栏（下拉菜单已改 fixed，不受此裁剪影响） */ overflow: hidden; }
-.cb-doc-head { flex: none; padding: 2px 0 0; }
+/* 标题栏做成带边框的卡片（2026-11-23 大王要求）：
+   描边 + 圆角 + 浅底色，标题与「只读」标记都装进去，和下面的正文分开。
+   注意只给文案区（.cb-doc-head）；写作区仍是通栏标题。 */
+.cb-doc-head { flex: none; box-sizing: border-box; display: flex; align-items: center; gap: 10px; margin: 0 auto 10px; padding: 10px 14px 12px; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); }
+/* 卡片左右各外扩 4.5px，抵掉内边距（14）与描边（1）让标题字右移的那一截：
+   边框仍在正文栏外侧，标题字仍落在正文左缘 —— 加边框不破坏首行对齐（2026-11-18
+   大王要求的对齐；实测外扩 4.5px 时三种状态误差都是 0.0px）。
+   必须用 .cb-doc > .cb-doc-head 提特异性：后面那条「中栏限宽 760 居中」
+   把 .cb-doc-head 的左右外边距写成 auto，同特异度会把负外边距盖掉。 */
+.cb-doc > .cb-doc-head { margin-left: -4.5px; margin-right: -4.5px; }
+.cb-doc-head .cb-doc-title { flex: 1 1 auto; min-width: 0; }
+.cb-doc-head .cb-doc-title-input { flex: 1 1 auto; width: auto; min-width: 0; margin: 0; }
+.cb-doc-head .cb-doc-meta { flex: 0 0 auto; justify-content: flex-end; }
 .cb-doc-title-input, .wbg-doc-title-input { display: block; width: 100%; box-sizing: border-box; margin: 0 0 8px; padding: 1px 8px; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; outline: none; }
 .cb-doc-title[data-renamable="true"], .wbg-doc-title[data-renamable="true"] { cursor: text; }
 .cb-doc-title[data-renamable="true"]:hover, .wbg-doc-title[data-renamable="true"]:hover { color: var(--dsw-alias-brand-primary); }
-.cb-doc-title { margin: 0 0 8px; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
+.cb-doc-title { margin: 0; font-size: 18px; font-weight: 650; line-height: 1.4; letter-spacing: -.01em; color: var(--dsw-alias-label-primary); }
 .cb-doc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; /* 元信息要读，用 secondary */ color: var(--dsw-alias-label-secondary); }
 .cb-pill { display: inline-flex; align-items: center; height: 20px; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 500; color: var(--dsw-alias-brand-primary); background: color-mix(in srgb, var(--dsw-alias-brand-primary) 12%, transparent); }
 .cb-pill-grey { color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-2); }
