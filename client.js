@@ -2140,12 +2140,26 @@ function useScrollMemo(bucket, selector, ready) {
           const paint = (text, caret, line) => {
             const node = el()
             if (!node) return
-            const at = typeof caret === 'number' ? caret : caretRef.current
+            /*
+             * caret 传 null / undefined = 「调用方没有要求还原光标」（切文件、外部改 draft）。
+             * 这时绝不能拿 caretRef.current 顶上去当显式光标：mdPaintEditor 只在显式光标
+             * 或编辑区已聚焦时才摆选区，而显式光标会绕过聚焦判断 —— 结果是切文件时悄悄
+             * 往编辑区里放一个折叠选区，浏览器就在那儿画一个光标，看着像自动进了编辑态
+             * （2026-11-24 大王反馈：切文件不该出现光标）。
+             */
+            const explicitCaret = typeof caret === 'number'
+            const at = explicitCaret ? caret : caretRef.current
             const spot = mdSpotOfGlobal(text, at)
-            const active = typeof line === 'number' ? line : spot.line
+            /*
+             * 没聚焦又不是显式要求还原光标 → 一律当成「没有当前行」（-1）：
+             * 所有行都收成预览、符号全部隐藏。否则切文件时默认把第 0 行标成当前行，
+             * 那一行的 ## / ** 会显示出来，看着像已经进了编辑态。
+             */
+            const focused = typeof document !== 'undefined' && document.activeElement === node
+            const active = typeof line === 'number' ? line : (focused || explicitCaret ? spot.line : -1)
             activeRef.current = active
             caretRef.current = at
-            mdPaintEditor(node, text, active, at, imageSrc)
+            mdPaintEditor(node, text, active, explicitCaret ? at : null, imageSrc)
           }
 
           /**
