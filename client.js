@@ -11429,6 +11429,14 @@ body.dsh-resizing, body.dsh-resizing * {
 /* 目录与文件同字号（shadcn 原则：靠图标区分，不靠加粗放大）。
    原来目录 700/15px，比文件大一档，看着笨重。 */
 .vp-tree-row[data-kind="dir"] .vp-tree-name { font-weight: 500; }
+/* 左栏目录行做成带边框的小卡片（2026-11-23 大王要求）：
+   与素材库五个固定分类（.vp-group-row）同一套观感 —— 1px 描边 + 8px 圆角 + 浅底，
+   这样「分组」和「文件」一眼分得开；文件行仍是无边框的扁平样式。
+   描边用 outline + 负 offset 而不是 border：border 会占掉 1px 内宽，把目录名相对
+   文件行整体右移一格（2026-11-19 刚把两侧缩进调成 0px 差值，不能被这个破掉）。 */
+.vp-tree-row[data-kind="dir"] { margin: 2px 0; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); outline: 1px solid var(--dsw-alias-border-l1); outline-offset: -1px; }
+.vp-tree-row[data-kind="dir"]:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.vp-tree-row[data-kind="dir"][data-active="true"] { background: var(--dsw-alias-bg-layer-1); outline-color: var(--dsw-alias-brand-primary); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
 /* 原地改名的树行（2026-11-19）：整行换成 div，只剩输入框能动，所以不要 hover 底色 */
 .vp-tree-row-edit { cursor: default; background: transparent; }
 .vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
