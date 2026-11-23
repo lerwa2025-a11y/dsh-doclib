@@ -114,12 +114,6 @@ window.__ModuleLoader__.load({
         readerBgDark: '夜间深色',
         readerSettingsFailed: '阅读偏好没能保存，下次打开会回到默认',
         // ── [t5 划线标注] ──
-        markPanel: '划线标注',
-        markUnderline: '下划线',
-        markWave: '波浪线',
-        markHighlight: '涂色',
-        markDelete: '删除这条标注',
-        markSaveFailed: '标注没能保存到服务端，本次改动可能丢失',
         // ── [t8 章节导航] ──
         tocPanel: '章节',
         tocParseFailed: '这本电子书的章节解析失败',
@@ -198,15 +192,8 @@ window.__ModuleLoader__.load({
         vaultNamePlaceholder: '名称',
         vaultConfirmDelete: '确认删除',
         modeEdit: '编辑',
-        vaultReadOnly: '电子书为只读格式，不能直接编辑',
         // ── [全文搜索] ──
         docFind: '在本文中查找',
-        docFindPlaceholder: '输入关键词，回车跳到下一处',
-        docFindNone: '没有找到',
-        docFindPrev: '上一处',
-        docFindNext: '下一处',
-        docFindClose: '关闭查找',
-        modeRead: '阅读',
         search: '搜索全部便签',
         cancel: '取消',
         saving: '保存中…',
@@ -251,8 +238,6 @@ window.__ModuleLoader__.load({
         copySaved: '已保存',
         copySaving: '保存中…',
         copySaveFailed: '保存失败：',
-        copyRead: '阅读',
-        copyEdit: '编辑',
         copyBold: '加粗',
         copyH2: '二级标题',
         copyList: '列表',
@@ -337,8 +322,6 @@ window.__ModuleLoader__.load({
         writePickChapter: '从左边选一章',
         writePickProject: '从左边选一个项目',
         writePickChapterSub: '选中章节后这里显示正文，可阅读可编辑',
-        writeRead: '阅读',
-        writeEdit: '编辑',
         writeDirty: '有改动',
         writeSaving: '保存中…',
         writeNoStructure: '项目.md 里还没写卷章结构',
@@ -495,12 +478,6 @@ window.__ModuleLoader__.load({
         readerBgDark: 'Night dark',
         readerSettingsFailed: 'Reading preferences could not be saved; defaults return next time',
         // ── [t5 划线标注] ──
-        markPanel: 'Annotations',
-        markUnderline: 'Underline',
-        markWave: 'Wavy line',
-        markHighlight: 'Highlight',
-        markDelete: 'Delete this annotation',
-        markSaveFailed: 'Annotation could not be saved to the server; this change may be lost',
         // ── [t8 章节导航] ──
         tocPanel: 'Chapters',
         tocParseFailed: 'Failed to parse chapters from this e-book',
@@ -569,15 +546,8 @@ window.__ModuleLoader__.load({
         vaultNamePlaceholder: 'Name',
         vaultConfirmDelete: 'Confirm delete',
         modeEdit: 'Edit',
-        vaultReadOnly: 'E-books are read-only and cannot be edited directly',
         // ── [全文搜索] ──
         docFind: 'Find in this document',
-        docFindPlaceholder: 'Type a keyword, Enter for next match',
-        docFindNone: 'No matches',
-        docFindPrev: 'Previous match',
-        docFindNext: 'Next match',
-        docFindClose: 'Close find',
-        modeRead: 'Read',
         search: 'Search all notes',
         cancel: 'Cancel',
         saving: 'Saving…',
@@ -621,8 +591,6 @@ window.__ModuleLoader__.load({
         copySaved: 'Saved',
         copySaving: 'Saving…',
         copySaveFailed: 'Save failed: ',
-        copyRead: 'Read',
-        copyEdit: 'Edit',
         copyBold: 'Bold',
         copyH2: 'Heading 2',
         copyList: 'List',
@@ -705,8 +673,6 @@ window.__ModuleLoader__.load({
         writePickChapter: 'Pick a chapter on the left',
         writePickProject: 'Pick a project on the left',
         writePickChapterSub: 'Select a chapter to read or edit its text here',
-        writeRead: 'Read',
-        writeEdit: 'Edit',
         writeDirty: 'Unsaved',
         writeSaving: 'Saving…',
         writeNoStructure: 'No volume/chapter structure in 项目.md yet',
@@ -1380,11 +1346,30 @@ function useScrollMemo(bucket, selector, ready) {
     }
 
     /** 造一行的展示节点。active 只管 CSS 显示符号，不影响 DOM 里有没有符号。 */
-    function mdLineNode(raw, index, active) {
+    function mdLineNode(raw, index, active, forcedKind) {
       const span = document.createElement('span')
       span.className = 'md-line'
       span.setAttribute('data-line', String(index))
       span.setAttribute('data-active', active ? 'true' : 'false')
+      /*
+       * 代码块与分隔线（2026-11-23 单模式化）：阅读态渲染器不再参与，这两类
+       * 得由编辑区自己画。它们要看上下文才能判（``` 一开一合），所以不在这里
+       * 自己判，由 mdPaintEditor 顺着行序算好传下来。
+       *   · pre：围栏行整行都是符号，包进 .md-mark（非当前行自动隐藏）；
+       *          围栏内的行是代码，原样文本、不跑行内 markdown。
+       *   · hr ：--- / *** / ___ 这种，整行都是符号。
+       */
+      if (forcedKind === 'pre') {
+        span.setAttribute('data-kind', 'pre')
+        if (/^\s*```/.test(raw)) span.appendChild(mdMarkNode(raw))
+        else span.appendChild(document.createTextNode(raw))
+        return span
+      }
+      if (forcedKind === 'hr') {
+        span.setAttribute('data-kind', 'hr')
+        span.appendChild(mdMarkNode(raw))
+        return span
+      }
       const head = MD_HEAD_PATTERN.exec(raw)
       let body = raw
       if (head) {
@@ -1621,8 +1606,22 @@ function useScrollMemo(bucket, selector, ready) {
       }
       const fragment = document.createDocumentFragment()
       const visible = Math.min(Math.max(activeLine, -1), lines.length - 1)
+      /* 围栏状态要跨行累计：遇到 ``` 翻一次，围栏内的行都算代码 */
+      let inFence = false
       for (let index = 0; index < lines.length; index += 1) {
-        fragment.appendChild(mdLineNode(lines[index], index, index === visible))
+        const raw = lines[index]
+        const trimmed = raw.trim()
+        let forcedKind = ''
+        if (/^```/.test(trimmed)) {
+          /* 围栏那一行本身也画成 pre（整行是符号，非当前行自动隐藏） */
+          forcedKind = 'pre'
+          inFence = !inFence
+        } else if (inFence) {
+          forcedKind = 'pre'
+        } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+          forcedKind = 'hr'
+        }
+        fragment.appendChild(mdLineNode(raw, index, index === visible, forcedKind))
         if (index < lines.length - 1) fragment.appendChild(document.createElement('br'))
       }
       editor.textContent = ''
@@ -1903,47 +1902,6 @@ function useScrollMemo(bucket, selector, ready) {
       return line >= 0 && line < lines.length ? lines[line] : ''
     }
 
-    /**
-     * 阅读态双击 → 编辑态：把「点在正文第几个字」换算成 draft 里的全局偏移。
-     *
-     * 阅读视图是渲染后的结果（md 符号被吃掉、连续行被并成一段、空行被丢掉），
-     * 与 draft 不是一一对应，没法用块下标直接换算。这里改用「块内文本在 draft
-     * 里找第一次出现」的近似：块文本本就是 draft 的连续片段，命中率很高；
-     * 实在找不到就落回 0（文首）—— 光标丢在文首也比丢在无关的位置好。
-     */
-    function mdReadOffsetOf(container, draft) {
-      const text = String(draft === undefined || draft === null ? '' : draft)
-      if (!container) return 0
-      const selection = typeof window === 'undefined' ? null : window.getSelection()
-      if (!selection || selection.rangeCount === 0) return 0
-      const range = selection.getRangeAt(0)
-      const start = range.startContainer
-      if (!start || !container.contains(start)) return 0
-      /* 找被点的那一个块（阅读容器的一级子节点）。start 就是容器本身时
-         （双击落在容器内边距上），用 startOffset 取对应的子节点。 */
-      let block = start === container ? container.childNodes[range.startOffset] : start
-      while (block && block.parentNode !== container) block = block.parentNode
-      if (!block) return 0
-      const raw = block.textContent || ''
-      if (raw.trim() === '') return 0
-      /* 块内偏移：从块首到双击处 */
-      let local = 0
-      try {
-        const inner = document.createRange()
-        inner.selectNodeContents(block)
-        inner.setEnd(range.startContainer, range.startOffset)
-        local = inner.toString().length
-      } catch (err) {
-        return 0
-      }
-      /* 块文本在 draft 里定位：整块优先，命中不了退到前 12 个可见字符 */
-      let at = text.indexOf(raw)
-      if (at < 0) at = text.indexOf(raw.slice(0, 24))
-      if (at < 0) at = text.indexOf(raw.trim().slice(0, 12))
-      if (at < 0) return 0
-      const lead = raw.length - raw.replace(/^\s+/, '').length
-      return Math.max(0, Math.min(at + Math.max(0, local - lead), text.length))
-    }
         /* ══════════════════════════════════════════════════════════════════════
          * 编辑区接线（三处共用）
          *
@@ -2248,22 +2206,6 @@ function useScrollMemo(bucket, selector, ready) {
             pushUndo,
             activeLine: () => activeRef.current,
             caretGlobal: () => caretRef.current,
-            /**
-             * 把光标放到 draft 的全局偏移处并聚焦（阅读态双击进编辑时用，2026-11-22）。
-             * 走 mdPaintEditor 而不是直接 mdPlaceCaret：刚挂载的编辑区里还没有
-             * .md-line 结构，必须先画一遍才有落点。
-             */
-            caretTo: (global) => {
-              const node = el()
-              if (!node) return
-              const limit = draftRef.current.length
-              const at = Math.max(0, Math.min(typeof global === 'number' ? global : 0, limit))
-              const spot = mdSpotOfGlobal(draftRef.current, at)
-              activeRef.current = spot.line
-              caretRef.current = at
-              mdPaintEditor(node, draftRef.current, spot.line, at)
-              if (typeof node.focus === 'function') node.focus()
-            },
           }
         }
 
@@ -2441,166 +2383,6 @@ function useScrollMemo(bucket, selector, ready) {
       return ['.dn-reader {', `  --dn-reader-size: ${sizePx}px;`, `  --dn-reader-line: ${lineHeight};`, '}'].join('\n')
     }
 
-    // ── [t5 划线标注] 锚点与渲染 ──────────────────────────────────────────────
-    //
-    //  锚点为什么不能存 DOM 路径或 React key：
-    //    renderVaultMarkdown 的块 key 来自 nextKey() 计数器（每次渲染从 b0 重排），
-    //    与正文内容毫无关系；在文件头部插入一段，后面所有 key 全部位移。
-    //  所以锚点只能用「块序号 + 块内纯文本偏移 + 原文片段」三元组：
-    //    { blockIndex, start, end, quote, prefix, suffix }
-    //  恢复时四级重定位：精确命中 → 同块 quote 重找 → 前后 ±3 块找 → 标 orphaned。
-
-    /** 三种线型 + 五种颜色。颜色是用户自选的数据色，唯一允许裸 hex 的地方。 */
-    const MARK_STYLES = [
-      { id: 'underline', labelKey: 'markUnderline' },
-      { id: 'wave', labelKey: 'markWave' },
-      { id: 'highlight', labelKey: 'markHighlight' },
-    ]
-    const MARK_COLORS = ['#f2c94c', '#6fcf97', '#56ccf2', '#f2994a', '#bb6bd9']
-
-    /** 取一个块元素里的纯文本（不含子元素带来的多余空白差异）。 */
-    function blockTextOf(el) {
-      return el ? el.textContent || '' : ''
-    }
-
-    /**
-     * 把 DOM Range 换算成「块序号 + 块内偏移」。
-     * 只在 .vp-read 的直接子块上定位；返回 null 表示选区跨块或不在阅读区。
-     */
-    function rangeToAnchor(range, container) {
-      if (!range || !container) return null
-      const blocks = Array.from(container.children)
-      const findBlock = (node) => {
-        let el = node && node.nodeType === 3 ? node.parentNode : node
-        while (el && el !== container) {
-          if (el.parentNode === container) return el
-          el = el.parentNode
-        }
-        return null
-      }
-      const startBlock = findBlock(range.startContainer)
-      const endBlock = findBlock(range.endContainer)
-      if (!startBlock || !endBlock || startBlock !== endBlock) return null
-      const blockIndex = blocks.indexOf(startBlock)
-      if (blockIndex < 0) return null
-      // 块内偏移：从块首遍历到 Range 起点/终点，累加文本长度
-      const offsetIn = (blockEl, containerNode, containerOffset) => {
-        let total = 0
-        let found = -1
-        const walk = (node) => {
-          if (found !== -1) return
-          if (node === containerNode) {
-            found = total + containerOffset
-            return
-          }
-          if (node.nodeType === 3) {
-            total += node.nodeValue.length
-            return
-          }
-          for (const child of node.childNodes) {
-            if (found !== -1) return
-            walk(child)
-          }
-        }
-        walk(blockEl)
-        return found === -1 ? -1 : found
-      }
-      const start = offsetIn(startBlock, range.startContainer, range.startOffset)
-      const end = offsetIn(endBlock, range.endContainer, range.endOffset)
-      if (start < 0 || end <= start) return null
-      const full = blockTextOf(startBlock)
-      return {
-        blockIndex,
-        start,
-        end,
-        quote: full.slice(start, end),
-        prefix: full.slice(Math.max(0, start - 16), start),
-        suffix: full.slice(end, end + 16),
-      }
-    }
-
-    /**
-     * 把锚点重定位到当前 DOM 上。返回 { el, start, end } 或 null。
-     * 四级：精确 → 同块按 quote 找 → ±3 块找唯一 → null（调用方标 orphaned）。
-     */
-    function locateAnchor(anchor, container) {
-      if (!container || !anchor) return null
-      const blocks = Array.from(container.children)
-      const tryBlock = (blockEl, a) => {
-        const full = blockTextOf(blockEl)
-        if (full.slice(a.start, a.end) === a.quote) return { el: blockEl, start: a.start, end: a.end }
-        if (!a.quote) return null
-        const at = full.indexOf(a.quote)
-        if (at === -1) return null
-        // 唯一命中才认，多处命中说明不可靠
-        if (full.indexOf(a.quote, at + 1) !== -1) return null
-        return { el: blockEl, start: at, end: at + a.quote.length }
-      }
-      const direct = blocks[anchor.blockIndex]
-      if (direct) {
-        const hit = tryBlock(direct, anchor)
-        if (hit) return hit
-      }
-      for (let delta = 1; delta <= 3; delta += 1) {
-        for (const idx of [anchor.blockIndex - delta, anchor.blockIndex + delta]) {
-          const el = blocks[idx]
-          if (!el) continue
-          const hit = tryBlock(el, anchor)
-          if (hit) return hit
-        }
-      }
-      return null
-    }
-
-    /** 在块的纯文本偏移 [start,end) 上包一层标注 span（跨 inline 边界时逐段包）。 */
-    function wrapRangeInBlock(blockEl, start, end, mark) {
-      if (!blockEl) return
-      const walker = document.createTreeWalker(blockEl, NodeFilter.SHOW_TEXT, null)
-      let pos = 0
-      const targets = []
-      let node
-      while ((node = walker.nextNode()) !== null) {
-        const len = node.nodeValue.length
-        const from = Math.max(start, pos)
-        const to = Math.min(end, pos + len)
-        if (to > from) targets.push({ node, from: from - pos, to: to - pos })
-        pos += len
-      }
-      for (const { node: textNode, from, to } of targets) {
-        const range = document.createRange()
-        range.setStart(textNode, from)
-        range.setEnd(textNode, to)
-        const span = document.createElement('span')
-        span.className = `rm-mark rm-${mark.style}`
-        span.setAttribute('data-rm-id', mark.id)
-        if (mark.color) span.style.setProperty('--rm-color', mark.color)
-        try {
-          range.surroundContents(span)
-        } catch {
-          // 跨节点时 surroundContents 会抛，退化为 extract+insert
-          try {
-            const frag = range.extractContents()
-            span.appendChild(frag)
-            range.insertNode(span)
-          } catch {
-            // 实在包不上就跳过，不能让一条标注拖垮整页渲染
-          }
-        }
-      }
-    }
-
-    /** 清掉当前阅读区里所有由我们包的标注节点，恢复成干净文本。 */
-    function unwrapAllMarks(container) {
-      if (!container) return
-      const spans = container.querySelectorAll('span[data-rm-id]')
-      for (const span of Array.from(spans)) {
-        const parent = span.parentNode
-        if (!parent) continue
-        while (span.firstChild) parent.insertBefore(span.firstChild, span)
-        parent.removeChild(span)
-        parent.normalize()
-      }
-    }
 
     /** 笔记库面板：左树右编辑，编辑/阅读双模式。 */
     function VaultPage(props) {      const t = props.t
@@ -2629,22 +2411,22 @@ function useScrollMemo(bucket, selector, ready) {
       const [selected, setSelected] = useState(null)
       const [doc, setDoc] = useState(null) // { path, title, text, mtime, dirty }
       const [draft, setDraft] = useState('')
-      const [mode, setMode] = useState('read')
+      /* 单模式（2026-11-23 大王定案「只保留电子书的阅读态」）：
+         普通文档恒为编辑态，只有电子书这类只读文档才走阅读态。 */
+      const mode = doc !== null && doc.readOnly === true ? 'read' : 'edit'
       const [saveState, setSaveState] = useState('idle')
       const [message, setMessage] = useState('')
       /*
-       * 切到工作台外再切回来（2026-11-19 大王要求）：把「打开的文件」与
-       * 「阅读还是编辑」写回内存。主面板 main 是 keyed slot，切到会话页时
-       * 整个工作台被卸载，这些 state 随之丢掉 → 切回来是空白首页。
+       * 切到工作台外再切回来（2026-11-19 大王要求）：把「打开的文件」写回内存。
+       * 主面板 main 是 keyed slot，切到会话页时整个工作台被卸载，这些 state
+       * 随之丢掉 → 切回来是空白首页。
+       * 2026-11-23 单模式化：不再记「阅读还是编辑」（只有一个状态），
+       * 滚动位置改记编辑面 .dn-edit-surface。
        */
       useEffect(() => {
         BOARD_MEMO.vault.selectedPath = selected && typeof selected.path === 'string' ? selected.path : ''
       }, [selected])
-      useEffect(() => {
-        BOARD_MEMO.vault.mode = mode
-      }, [mode])
-      /* 正文滚动位置（.vp-read 是阅读态滚动容器） */
-      useScrollMemo(BOARD_MEMO.vault, '.vp-read', doc ? doc.path : '')
+      useScrollMemo(BOARD_MEMO.vault, '.dn-edit-surface', doc ? doc.path : '')
       const [error, setError] = useState('')
       const [imageTick, setImageTick] = useState(0)
       const [confirmDelete, setConfirmDelete] = useState(false)
@@ -2703,17 +2485,6 @@ function useScrollMemo(bucket, selector, ready) {
       const readerDirty = useRef(false)
       const renameGuard = useRef({ cancelled: false, done: false })
       const messageTimer = useRef(null)
-      // ── [t5 划线标注] ──
-      /** 当前文件的标注列表（服务端 annotations.json，跟库内相对路径走）。 */
-      const [marks, setMarks] = useState([])
-      /** 选中文本后弹出的浮动工具条位置与内容；null = 不显示。 */
-      const [markBar, setMarkBar] = useState(null)
-      /** 正在编辑的标注 id（用于删除/改色）；null = 新建。 */
-      const [markEditing, setMarkEditing] = useState(null)
-      /** 标注列表面板开关。 */
-      const [markPanelOpen, setMarkPanelOpen] = useState(false)
-      /** 服务端标注读写失败时的提示。 */
-      const [markError, setMarkError] = useState('')
       // ── [t8 章节导航] ──
       /** 当前电子书的解析结果：{ kind, title, toc, chapters }；null = 不是电子书或还没解析。 */
       const [book, setBook] = useState(null)
@@ -2723,13 +2494,6 @@ function useScrollMemo(bucket, selector, ready) {
       const [tocActive, setTocActive] = useState('')
       /** 解析失败提示。 */
       const [tocError, setTocError] = useState('')
-      // ── [t5+ 全文搜索] ── 当前文档内的查找，区别于左侧文件树的全库搜索。
-      const [docFindOpen, setDocFindOpen] = useState(false)
-      const [docFindQuery, setDocFindQuery] = useState('')
-      /** 命中项：{ index, blockEl, start, end } 的列表；index 用于「第 n / 共 m」。 */
-      const [docFindHits, setDocFindHits] = useState([])
-      const [docFindCursor, setDocFindCursor] = useState(0)
-      const docFindInputRef = useRef(null)
       /** 大纲轨是否收起。跟 reader-settings 的 tocCollapsed 同步。
        *  初始 true = 与 reader-settings 的默认值一致，避免「先展开一帧再收起」的闪烁。 */
       const [outlineCollapsed, setOutlineCollapsed] = useState(true)
@@ -3023,139 +2787,6 @@ function useScrollMemo(bucket, selector, ready) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [mode, draft, readerFont, readerFontSize, readerLine, readerBg])
 
-      // ── [t5 划线标注] 换文件时读该文件的标注。
-      // 失败只提示不阻塞：标注读不出来也必须能正常看笔记。
-      useEffect(() => {
-        let alive = true
-        setMarkBar(null)
-        setMarkEditing(null)
-        if (!doc || !doc.path) {
-          setMarks([])
-          return undefined
-        }
-        vaultApiGet(`/annotations?path=${encodeURIComponent(doc.path)}`)
-          .then((data) => {
-            if (!alive) return
-            const items = data && Array.isArray(data.items) ? data.items : []
-            setMarks(items)
-            setMarkError('')
-          })
-          .catch(() => {
-            if (alive) setMarks([])
-          })
-        return () => {
-          alive = false
-        }
-      }, [doc && doc.path])
-
-      // ── [t5 划线标注] 阅读区渲染完成后把标注画上去。
-      // 依赖 blocks 与 marks：任何一次重渲染都要先 unwrap 再重包，
-      // 否则 React 的 reconciliation 会和我们包的 span 打架。
-      useEffect(() => {
-        const panel = readerRef.current
-        if (!panel || mode !== 'read') return
-        const container = panel.querySelector('.vp-read')
-        if (!container) return
-        unwrapAllMarks(container)
-        if (!marks || marks.length === 0) return
-        for (const mark of marks) {
-          const hit = locateAnchor(mark, container)
-          if (!hit) continue // orphaned：数据保留，只是这次画不出来
-          wrapRangeInBlock(hit.el, hit.start, hit.end, mark)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [marks, mode, doc && doc.text, imageTick, book])
-
-      // ── [全文搜索] 统一在这里执行查找（重渲染后自动重建高亮）──
-      // ── [全文搜索] 查找的实际执行放在 runFind 定义之后（见下方 useLayoutEffect），
-      //    避免「函数在声明前被引用」这种读起来可疑的写法。
-
-      // ── [t5 划线标注] 选中文字后弹工具条。
-      // 用 mouseup/keyup 而不是 selectionchange：后者在拖选过程中疯狂触发。
-      useEffect(() => {
-        const panel = readerRef.current
-        if (!panel || mode !== 'read') {
-          setMarkBar(null)
-          return undefined
-        }
-        const onSelect = () => {
-          const sel = window.getSelection()
-          if (!sel || sel.isCollapsed || sel.rangeCount === 0) {
-            setMarkBar(null)
-            return
-          }
-          const range = sel.getRangeAt(0)
-          const container = panel.querySelector('.vp-read')
-          if (!container || !container.contains(range.commonAncestorContainer)) {
-            setMarkBar(null)
-            return
-          }
-          const anchor = rangeToAnchor(range, container)
-          if (!anchor) {
-            setMarkBar(null)
-            return
-          }
-          const rect = range.getBoundingClientRect()
-          const panelRect = panel.getBoundingClientRect()
-          setMarkBar({
-            anchor,
-            editing: null,
-            top: Math.max(4, rect.top - panelRect.top - 46),
-            left: Math.max(8, rect.left - panelRect.left + rect.width / 2 - 110),
-          })
-        }
-        const onDown = (event) => {
-          // 点工具条本身不算取消
-          if (event.target && event.target.closest && event.target.closest('.rm-bar')) return
-          setMarkBar(null)
-        }
-        panel.addEventListener('mouseup', onSelect)
-        panel.addEventListener('keyup', onSelect)
-        document.addEventListener('mousedown', onDown)
-        return () => {
-          panel.removeEventListener('mouseup', onSelect)
-          panel.removeEventListener('keyup', onSelect)
-          document.removeEventListener('mousedown', onDown)
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [mode, doc && doc.path])
-
-      /** 保存整份标注到服务端（整体覆盖该文件）。失败提示但不回滚内存态。 */
-      const persistMarks = (next) => {
-        setMarks(next)
-        if (!doc || !doc.path) return
-        void vaultApiPost('/annotations', { path: doc.path, items: next }, 'PUT')
-          .then(() => setMarkError(''))
-          .catch(() => setMarkError(t('markSaveFailed')))
-      }
-
-      /** 新建一条标注。 */
-      const addMark = (style) => {
-        if (!markBar) return
-        const now = new Date().toISOString()
-        const mark = {
-          id: `rm_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-          ...markBar.anchor,
-          style,
-          color: MARK_COLORS[0],
-          note: '',
-          createdAt: now,
-          updatedAt: now,
-        }
-        persistMarks(marks.concat([mark]))
-        setMarkBar(null)
-        window.getSelection()?.removeAllRanges()
-      }
-
-      /** 改某条标注的颜色/线型。 */
-      const updateMark = (id, patch) => {
-        persistMarks(marks.map((item) => (item.id === id ? { ...item, ...patch, updatedAt: new Date().toISOString() } : item)))
-      }
-
-      /** 删某条标注。 */
-      const removeMark = (id) => {
-        persistMarks(marks.filter((item) => item.id !== id))
-      }
 
       // ── [t8 章节导航] 当前文件是电子书时解析章节。
       // 只对 txt/mobi/azw3 调 /parse；md 走原来的纯文本阅读，不显示章节入口。
@@ -3183,131 +2814,10 @@ function useScrollMemo(bucket, selector, ready) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [doc && doc.path])
 
-      // ── [全文搜索] 在当前文档的渲染结果里查找并高亮 ──────────────────────
-      // 与左侧文件树的全库搜索不同：这里只搜「当前打开的这篇」。
-      // 做法：遍历 .vp-read 的文本节点，用 Range 包 <mark class="df-hit">，
-      //      不修改 draft/doc（纯展示层），因此不影响保存与 md 原文。
-      const FIND_HIT_CLASS = 'df-hit'
-
-      /** 清掉所有高亮，恢复干净文本。 */
-      const clearFindHits = () => {
-        const panel = readerRef.current
-        if (!panel) return
-        const container = panel.querySelector('.vp-read')
-        if (!container) return
-        for (const mark of Array.from(container.querySelectorAll(`mark.${FIND_HIT_CLASS}`))) {
-          const parent = mark.parentNode
-          if (!parent) continue
-          while (mark.firstChild) parent.insertBefore(mark.firstChild, mark)
-          parent.removeChild(mark)
-          parent.normalize()
-        }
-      }
-
-      /** 执行查找：返回命中数量。 */
-      const runFind = (rawQuery) => {
-        clearFindHits()
-        const needle = String(rawQuery || '').trim()
-        if (needle === '') {
-          setDocFindHits([])
-          setDocFindCursor(0)
-          return 0
-        }
-        const panel = readerRef.current
-        if (!panel) return 0
-        const container = panel.querySelector('.vp-read')
-        if (!container) return 0
-        const lower = needle.toLowerCase()
-        const hits = []
-        // 收集所有文本节点，逐个查找（跨节点不匹配，够用且不会破坏 DOM 结构）
-        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null)
-        const textNodes = []
-        let node
-        while ((node = walker.nextNode()) !== null) {
-          // 跳过我们自己的标注/高亮节点里的文本，避免套娃
-          const parentEl = node.parentNode
-          if (parentEl && parentEl.closest && parentEl.closest(`mark.${FIND_HIT_CLASS}, span[data-rm-id]`)) continue
-          textNodes.push(node)
-        }
-        for (const textNode of textNodes) {
-          const value = textNode.nodeValue || ''
-          const valueLower = value.toLowerCase()
-          let from = 0
-          while (true) {
-            const at = valueLower.indexOf(lower, from)
-            if (at === -1) break
-            hits.push({ node: textNode, start: at, end: at + needle.length })
-            from = at + needle.length
-            if (hits.length >= 500) break
-          }
-          if (hits.length >= 500) break
-        }
-        // 从后往前包，避免前面的包裹影响后面的偏移
-        for (let i = hits.length - 1; i >= 0; i -= 1) {
-          const hit = hits[i]
-          try {
-            const range = document.createRange()
-            range.setStart(hit.node, hit.start)
-            range.setEnd(hit.node, hit.end)
-            const mark = document.createElement('mark')
-            mark.className = FIND_HIT_CLASS
-            range.surroundContents(mark)
-            hit.markEl = mark
-          } catch {
-            /* 包不上就跳过这一条，不能让搜索拖垮渲染 */
-          }
-        }
-        const valid = hits.filter((h) => h.markEl)
-        setDocFindHits(valid)
-        setDocFindCursor(valid.length > 0 ? 0 : -1)
-        if (valid.length > 0) {
-          valid[0].markEl.scrollIntoView({ block: 'center', behavior: 'smooth' })
-          valid[0].markEl.setAttribute('data-active', 'true')
-        }
-        return valid.length
-      }
-
-      /** 跳到第 n 个命中（相对当前游标）。 */
-      const gotoFindHit = (delta) => {
-        if (docFindHits.length === 0) return
-        const next = (docFindCursor + delta + docFindHits.length) % docFindHits.length
-        for (const hit of docFindHits) {
-          if (hit.markEl) hit.markEl.removeAttribute('data-active')
-        }
-        const target = docFindHits[next]
-        if (target && target.markEl) {
-          target.markEl.setAttribute('data-active', 'true')
-          target.markEl.scrollIntoView({ block: 'center', behavior: 'smooth' })
-        }
-        setDocFindCursor(next)
-      }
-
-      /** 关闭搜索框并清理高亮。 */
-      const closeFind = () => {
-        setDocFindOpen(false)
-        setDocFindQuery('')
-        setDocFindHits([])
-        setDocFindCursor(0)
-        clearFindHits()
-      }
-
-      // ── [全文搜索] 统一在这里执行查找（重渲染后自动重建高亮）──
-      // React 每次重渲染都会重建 .vp-read 的 DOM（切字体、换书、分章加载完成等），
-      // 命令式包上去的 <mark> 会随之消失。放在 effect 里统一执行有两个好处：
-      //   ① 输入变化与 DOM 重建走同一条路径，不会出现「搜索框开着但高亮没了」；
-      //   ② 输入框的 onChange 只需 setState，逻辑单一，不会有双重执行。
-      useLayoutEffect(() => {
-        if (!docFindOpen || mode !== 'read') return
-        const query = docFindQuery.trim()
-        if (query === '') {
-          clearFindHits()
-          setDocFindHits([])
-          setDocFindCursor(0)
-          return
-        }
-        runFind(query)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-      }, [docFindOpen, docFindQuery, book, mode, doc && doc.text, imageTick])
+      /* 文档内查找实现已删（2026-11-23 单模式化）：它遍历 .vp-read 的渲染 DOM，
+         而 .vp-read 只存在于阅读态；普通文档不再有阅读态 → 改用浏览器原生 window.find。
+         相关 state（docFindOpen / docFindQuery / docFindHits / docFindCursor / docFindInputRef）
+         与查找条一并删除。 */
 
       /** 点章节：滚到该章起始块（精确 DOM 定位，不靠文本猜）。 */
       const jumpToChapter = (chapterId) => {
@@ -3328,22 +2838,27 @@ function useScrollMemo(bucket, selector, ready) {
       /**
        * 跳到大纲项。
        *
-       * 两种数据源的定位方式不同，不能混用：
+       * 三种情况定位方式都不同，不能混用：
        *   · 电子书：标题节点带 data-chapter-id，按 id 找元素（复用 jumpToChapter）
-       *   · Markdown：没有稳定 id，按**标题在源码里的行号**找渲染出的对应标题节点
-       *     （阅读模式的 h1..h6 是按顺序渲染的，第 n 个标题 = 源码第 n 个标题行）
+       *   · Markdown（编辑态，2026-11-23 单模式化后普通文档恒为编辑态）：
+       *     按**标题在源码里的行号**找编辑区里那个 .md-line（行号写在 data-line 上）
+       *   · Markdown（阅读态，只剩超长降级这一种）：退回按标题序号找渲染节点
        *
-       * ⚠️ Markdown 这条为什么不能也用 id：渲染器的 key 是内部计数器，
-       *    不是标题文本，跨次渲染会变；用行号做匹配最稳。
+       * ⚠️ Markdown 为什么不用 id：渲染器的 key 是内部计数器，不是标题文本，
+       *    跨次渲染会变；用源码行号做匹配最稳。
        */
       const jumpToOutline = (node) => {
         if (!node) return
         if (node.source === 'book') { jumpToChapter(node.id); return }
         const panel = readerRef.current
         if (!panel) return
-        const headings = Array.from(panel.querySelectorAll('.vp-read .v-h'))
-        const target = headings[node.ordinal]
         setTocActive(node.id)
+        /* 编辑态：行号直接写在 .md-line 的 data-line 上，最准 */
+        const byLine = typeof node.line === 'number'
+          ? panel.querySelector(`.md-line[data-line="${node.line}"]`)
+          : null
+        const headings = byLine === null ? Array.from(panel.querySelectorAll('.vp-read .v-h')) : []
+        const target = byLine === null ? headings[node.ordinal] : byLine
         if (target && typeof target.scrollIntoView === 'function') {
           target.scrollIntoView({ block: 'start', behavior: 'smooth' })
         }
@@ -3476,7 +2991,6 @@ function useScrollMemo(bucket, selector, ready) {
         setMoveOpen(false)
         setError('')
         setMessage('')
-        setMode('read')
         if (entry.image) {
           setDoc(null)
           setDraft('')
@@ -3517,7 +3031,6 @@ function useScrollMemo(bucket, selector, ready) {
        * 等恢复逻辑读内存时，记录已经被自己清空了。
        */
       const memoPathAtMount = useRef(typeof BOARD_MEMO.vault.selectedPath === 'string' ? BOARD_MEMO.vault.selectedPath : '')
-      const memoModeAtMount = useRef(BOARD_MEMO.vault.mode === 'edit' ? 'edit' : 'read')
       useEffect(() => {
         if (restoredRef.current) return
         if (flatTree.length === 0) return
@@ -3526,9 +3039,7 @@ function useScrollMemo(bucket, selector, ready) {
         if (path === '') return
         const node = nodeOfPath(flatTree, path)
         if (!node || node.type !== 'file') return
-        void openFile(node).then(() => {
-          if (memoModeAtMount.current === 'edit') setMode('edit')
-        })
+        void openFile(node)
         // eslint-disable-next-line react-hooks/exhaustive-deps
       }, [flatTree])
 
@@ -3590,6 +3101,9 @@ function useScrollMemo(bucket, selector, ready) {
         return out.length > 0 ? buildImage(out.join('/')) : buildImage('')
       }
 
+      /* 只有只读文档（电子书等）才会走阅读态，所以这里的 mode === 'read' 等价于
+         doc.readOnly === true；普通文档恒为编辑态，不再渲染这套 Markdown 块
+         （2026-11-23 单模式化，大王定案「只保留电子书的阅读态」）。 */
       const blocks = useMemo(
         () => (mode === 'read' && doc ? renderVaultMarkdown(doc.text, resolveImage) : null),
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4078,26 +3592,6 @@ function useScrollMemo(bucket, selector, ready) {
         onDirty: () => setDoc((current) => (current ? { ...current, dirty: true } : current)),
         onSave: () => void saveDoc(),
       })
-
-      /*
-       * 阅读态双击进编辑（2026-11-22 大王要求）：在正文上连点两下直接开始写，
-       * 光标尽量落在点中的那一段。只读文档（电子书）与图片不进。
-       * 划线标注靠拖选（mouseup）触发，双击不会影响它。
-       */
-      const pendingCaretRef = useRef(null)
-      const startEditAtClick = (event) => {
-        if (mode === 'edit') return
-        if (!canEdit) return
-        pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
-        setMode('edit')
-      }
-      useLayoutEffect(() => {
-        if (mode !== 'edit') return
-        if (pendingCaretRef.current === null) return
-        const at = pendingCaretRef.current
-        pendingCaretRef.current = null
-        mdPreview.caretTo(at)
-      }, [mode])
 
       /** 在编辑框里插入/包裹格式标记。 */
       const applyFormat = (kind) => {
@@ -4597,20 +4091,12 @@ function useScrollMemo(bucket, selector, ready) {
             {
               type: 'button',
               className: 'vpb-pill vpb-ib vpb-ib-icon',
-              'data-on': docFindOpen ? 'true' : 'false',
               disabled: !doc,
               title: t('docFind'),
               'aria-label': t('docFind'),
-              'aria-pressed': docFindOpen ? 'true' : 'false',
               onClick: () => {
-                if (docFindOpen) {
-                  closeFind()
-                } else {
-                  setDocFindOpen(true)
-                  requestAnimationFrame(() => {
-                    if (docFindInputRef.current) docFindInputRef.current.focus()
-                  })
-                }
+                /* 浏览器原生查找（与文案区/写作区同一套）*/
+                if (typeof window.find === 'function') window.find('', false, false, true, false, false, false)
               },
             },
             h(BoardIcon, { name: 'search', className: 'wb-ic' }),
@@ -4628,18 +4114,6 @@ function useScrollMemo(bucket, selector, ready) {
             h(BoardIcon, { name: 'copy', className: 'wb-ic' }),
           ),
         ),
-        h('i', { className: 'vpb-sep' }),
-        h(
-          'button',
-          {
-            type: 'button', className: 'vpb-pill', 'data-on': markPanelOpen ? 'true' : 'false',
-            onClick: () => setMarkPanelOpen((open) => !open), disabled: !doc, title: t('markPanel'),
-            'aria-pressed': markPanelOpen ? 'true' : 'false',
-          },
-          h(BoardIcon, { name: 'pen', className: 'wb-ic-xs' }),
-          h('span', null, String(marks.length)),
-        ),
-        h('i', { className: 'vpb-sep' }),
         saveState === 'saving'
           ? h('span', { className: 'vpb-state', 'data-state': 'saving' }, t('vaultSaving'))
           : saveState === 'error'
@@ -4841,78 +4315,12 @@ function useScrollMemo(bucket, selector, ready) {
             h('span', { className: 'dn-spacer' }),
 
             /* 复制路径按钮已删（2026-11-22）：入口挪进左栏右键菜单，文件夹也能复制 */
-            h(
-              'div',
-              { className: 'vp-mode' },
-              h('button', { type: 'button', className: 'vp-modebtn', 'data-active': mode === 'read', onClick: () => setMode('read') }, t('modeRead')),
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'vp-modebtn',
-                  'data-active': mode === 'edit',
-                  // 电子书只读：禁用编辑入口，避免用户编辑后保存把二进制书写坏
-                  disabled: isReadOnlyDoc,
-                  title: isReadOnlyDoc ? t('vaultReadOnly') : undefined,
-                  onClick: () => {
-                    if (isReadOnlyDoc) return
-                    setMode('edit')
-                  },
-                },
-                t('modeEdit'),
-              ),
-            ),
+            /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通文档恒为编辑态 */
           ),
           docBar,
           // ── [全文搜索] 正文栏内的查找条：只在阅读模式显示，关闭即清理高亮
-          docFindOpen && mode === 'read'
-            ? h(
-              'div',
-              { className: 'df-bar' },
-              h('input', {
-                ref: docFindInputRef,
-                className: 'df-input',
-                type: 'text',
-                value: docFindQuery,
-                placeholder: t('docFindPlaceholder'),
-                onChange: (event) => {
-                  // 只更新关键词，实际查找由下面的 useLayoutEffect 统一执行
-                  setDocFindQuery(event.target.value)
-                },
-                onKeyDown: (event) => {
-                  if (event.key === 'Enter') {
-                    event.preventDefault()
-                    if (docFindHits.length > 0) gotoFindHit(event.shiftKey ? -1 : 1)
-                    else runFind(docFindQuery)
-                  } else if (event.key === 'Escape') {
-                    event.preventDefault()
-                    closeFind()
-                  }
-                },
-              }),
-              h(
-                'span',
-                { className: 'df-count' },
-                docFindQuery.trim() === ''
-                  ? ''
-                  : docFindHits.length === 0
-                    ? t('docFindNone')
-                    : `${docFindCursor + 1} / ${docFindHits.length}`,
-              ),
-              h(
-                'button',
-                { type: 'button', className: 'df-navbtn', onClick: () => gotoFindHit(-1), disabled: docFindHits.length === 0, title: t('docFindPrev') },
-                '↑',
-              ),
-              h(
-                'button',
-                { type: 'button', className: 'df-navbtn', onClick: () => gotoFindHit(1), disabled: docFindHits.length === 0, title: t('docFindNext') },
-                '↓',
-              ),
-              h('button', { type: 'button', className: 'df-close', onClick: closeFind, title: t('docFindClose') }, '×'),
-            )
-            : null,
-          // ── [t7 视觉主题] .dn-reader 包裹层：包住整个三元，
+          /* 文档内查找条已删（2026-11-23 单模式化）：它只认阅读态 DOM。
+             素材区的查找改成和文案区/写作区同一套（浏览器原生 window.find）。 */
           //    让阅读区与编辑区共享同一套底色/字体变量（队长裁定：不能只包 read 分支）。
           //    .vp-read 与编辑区的内部结构零改动。
           h(
@@ -4929,70 +4337,9 @@ function useScrollMemo(bucket, selector, ready) {
                 null,
                 h(
                   'div',
-                  { className: 'vp-read', onDoubleClick: startEditAtClick },
+                  { className: 'vp-read' },
                   readNodes,
                 ),
-                // ── [t5 划线标注] 选中后浮出的工具条
-                markBar
-                  ? h(
-                    'div',
-                    {
-                      className: 'rm-bar',
-                      style: { top: `${markBar.top}px`, left: `${markBar.left}px` },
-                    },
-                    MARK_STYLES.map((item) =>
-                      h(
-                        'button',
-                        {
-                          key: item.id,
-                          type: 'button',
-                          className: `rm-stylebtn rm-stylebtn-${item.id}`,
-                          onClick: () => addMark(item.id),
-                          title: t(item.labelKey),
-                        },
-                        t(item.labelKey),
-                      ),
-                    ),
-                    h('span', { className: 'rm-bar-sep' }),
-                    MARK_COLORS.map((color) =>
-                      h('button', {
-                        key: color,
-                        type: 'button',
-                        className: 'rm-colorbtn',
-                        style: { '--rm-swatch': color },
-                        onClick: () => addMark('highlight'),
-                        title: color,
-                      }),
-                    ),
-                  )
-                  : null,
-                // ── [t5 划线标注] 标注列表
-                markPanelOpen && marks.length > 0
-                  ? h(
-                    'div',
-                    { className: 'rm-panel' },
-                    h(
-                      'div',
-                      { className: 'rm-panel-head' },
-                      h('span', null, t('markPanel')),
-                      h('button', { type: 'button', className: 'rm-panel-close', onClick: () => setMarkPanelOpen(false) }, '×'),
-                    ),
-                    markError !== '' ? h('div', { className: 'vp-error' }, markError) : null,
-                    marks.map((mark) =>
-                      h(
-                        'div',
-                        { className: 'rm-row', key: mark.id },
-                        h('span', { className: `rm-dot rm-${mark.style}`, style: { '--rm-color': mark.color } }),
-                        h('span', { className: 'rm-row-quote', title: mark.quote }, mark.quote || `#${mark.blockIndex}`),
-                        h(
-                          'button',
-                          { type: 'button', className: 'rm-row-del', onClick: () => removeMark(mark.id), title: t('markDelete') },
-                          '×',
-                        ),
-                      ),
-                    ),
-                  )
-                  : null,
               )
               : h(
                 Fragment,
@@ -8736,31 +8083,7 @@ function useScrollMemo(bucket, selector, ready) {
              */
               h('span', { className: 'cb-dn-spacer' }),
               // 阅读 / 编辑：与素材库同一套观感
-              h(
-                'div',
-                { className: 'vp-mode' },
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-modebtn',
-                    'data-active': mode === 'read',
-                    onClick: () => props.onMode('read'),
-                  },
-                  t('copyRead'),
-                ),
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-modebtn',
-                    'data-active': mode === 'edit',
-                    disabled: doc.readOnly === true,
-                    onClick: () => props.onMode('edit'),
-                  },
-                  t('copyEdit'),
-                ),
-              ),
+              /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通稿件恒为编辑态 */
             ),
           /* 文案台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
              阅读按钮由下面的 ReaderBar 独占一行方框 */
@@ -8782,17 +8105,17 @@ function useScrollMemo(bucket, selector, ready) {
             docPath: doc.path,
             onRestored: () => props.onReloadDoc(doc.path),
           }),
-          mode === 'edit'
-            ? h('div', { className: 'cb-edit-wrap' }, props.editor)
-            : h(
+          mode === 'read'
+            ? h(
                 'div',
-                { className: 'cb-prose', onDoubleClick: props.onBodyDoubleClick },
+                { className: 'cb-prose' },
                 blocks.map((block, index) => {
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
                   if (block.t === 'quote') return h('p', { key: index, className: 'cb-quote' }, block.text)
                   return h('p', { key: index }, block.text)
                 }),
-              ),
+              )
+            : h('div', { className: 'cb-edit-wrap' }, props.editor),
           h(
             'div',
             { className: 'cb-doc-foot' },
@@ -8856,7 +8179,8 @@ function useScrollMemo(bucket, selector, ready) {
         const renameGuard = useRef({ done: false })
         const [doc, setDoc] = useState(null)
         const [draft, setDraft] = useState('')
-        const [mode, setMode] = useState('read')
+        /* 单模式（2026-11-23）：普通稿件恒为编辑态，只读电子书才走阅读态。 */
+        const mode = doc !== null && doc.readOnly === true ? 'read' : 'edit'
         const [saveState, setSaveState] = useState('idle')
         const [error, setError] = useState('')
         const [notice, setNotice] = useState('')
@@ -8867,10 +8191,7 @@ function useScrollMemo(bucket, selector, ready) {
          * slot，切到会话页时整个工作台被卸载，阅读/编辑模式与滚动位置都会丢。
          * 这里把它们写回内存，重新挂载时再还原。
          */
-        useEffect(() => {
-          BOARD_MEMO.copy.mode = mode
-        }, [mode])
-        useScrollMemo(BOARD_MEMO.copy, '.cb-prose', doc ? doc.path : '')
+        useScrollMemo(BOARD_MEMO.copy, '.cb-editor-surface', doc ? doc.path : '')
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
@@ -8937,7 +8258,6 @@ function useScrollMemo(bucket, selector, ready) {
           setActivePath('')
           setDoc(null)
           setDraft('')
-          setMode('read')
           setQuery('')
           void reload()
           // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -8951,7 +8271,6 @@ function useScrollMemo(bucket, selector, ready) {
          * 否则用户主动关掉稿件后会被这里悄悄又打开。
          */
         const copyRestoredRef = useRef(false)
-        const memoCopyModeAtMount = useRef(BOARD_MEMO.copy.mode === 'edit' ? 'edit' : 'read')
         const memoCopyPathAtMount = useRef(typeof BOARD_MEMO.copy.activePath === 'string' ? BOARD_MEMO.copy.activePath : '')
         useEffect(() => {
           if (copyRestoredRef.current) return
@@ -8960,9 +8279,7 @@ function useScrollMemo(bucket, selector, ready) {
           const path = typeof memoCopyPathAtMount.current === 'string' ? memoCopyPathAtMount.current : ''
           if (path === '') return
           if (!docs.some((item) => item && item.path === path)) return
-          void pick(path).then(() => {
-            if (memoCopyModeAtMount.current === 'edit') setMode('edit')
-          })
+          void pick(path)
           // eslint-disable-next-line react-hooks/exhaustive-deps
         }, [docs])
 
@@ -8992,8 +8309,6 @@ function useScrollMemo(bucket, selector, ready) {
             })
             setDraft(text)
             setSaveState('idle')
-            // 只读格式不允许进编辑态
-            if (data.readOnly === true) setMode('read')
           } catch (err) {
             setDoc(null)
             setError(t('copyLoadFailed') + messageOf(err))
@@ -9279,22 +8594,6 @@ function useScrollMemo(bucket, selector, ready) {
           onSave: () => void save(true),
         })
 
-        /* 阅读态双击进编辑（2026-11-22 大王要求）：同素材区。 */
-        const pendingCaretRef = useRef(null)
-        const startEditAtClick = (event) => {
-          if (mode === 'edit') return
-          if (!doc || doc.readOnly === true) return
-          pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
-          setMode('edit')
-        }
-        useLayoutEffect(() => {
-          if (mode !== 'edit') return
-          if (pendingCaretRef.current === null) return
-          const at = pendingCaretRef.current
-          pendingCaretRef.current = null
-          mdPreview.caretTo(at)
-        }, [mode])
-
         /**
          * 格式按钮：往纯文本里插 markdown 标记。
          * 绝不生成 HTML —— 磁盘只存 md，编辑器是纯文本（契约底线 2）。
@@ -9522,7 +8821,6 @@ function useScrollMemo(bucket, selector, ready) {
             await vaultApiPost('/file', { path, content: '# ' + name + '\n\n' }, 'PUT')
             await reload()
             await pick(path)
-            setMode('edit')
             /* 新建完直接进原地命名（2026-11-19 大王要求，不再弹底部输入条） */
             renameNode({ path, name: name + '.md', type: 'file' })
           } catch (err) {
@@ -9642,7 +8940,6 @@ function useScrollMemo(bucket, selector, ready) {
             saveState,
             error,
             disabled: false,
-            onMode: (next) => setMode(next),
             onFormat: applyFormat,
             onAssist: (how) => void sendToAssist(how),
             aiBusy,
@@ -9660,7 +8957,6 @@ function useScrollMemo(bucket, selector, ready) {
             onTitleCommit: commitTitleEdit,
             onTitleCancel: closeTitleEdit,
             /* 阅读态双击进编辑（2026-11-22 大王要求） */
-            onBodyDoubleClick: (event) => startEditAtClick(event),
             editor: h('div', {
               key: 'cb-edit-surface',
               ref: (node) => {
@@ -10539,30 +9835,7 @@ function useScrollMemo(bucket, selector, ready) {
               { className: 'wbg-doc-meta' },
             /* 2026-11-18：元数据与字数移到底部，这里只留「阅读 / 编辑」切换 */
               h('span', { className: 'wbg-dn-spacer' }),
-              h(
-                'div',
-                { className: 'vp-mode' },
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-modebtn',
-                    'data-active': props.mode === 'read',
-                    onClick: () => props.onMode('read'),
-                  },
-                  t('writeRead'),
-                ),
-                h(
-                  'button',
-                  {
-                    type: 'button',
-                    className: 'vp-modebtn',
-                    'data-active': props.mode === 'edit',
-                    onClick: () => props.onMode('edit'),
-                  },
-                  t('writeEdit'),
-                ),
-              ),
+              /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通正文恒为编辑态 */
             ),
           /* 写作台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
              阅读按钮由下面的 ReaderBar 独占一行方框 */
@@ -10581,18 +9854,18 @@ function useScrollMemo(bucket, selector, ready) {
             docPath: file.path,
             onRestored: () => props.onReloadDoc(file.path),
           }),
-          props.mode === 'edit'
-            ? h('div', { className: 'wbg-edit-wrap' }, props.editor)
-            : h(
+          props.mode === 'read'
+            ? h(
                 'div',
-                { className: 'wbg-prose', onDoubleClick: props.onBodyDoubleClick },
+                { className: 'wbg-prose' },
                 blocks.map((block, index) => {
                   if (block.t === 'sep') return h('div', { key: index, className: 'wbg-scene-sep' }, '◆')
                   if (block.t === 'h2') return h('h2', { key: index }, block.text)
                   if (block.t === 'quote') return h('p', { key: index, className: 'wbg-p-quote' }, block.text)
                   return h('p', { key: index }, block.text)
                 }),
-              ),
+              )
+            : h('div', { className: 'wbg-edit-wrap' }, props.editor),
           h(
             'div',
             { className: 'wbg-doc-foot' },
@@ -10683,7 +9956,8 @@ function useScrollMemo(bucket, selector, ready) {
         const [draft, setDraft] = useState('')
         /* 阅读设置副本（2026-11-18）：ReaderBar 回调上来，应用到正文 */
         const [readerCfg, setReaderCfg] = useState({ fontSize: 14, font: '', line: 1.85, bg: '' })
-        const [mode, setMode] = useState('read')
+        /* 单模式（2026-11-23）：普通正文恒为编辑态，只读电子书才走阅读态。 */
+        const mode = file !== null && file.readOnly === true ? 'read' : 'edit'
         const [saveState, setSaveState] = useState('idle')
         const [error, setError] = useState('')
         const [notice, setNotice] = useState('')
@@ -10696,10 +9970,7 @@ function useScrollMemo(bucket, selector, ready) {
          * slot，切到会话页时整个工作台被卸载，阅读/编辑模式与正文滚动位置都会丢。
          * 这里把它们写回内存，重新挂载时再还原。
          */
-        useEffect(() => {
-          BOARD_MEMO.write.mode = mode
-        }, [mode])
-        useScrollMemo(BOARD_MEMO.write, '.wbg-prose', file ? file.path : '')
+        useScrollMemo(BOARD_MEMO.write, '.wbg-editor-surface', file ? file.path : '')
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
@@ -10973,7 +10244,6 @@ function useScrollMemo(bucket, selector, ready) {
          * 而「写回内存」的 effect 会在挂载时立刻把内存清掉，所以渲染期就抓住。
          */
         const memoProjectAtMount = useRef(typeof BOARD_MEMO.write.activeProject === 'string' ? BOARD_MEMO.write.activeProject : '')
-        const memoWriteModeAtMount = useRef(BOARD_MEMO.write.mode === 'edit' ? 'edit' : 'read')
         const memoFileAtMount = useRef(typeof BOARD_MEMO.write.activeFile === 'string' ? BOARD_MEMO.write.activeFile : '')
         useEffect(() => {
           setActiveProject('')
@@ -10994,7 +10264,6 @@ function useScrollMemo(bucket, selector, ready) {
             if (hit) {
               const data = await loadProject(hit.path)
               if (data && memoFile !== '') await restoreBody(data, memoFile)
-              if (memoWriteModeAtMount.current === 'edit') setMode('edit')
               return
             }
             // 只有一个项目时直接打开，省一次点击
@@ -11056,7 +10325,6 @@ function useScrollMemo(bucket, selector, ready) {
             setDraft(text)
             setSaveState('idle')
             setError('')
-            if (data.readOnly === true) setMode('read')
           } catch (err) {
             setError(t('writeLoadFailed') + messageOf(err))
           }
@@ -11093,7 +10361,6 @@ function useScrollMemo(bucket, selector, ready) {
                   setDraft(text)
                   setSaveState('idle')
                   setError('')
-                  if (fileData.readOnly === true) setMode('read')
                 } catch (err) {
                   setError(t('writeLoadFailed') + messageOf(err))
                 }
@@ -11351,22 +10618,6 @@ function useScrollMemo(bucket, selector, ready) {
           editorToText,
           onSave: () => void save(true),
         })
-
-        /* 阅读态双击进编辑（2026-11-22 大王要求）：同素材区。 */
-        const pendingCaretRef = useRef(null)
-        const startEditAtClick = (event) => {
-          if (mode === 'edit') return
-          if (!file) return
-          pendingCaretRef.current = mdReadOffsetOf(event.currentTarget, draft)
-          setMode('edit')
-        }
-        useLayoutEffect(() => {
-          if (mode !== 'edit') return
-          if (pendingCaretRef.current === null) return
-          const at = pendingCaretRef.current
-          pendingCaretRef.current = null
-          mdPreview.caretTo(at)
-        }, [mode])
 
         /** 格式按钮：插 markdown 标记，绝不生成 HTML。 */
         const applyFormat = (kind) => {
@@ -11782,7 +11033,6 @@ function useScrollMemo(bucket, selector, ready) {
             saveState,
             error,
             aiBusy,
-            onMode: (next) => setMode(next),
             onFormat: applyFormat,
             onAssist: (how) => void sendToAssist(how),
             onTimeline: () => setOutlineOpen((open) => !open),
@@ -11798,7 +11048,6 @@ function useScrollMemo(bucket, selector, ready) {
             onTitleCommit: commitTitleEdit,
             onTitleCancel: closeTitleEdit,
             /* 阅读态双击进编辑（2026-11-22 大王要求） */
-            onBodyDoubleClick: (event) => startEditAtClick(event),
             editor: h('div', {
               key: 'wbg-edit-surface',
               ref: (node) => {
@@ -12182,9 +11431,6 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-doc { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 12px 24px 16px; gap: 8px; }
 .vp-dochead { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--dsw-alias-border-l1); }
 /* 复制路径按钮已删（2026-11-22 大王要求）：入口改到左栏右键菜单 */
-.vp-mode { display: flex; gap: 2px; border: 1px solid var(--dsw-alias-border-l1); border-radius: 8px; padding: 2px; }
-.vp-modebtn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; padding: 2px 8px; border-radius: 6px; cursor: pointer; }
-.vp-modebtn[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); }
 .vp-read { flex: 1; min-height: 0; overflow-y: auto; font-size: 15px; line-height: 1.85; padding-right: 24px; }.vp-read .v-h { margin: 16px 0 8px; font-weight: 650; line-height: 1.35; color: var(--dsw-alias-brand-primary); }
 .vp-read .v-h:first-child { margin-top: 0; }
 .vp-read .v-h1 { font-size: 22px; border-bottom: 1px solid var(--dsw-alias-border-l1); padding-bottom: 6px; }
@@ -12515,159 +11761,6 @@ body.dsh-resizing, body.dsh-resizing * {
    切换「阅读/编辑」时观感连续。--dn-reader-* 由 t4/t7 提供，这里只读。 */
 .dn-edit-surface { font-family: inherit; font-size: inherit; line-height: inherit; }
 
-/* ══ [t5 · 划线标注] ══════════════════════════════════════════════════════
-   三种线型都用 --rm-color（用户自选数据色）。为了让深色主题下不刺眼，
-   一律经 color-mix 与纸面融合，而不是直接铺纯色。 */
-.rm-mark { border-radius: 4px; }
-.rm-underline {
-  border-bottom: 2px solid var(--rm-color, #f2c94c);
-  padding-bottom: 2px;
-}
-/* 波浪线：用 repeating-linear-gradient 画，避免 background-image 与高亮冲突 */
-.rm-wave {
-  background-image: repeating-linear-gradient(
-    -45deg,
-    var(--rm-color, #f2c94c) 0 2px,
-    transparent 2px 5px
-  );
-  background-repeat: repeat-x;
-  background-position: 0 100%;
-  background-size: 100% 3px;
-  padding-bottom: 2px;
-}
-.rm-highlight {
-  background: color-mix(in srgb, var(--rm-color, #f2c94c) 42%, transparent);
-  border-radius: 4px;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
-}
-
-/* 浮动工具条：绝对定位在 .dn-reader 内（.dn-reader 已有 position:relative） */
-.rm-bar {
-  position: absolute;
-  z-index: 20;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-radius: 8px;
-  background: var(--dsw-alias-bg-overlay, rgba(128, 128, 128, 0.16));
-  border: 1px solid var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.24));
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.18);
-}
-.rm-stylebtn {
-  border: 0;
-  background: none;
-  color: var(--dsw-alias-label-primary, inherit);
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 6px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.rm-stylebtn:hover { background: var(--dsw-alias-bg-layer-2, rgba(128, 128, 128, 0.18)); }
-.rm-stylebtn-underline { text-decoration: underline; }
-.rm-stylebtn-wave {
-  background-image: repeating-linear-gradient(-45deg, currentColor 0 1px, transparent 1px 4px);
-  background-repeat: repeat-x;
-  background-position: 0 100%;
-  background-size: 100% 2px;
-}
-.rm-stylebtn-highlight { background: color-mix(in srgb, var(--rm-color, #f2c94c) 45%, transparent); }
-.rm-bar-sep { width: 1px; height: 16px; background: var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.3)); margin: 0 2px; }
-.rm-colorbtn {
-  width: 16px;
-  height: 16px;
-  padding: 0;
-  border-radius: 50%;
-  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, 0.2));
-  background: var(--rm-swatch, #f2c94c);
-  cursor: pointer;
-}
-.rm-colorbtn:hover { transform: scale(1.15); }
-
-/* 标注列表面板 */
-.rm-panelbtn {
-  border: 1px solid var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.3));
-  background: none;
-  color: var(--dsw-alias-label-secondary, inherit);
-  font: inherit;
-  font-size: 12px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.rm-panelbtn[data-on="true"] {
-  background: var(--dsw-alias-bg-layer-2, rgba(128, 128, 128, 0.2));
-  color: var(--dsw-alias-label-primary, inherit);
-}
-.rm-panel {
-  position: absolute;
-  top: 8px;
-  right: 12px;
-  width: 260px;
-  max-height: 60%;
-  overflow-y: auto;
-  z-index: 25;
-  border-radius: 8px;
-  padding: 8px;
-  background: var(--dsw-alias-bg-overlay, rgba(128, 128, 128, 0.12));
-  border: 1px solid var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.24));
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-}
-.rm-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary, inherit);
-  padding: 2px 4px 6px;
-}
-.rm-panel-close {
-  border: 0;
-  background: none;
-  color: inherit;
-  font-size: 15px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-.rm-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 4px;
-  border-radius: 6px;
-}
-.rm-row:hover { background: var(--dsw-alias-bg-layer-2, rgba(128, 128, 128, 0.14)); }
-.rm-dot {
-  flex: 0 0 auto;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--rm-color, #f2c94c);
-}
-.rm-row-quote {
-  flex: 1;
-  min-width: 0;
-  font-size: 12px;
-  color: var(--dsw-alias-label-secondary, inherit);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.rm-row-del {
-  flex: 0 0 auto;
-  border: 0;
-  background: none;
-  color: var(--dsw-alias-label-tertiary, inherit);
-  cursor: pointer;
-  font-size: 13px;
-  padding: 0 4px;
-}
-.rm-row-del:hover { color: var(--dsw-alias-state-error-primary, #e05252); }
 
 /* ══ [t8 · 章节导航] ══════════════════════════════════════════════════════ */
   border: 1px solid var(--dsw-alias-border-l1, rgba(128, 128, 128, 0.3));
@@ -13009,21 +12102,6 @@ mark.df-hit[data-active="true"] {
   .vp-fileinfo { display: none; }
   .vp-docbar { gap: 4px; padding: 4px 8px; }
 }
-.vp-modegroup {
-  display: flex; gap: 2px; padding: 2px; border-radius: 6px;
-  background: var(--dsw-alias-bg-layer-2); flex: 0 0 auto;
-}
-.vp-modegroup .vp-modebtn {
-  height: 24px; padding: 0 12px; border: 0; border-radius: 4px;
-  background: none; color: var(--dsw-alias-label-secondary);
-  font: inherit; font-size: 12px; cursor: pointer;
-}
-.vp-modegroup .vp-modebtn[data-on="true"] {
-  background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1));
-  color: var(--dsw-alias-label-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .3);
-}
-.vp-modegroup .vp-modebtn:disabled { opacity: .38; cursor: default; }
 .vp-fileinfo {
   font-size: 11px; color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums; white-space: nowrap;
