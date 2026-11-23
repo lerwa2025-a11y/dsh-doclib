@@ -192,6 +192,9 @@ window.__ModuleLoader__.load({
         vaultNamePlaceholder: '名称',
         vaultConfirmDelete: '确认删除',
         modeEdit: '编辑',
+        /* 只读标记：电子书（mobi/azw3）这类不能写回的文件，在标题行右侧标一下 */
+        readOnlyBadge: '只读',
+        readOnlyBadgeTip: '这份文件是只读格式，能看不能改',
         // ── [全文搜索] ──
         docFind: '在本文中查找',
         search: '搜索全部便签',
@@ -546,6 +549,8 @@ window.__ModuleLoader__.load({
         vaultNamePlaceholder: 'Name',
         vaultConfirmDelete: 'Confirm delete',
         modeEdit: 'Edit',
+        readOnlyBadge: 'Read-only',
+        readOnlyBadgeTip: 'Read-only format — you can read it but not edit it',
         // ── [全文搜索] ──
         docFind: 'Find in this document',
         search: 'Search all notes',
@@ -752,6 +757,18 @@ window.__ModuleLoader__.load({
      * （例如 素材/图片/a.png、写作/小说/正文/第一卷/0001-第一章.md），
      * 库根在各自的 Board 里，所以这里只做拼接，不碰 DOM。
      */
+    /* 只读标记（2026-11-23 大王要求）：只读文件在标题行右侧标一下。
+       原来是「阅读 / 编辑」两个按钮，单模式化后按钮没了，但「这份不能改」仍要说清楚，
+       所以留一个静态胶囊 —— 外形照旧的 vp-modebtn，内容换成锁图标 + 「只读」。 */
+    function ReadOnlyBadge(props) {
+      return h(
+        'span',
+        { className: 'vp-readonly', title: props.t('readOnlyBadgeTip') },
+        h(BoardIcon, { name: 'lock', className: 'wb-ic-xs' }),
+        h('span', null, props.t('readOnlyBadge')),
+      )
+    }
+
     function absolutePathOf(root, relPath) {
       const base = typeof root === 'string' ? root.replace(/[\\/]+$/, '') : ''
       const relative = String(relPath === undefined || relPath === null ? '' : relPath).replaceAll('/', '\\')
@@ -4315,7 +4332,8 @@ function useScrollMemo(bucket, selector, ready) {
             h('span', { className: 'dn-spacer' }),
 
             /* 复制路径按钮已删（2026-11-22）：入口挪进左栏右键菜单，文件夹也能复制 */
-            /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通文档恒为编辑态 */
+            /* 只读文件标一下（2026-11-23 大王要求）：普通文档恒为编辑态、不标；电子书这类只读的才标 */
+            doc !== null && doc.readOnly === true ? h(ReadOnlyBadge, { t }) : null,
           ),
           docBar,
           // ── [全文搜索] 正文栏内的查找条：只在阅读模式显示，关闭即清理高亮
@@ -5255,6 +5273,11 @@ function useScrollMemo(bucket, selector, ready) {
           'M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8',
           'M10 12h4',
           'M3 4h18v4H3z',
+        ],
+        // Lucide lock —— 只读标记（电子书这类不能写回的文件）
+        lock: [
+          'M5 11h14a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2z',
+          'M7 11V7a5 5 0 0 1 10 0v4',
         ],
         // Lucide book-open —— 写作库（库级图标）
         bookOpen: [
@@ -8083,7 +8106,8 @@ function useScrollMemo(bucket, selector, ready) {
              */
               h('span', { className: 'cb-dn-spacer' }),
               // 阅读 / 编辑：与素材库同一套观感
-              /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通稿件恒为编辑态 */
+              /* 只读文件标一下（2026-11-23 大王要求） */
+              doc.readOnly === true ? h(ReadOnlyBadge, { t }) : null,
             ),
           /* 文案台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
              阅读按钮由下面的 ReaderBar 独占一行方框 */
@@ -9835,7 +9859,8 @@ function useScrollMemo(bucket, selector, ready) {
               { className: 'wbg-doc-meta' },
             /* 2026-11-18：元数据与字数移到底部，这里只留「阅读 / 编辑」切换 */
               h('span', { className: 'wbg-dn-spacer' }),
-              /* 阅读/编辑切换按钮已删（2026-11-23 单模式化）：普通正文恒为编辑态 */
+              /* 只读文件标一下（2026-11-23 大王要求） */
+              file.readOnly === true ? h(ReadOnlyBadge, { t }) : null,
             ),
           /* 写作台格式工具条：2026-11-18 需求6 —— 格式按钮全部去掉，
              阅读按钮由下面的 ReaderBar 独占一行方框 */
@@ -12304,6 +12329,22 @@ mark.df-hit[data-active="true"] {
 .cb-empty-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 
 /* 标题行里把「阅读/编辑」推到右边 */
+/* 只读标记：外形照旧的阅读/编辑按钮（描边胶囊），内容换成锁 + 「只读」 */
+.vp-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 3px 9px;
+  border-radius: var(--dsw-radius-sm, 8px);
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary));
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  user-select: none;
+}
 .cb-dn-spacer { flex: 1 1 auto; min-width: 8px; }
 
 /* 编辑态：与素材库同一套（真实 \n 靠 pre-wrap，绝不产生富文本节点） */
