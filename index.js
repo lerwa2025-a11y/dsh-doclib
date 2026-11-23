@@ -19,16 +19,19 @@ import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook
 import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import {
+  addSettingEntry,
   addSettingKind,
   addWriteChapter,
   addWriteVolume,
   attachWriteChapterBody,
   createWriteProject,
+  deleteSettingEntry,
   deleteSettingKind,
   deleteWriteChapter,
   deleteWriteVolume,
   listWriteProjects,
   readWriteProject,
+  renameSettingEntry,
   renameSettingKind,
   renameWriteChapter,
   renameWriteProject,
@@ -497,11 +500,12 @@ export function apply(ctx) {
                 return
               }
               /*
-               * 设定：分类文件夹与条目文件（2026-11-22 大王要求）。
+               * 设定：分类目录 + 条目文件（2026-11-24 大王改定：设定分组）。
                *
-               * 新结构下「设定」下面就是一层分类文件夹，一层条目文件；
-               * 固定的六类（世界背景/大纲/世界地图/情节线/核心冲突设定/人物）
-               * 在新建项目时就建好，之后可自建、可改名、可删。
+               * 结构是两级：设定\<分类>\<条目>.md。八个固定分类
+               * （大纲/人物/世界地图/核心冲突设定/修行体系/势力结构/武器/灵感与废案）
+               * 在新建项目时就建好、各铺一篇同名条目，之后可自建分类、
+               * 可在任何分类里加条目、可改名、可删。
                */
               if (route === '/write-add-setting-kind' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
@@ -524,6 +528,30 @@ export function apply(ctx) {
                 sendJson(res, 200, {
                   ok: true,
                   ...(await deleteSettingKind(root, body && body.path, body && body.kind)),
+                })
+                return
+              }
+              if (route === '/write-add-setting-entry' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await addSettingEntry(root, body && body.path, body && body.kind, body && body.title)),
+                })
+                return
+              }
+              if (route === '/write-rename-setting-entry' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await renameSettingEntry(root, body && body.path, body && body.kind, body && body.from, body && body.to)),
+                })
+                return
+              }
+              if (route === '/write-del-setting-entry' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                sendJson(res, 200, {
+                  ok: true,
+                  ...(await deleteSettingEntry(root, body && body.path, body && body.kind, body && body.name)),
                 })
                 return
               }
