@@ -190,6 +190,9 @@ window.__ModuleLoader__.load({
         vaultLibEmpty: '这个库还是空的',
         vaultLibFixed: '素材 / 文案 / 写作 是固定库，不能删除或改名',
         vaultNamePlaceholder: '名称',
+        /* 新建命名框（2026-11-24）：不写名字就不会真的建出来 */
+        vaultNamePrompt: '输入标题名',
+        vaultNamePromptHint: '不输入就不会新建',
         vaultConfirmDelete: '确认删除',
         modeEdit: '编辑',
         /* 只读标记：电子书（mobi/azw3）这类不能写回的文件，在标题行右侧标一下 */
@@ -550,6 +553,8 @@ window.__ModuleLoader__.load({
         vaultLibEmpty: 'This library is empty',
         vaultLibFixed: '素材 / 文案 / 写作 are fixed libraries and cannot be removed or renamed',
         vaultNamePlaceholder: 'Name',
+        vaultNamePrompt: 'Enter a title',
+        vaultNamePromptHint: 'Nothing is created without a name',
         vaultConfirmDelete: 'Confirm delete',
         modeEdit: 'Edit',
         readOnlyBadge: 'Read-only',
@@ -2468,6 +2473,11 @@ function useScrollMemo(bucket, selector, ready) {
       const [renaming, setRenaming] = useState(false)
       const [renameDraft, setRenameDraft] = useState('')
       const [renameError, setRenameError] = useState('')
+      /*
+       * 新建命名框（2026-11-24 大王要求）：{ kind: 'dir' | 'file', dir, value } | null。
+       * 点了 ＋ 只把这个摆出来，回车才真的创建；空名字等于取消。
+       */
+      const [createPending, setCreatePending] = useState(null)
       const [history, setHistory] = useState([])
       const [historyError, setHistoryError] = useState('')
       const [query, setQuery] = useState('')
@@ -3277,21 +3287,20 @@ function useScrollMemo(bucket, selector, ready) {
       }
 
       /**
-       * 新建文件 / 文件夹（2026-11-19 大王要求）：
-       * 不再弹底部输入条 —— 直接用默认名建出来，然后跳到标题处原地命名。
-       * 用户按 Esc 就保留默认名，等于「建好了没改名」。
+       * 新建文件 / 文件夹（2026-11-24 大王要求改）：
+       * 点了 ＋ 不再立刻建出来 —— 先在落点目录里出一行空的命名框，
+       * 写名字回车才真的建；留空（或按 Esc / 点到别处）就什么都不创建。
+       * 防的就是「手一滑多点两下，磁盘上多出两个「新建文件夹」」这种误触。
+       *
+       * 落点规则不变（2026-11-22 大王要求：新建文件夹只能落到五个固定分类下面）：
+       *  · 新建文件夹 → 只能用分类行右侧的 ＋ 指定落点；没指定就默认「笔记」。
+       *    绝不再落到素材根层，那样会冒出一个不属于任何分类的孤儿目录。
+       *  · 新建文件 → 选中文件夹里面 / 选中文件所在目录 / 素材根
+       *    （根层的文件由服务端按后缀归位，md 归「笔记」）。
        */
-      const askCreate = async (kind, targetDir) => {
+      const askCreate = (kind, targetDir) => {
         if (root === '') { setError(t('assistNeedWorkspace')); return }
         const isDir = kind === 'dir'
-        const ext = isDir ? '' : '.md'
-        /*
-         * 落点规则（2026-11-22 大王要求：新建文件夹只能落到五个固定分类下面）：
-         *  · 新建文件夹 → 只能用分类行右侧的 ＋ 指定落点；没指定就默认「笔记」。
-         *    绝不再落到素材根层，那样会冒出一个不属于任何分类的孤儿目录。
-         *  · 新建文件 → 选中文件夹里面 / 选中文件所在目录 / 素材根
-         *    （根层的文件由服务端按后缀归位，md 归「笔记」）。
-         */
         const pickedDir = selected
           ? selected.type === 'dir'
             ? selected.path
@@ -3303,41 +3312,82 @@ function useScrollMemo(bucket, selector, ready) {
           ? (typeof targetDir === 'string' && targetDir !== '' ? targetDir : `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`)
           : pickedDir
         const nameDir = !isDir && dir === MATERIAL_ROOT ? `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}` : dir
-        const base = isDir ? t('vaultNewDir') : t('vaultNewFile')
-        const taken = namesInDir(nameDir)
-        let name = base
+        /* 落点目录展开，否则那行命名框在收起的目录里看不见 */
+        if (nameDir !== '') setExpanded((prev) => ({ ...prev, [nameDir]: true }))
+        setConfirmDelete(false)
+        setMoveOpen(false)
+        setCtxMenu(null)
+        setRenaming(false)
+        setCreatePending({ kind, dir: nameDir, value: '' })
+      }
+
+      /** 取消新建：命名框收掉，磁盘上什么都没发生。 */
+      const cancelCreate = () => { setCreatePending(null) }
+
+      /**
+       * 提交新建：按命名框里写的名字真的建出来。
+       * 名字为空 = 什么都不建 —— 这是本次防呆的核心。
+       */
+      const commitCreate = async () => {
+        const pending = createPending
+        if (pending === null) return
+        const typed = String(pending.value || '').replace(/[\\/:*?"<>|]/g, '').trim()
+        if (typed === '') { setCreatePending(null); return }
+        setCreatePending(null)
+        const isDir = pending.kind === 'dir'
+        const ext = isDir ? '' : '.md'
+        /* 同名就往后加序号，绝不覆盖已有条目 */
+        const taken = namesInDir(pending.dir)
+        let name = typed
         let n = 2
-        while (taken.has(name + ext)) { name = base + ' ' + n; n += 1 }
-        let path = nameDir === '' ? name + ext : `${nameDir}/${name}${ext}`
+        while (taken.has(name + ext)) { name = typed + ' ' + n; n += 1 }
+        let path = pending.dir === '' ? name + ext : `${pending.dir}/${name}${ext}`
         try {
           const created = isDir
             ? await vaultApiPost('/mkdir', { path })
             : await vaultApiPost('/newfile', { path })
-          /*
-           * 真实落点以服务端返回的 path 为准：素材根层的新文件会被重定向进
-           * 视频 / 音频 / 图片 / 笔记 / 电子书 分类，客户端再按旧路径找就找不到，
-           * 也就进不了原地改名态（2026-11-22）。
-           */
+          /* 真实落点以服务端返回的 path 为准（素材根层的新文件会被按后缀归位） */
           if (created && typeof created.path === 'string' && created.path !== '') path = created.path
           await reloadTree()
           const parentDir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
-          /* 父目录展开，否则新建的东西在树上看不见 */
           if (parentDir !== '') setExpanded((prev) => ({ ...prev, [parentDir]: true }))
           const fileName = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
           const entry = { path, name: fileName, type: isDir ? 'dir' : 'file', image: false }
-          setConfirmDelete(false)
-          setMoveOpen(false)
-          setCtxMenu(null)
           if (isDir) {
             setSelected(entry)
             setExpanded((prev) => ({ ...prev, [path]: true }))
           } else {
             await openFile(entry)
           }
-          startRename(entry)
         } catch (err) {
           setError(messageOf(err))
         }
+      }
+
+      /** 新建命名行（2026-11-24）：输入框 + 右侧小字提示，写名字回车才建。 */
+      const createRow = (depth) => {
+        if (createPending === null) return null
+        const isDir = createPending.kind === 'dir'
+        return h(
+          'div',
+          { key: '__create__', className: 'vp-tree-row vp-tree-row-edit', style: { paddingLeft: `${(isDir ? 6 : 22) + depth * 14}px` } },
+          h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: isDir ? 'folder' : 'fileText', className: 'wb-ic' })),
+          h('input', {
+            className: 'vp-tree-input',
+            autoFocus: true,
+            value: createPending.value,
+            placeholder: t('vaultNamePrompt'),
+            'aria-label': t('vaultNamePrompt'),
+            onClick: (event) => event.stopPropagation(),
+            onChange: (event) => setCreatePending({ ...createPending, value: event.target.value }),
+            onKeyDown: (event) => {
+              if (event.key === 'Enter') { event.preventDefault(); void commitCreate() }
+              else if (event.key === 'Escape') { event.preventDefault(); cancelCreate() }
+            },
+            onBlur: () => { void commitCreate() },
+          }),
+          h('span', { className: 'vp-newrow-hint' }, t('vaultNamePromptHint')),
+        )
       }
 
       const deleteSelected = async () => {
@@ -3887,16 +3937,20 @@ function useScrollMemo(bucket, selector, ready) {
                 onClick: (event) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  void askCreate('dir', node.path)
+                  askCreate('dir', node.path)
                 },
               },
               '＋',
             ),
           ),
           isOpen
-            ? children.length === 0
-              ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, t('vaultEmptyDir'))
-              : children.map((child) => treeNode(child, depth + 1))
+            ? [
+              /* 命名框排在最前（2026-11-24）：新东西总是排在目录最上面，一眼看得见 */
+              createPending !== null && createPending.dir === node.path ? createRow(depth + 1) : null,
+              children.length === 0
+                ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, t('vaultEmptyDir'))
+                : children.map((child) => treeNode(child, depth + 1)),
+            ]
             : null,
         )
       }
@@ -3944,9 +3998,12 @@ function useScrollMemo(bucket, selector, ready) {
               h('span', { className: 'vp-tree-name' }, node.name),
             ),
             isOpen
-              ? node.children.length === 0
-                ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, fixedLib ? t('vaultLibEmpty') : t('vaultEmptyDir'))
-                : node.children.map((child) => treeNode(child, depth + 1))
+              ? [
+                createPending !== null && createPending.dir === node.path ? createRow(depth + 1) : null,
+                node.children.length === 0
+                  ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: `${30 + depth * 14}px` } }, fixedLib ? t('vaultLibEmpty') : t('vaultEmptyDir'))
+                  : node.children.map((child) => treeNode(child, depth + 1)),
+              ]
               : null,
           )
         }
@@ -4202,13 +4259,13 @@ function useScrollMemo(bucket, selector, ready) {
               { className: 'vp-empty-quick' },
               h(
                 'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('file') },
+                { type: 'button', className: 'vp-qcard', onClick: () => askCreate('file') },
                 h('span', { className: 'vp-qcard-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic-lg' })),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewFile')),
               ),
               h(
                 'button',
-                { type: 'button', className: 'vp-qcard', onClick: () => void askCreate('dir', `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`) },
+                { type: 'button', className: 'vp-qcard', onClick: () => askCreate('dir', `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`) },
                 h('span', { className: 'vp-qcard-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic-lg' })),
                 h('span', { className: 'vp-qcard-t' }, t('vaultNewDir')),
               ),
@@ -4683,7 +4740,7 @@ function useScrollMemo(bucket, selector, ready) {
                 {
                   type: 'button',
                   className: 'vp-newbtn-round',
-                  onClick: () => { void askCreate('file') },
+                  onClick: () => { askCreate('file') },
                   title: t('vaultNewMd'),
                   'aria-label': t('vaultNewMd'),
                 },
@@ -5795,12 +5852,39 @@ function useScrollMemo(bucket, selector, ready) {
           )
         }
 
+        /*
+         * 新建命名行（2026-11-24 大王要求）：树顶第一行是一个空输入框，
+         * 写名字回车才真的建；留空 / Esc / 点到别处就收掉，磁盘上什么都不发生。
+         */
+        const pendingRow = props.pending
+          ? h(
+            'div',
+            { key: '__create__', className: 'vp-tree-row vp-tree-row-edit', style: { paddingLeft: '6px' } },
+            h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: props.pending.kind === 'dir' ? 'folder' : 'fileText', className: 'wb-ic' })),
+            h('input', {
+              className: 'vp-tree-input',
+              autoFocus: true,
+              value: props.pending.value,
+              placeholder: t('vaultNamePrompt'),
+              'aria-label': t('vaultNamePrompt'),
+              onClick: (event) => event.stopPropagation(),
+              onChange: (event) => props.pending.onValue(event.target.value),
+              onKeyDown: (event) => {
+                if (event.key === 'Enter') { event.preventDefault(); props.pending.commit() }
+                else if (event.key === 'Escape') { event.preventDefault(); props.pending.cancel() }
+              },
+              onBlur: () => props.pending.commit(),
+            }),
+            h('span', { className: 'vp-newrow-hint' }, t('vaultNamePromptHint')),
+          )
+          : null
+
         return h(
           'div',
           { className: 'vp-treelist', style: { padding: '2px 4px 10px' } },
-          nodes.length === 0
+          nodes.length === 0 && pendingRow === null
             ? h('div', { className: 'vp-tree-empty' }, t('vaultEmptyDir'))
-            : nodes.map((node) => row(node, 0)),
+            : [pendingRow, ...nodes.map((node) => row(node, 0))],
           ctxMenu
             ? h(
               'div',
@@ -8038,6 +8122,8 @@ function useScrollMemo(bucket, selector, ready) {
             onDelete: (node) => { if (typeof props.onDelete === 'function') props.onDelete(node) },
             /* 原地改名（2026-11-19）：把「正在改哪一行」交给树，树负责画输入框 */
             rename: props.rename || null,
+            /* 新建命名框（2026-11-24）：树负责在最上面画那一行空输入框 */
+            pending: props.pending || null,
           }),
         )
       }
@@ -8279,6 +8365,11 @@ function useScrollMemo(bucket, selector, ready) {
          * 两个回调拿到同一份旧 state，没有闸门会 POST 两次（第二次必然重名失败）。
          */
         const renameGuard = useRef({ done: false })
+        /*
+         * 新建命名框（2026-11-24 大王要求）：{ kind: 'dir' | 'file', value } | null。
+         * 点 ＋ 只摆出这一行，写名字回车才创建，空名字等于取消。
+         */
+        const [createPending, setCreatePending] = useState(null)
         const [doc, setDoc] = useState(null)
         const [draft, setDraft] = useState('')
         /* 单模式（2026-11-23）：普通稿件恒为编辑态，只读电子书才走阅读态。 */
@@ -8861,10 +8952,10 @@ function useScrollMemo(bucket, selector, ready) {
           flash(ok ? t('copyCopiedMp') : t('copyCopyFailed'))
         }
 
-        // 新建稿件：写进 文案\，命名不撞车
         /*
-         * 新建分组 = 在 文案\ 下真的建一个文件夹（2026-11-18 大王要求）。
-         * 2026-11-19 起不再弹输入条：直接用默认名建，然后跳树上原地命名。
+         * 新建分组 / 新建稿件（2026-11-24 大王要求改）：
+         * 点了 ＋ 不再立刻建出来 —— 先在树顶出一行空的命名框，
+         * 写名字回车才真的建；留空就什么都不创建。
          */
         /* 全部展开/收起切换 */
         const toggleExpand = () => {
@@ -8889,44 +8980,46 @@ function useScrollMemo(bucket, selector, ready) {
          * 新建分组（2026-11-19 大王要求）：不再弹输入条，
          * 直接用默认名建出来，然后跳到树上那一行原地命名。
          */
-        const createGroup = async () => {
+        const createGroup = () => {
           if (root === '') { flash(t('assistNeedWorkspace')); return }
-          const base = t('vaultNewDir')
-          const taken = topNames()
-          let name = base
-          let n = 2
-          while (taken.has(name)) { name = base + ' ' + n; n += 1 }
-          const path = '文案/' + name
-          try {
-            await vaultApiPost('/mkdir', { path })
-            await reload()
-            renameNode({ path, name, type: 'dir' })
-          } catch (err) {
-            setError(t('copySaveFailed') + messageOf(err))
-          }
+          setCreatePending({ kind: 'dir', value: '' })
         }
 
-        const createDraft = async () => {
+        const createDraft = () => {
           if (root === '') {
             flash(t('assistNeedWorkspace'))
             return
           }
-          const base = t('copyNewDraftName')
-          let name = base
+          setCreatePending({ kind: 'file', value: '' })
+        }
+
+        /** 取消新建：收掉命名框，什么都没建。 */
+        const cancelCreate = () => { setCreatePending(null) }
+
+        /** 提交新建：写名字才建；空名字直接收掉。 */
+        const commitCreate = async () => {
+          const pending = createPending
+          if (pending === null) return
+          const typed = String(pending.value || '').replace(/[\\/:*?"<>|]/g, '').trim()
+          if (typed === '') { setCreatePending(null); return }
+          setCreatePending(null)
+          const isDir = pending.kind === 'dir'
+          const suffix = isDir ? '' : '.md'
+          const taken = topNames()
+          let name = typed
           let n = 2
-          const taken = new Set(docs.map((item) => item.name))
-          while (taken.has(name + '.md')) {
-            name = base + ' ' + n
-            n += 1
-          }
-          const path = '文案/' + name + '.md'
+          while (taken.has(name + suffix)) { name = typed + ' ' + n; n += 1 }
+          const path = '文案/' + name + suffix
           try {
-            await vaultApiPost('/newfile', { path })
-            await vaultApiPost('/file', { path, content: '# ' + name + '\n\n' }, 'PUT')
-            await reload()
-            await pick(path)
-            /* 新建完直接进原地命名（2026-11-19 大王要求，不再弹底部输入条） */
-            renameNode({ path, name: name + '.md', type: 'file' })
+            if (isDir) {
+              await vaultApiPost('/mkdir', { path })
+              await reload()
+            } else {
+              await vaultApiPost('/newfile', { path })
+              await vaultApiPost('/file', { path, content: '# ' + name + '\n\n' }, 'PUT')
+              await reload()
+              await pick(path)
+            }
           } catch (err) {
             setError(t('copySaveFailed') + messageOf(err))
           }
@@ -8987,6 +9080,16 @@ function useScrollMemo(bucket, selector, ready) {
                 onValue: (next) => setTreePrompt({ ...treePrompt, value: next }),
                 commit: () => void promptCommit(),
                 cancel: () => { renameGuard.current.done = true; setTreePrompt(null) },
+              }
+              : null,
+            /* 新建命名框（2026-11-24）：只描述状态，输入框由树画 */
+            pending: createPending
+              ? {
+                kind: createPending.kind,
+                value: createPending.value,
+                onValue: (next) => setCreatePending({ ...createPending, value: next }),
+                commit: () => void commitCreate(),
+                cancel: () => cancelCreate(),
               }
               : null,
             style: { width: (panelHidden ? 30 : listW) + 'px' },
@@ -11567,6 +11670,8 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
 /* 三个固定库：用库别图标，名字再加一点分量，和普通文件夹区分开 */
 .vp-tree-icon-lib { font-size: 13px; line-height: 1; }
+/* 新建命名行右侧的小字提示（2026-11-24）：告诉用户「不写名字就不会建」 */
+.vp-newrow-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 /* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
 .vp-iconbtn-off { opacity: .3; pointer-events: none; }
 /*
