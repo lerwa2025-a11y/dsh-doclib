@@ -193,6 +193,7 @@ window.__ModuleLoader__.load({
         /* 新建命名框（2026-11-24）：不写名字就不会真的建出来 */
         vaultNamePrompt: '输入标题名',
         vaultNamePromptHint: '不输入就不会新建',
+        imagePasteFailed: '图片粘贴失败：',
         vaultConfirmDelete: '确认删除',
         modeEdit: '编辑',
         /* 只读标记：电子书（mobi/azw3）这类不能写回的文件，在标题行右侧标一下 */
@@ -555,6 +556,7 @@ window.__ModuleLoader__.load({
         vaultNamePlaceholder: 'Name',
         vaultNamePrompt: 'Enter a title',
         vaultNamePromptHint: 'Nothing is created without a name',
+        imagePasteFailed: 'Could not paste the image: ',
         vaultConfirmDelete: 'Confirm delete',
         modeEdit: 'Edit',
         readOnlyBadge: 'Read-only',
@@ -1330,6 +1332,14 @@ function useScrollMemo(bucket, selector, ready) {
     /** 超过这个行数就不做预览渲染（纯文本模式），防大文档卡顿。 */
     const MD_PREVIEW_LINE_LIMIT = 2000
 
+    /*
+     * 整行图片（2026-11-24 大王要求支持粘贴图片）：
+     *   ![](素材/图片/paste-....jpg)   —— 整行只有这一个图片语法。
+     * 图片行不依赖上下文（不像 ``` 要一开一合），所以 mdLineNode 自己判，
+     * 单行重画（mdRepaintLine）也能正确识别，不必由 mdPaintEditor 传下来。
+     */
+    const MD_IMAGE_LINE_PATTERN = /^!\[[^\]]*\]\(([^)]+)\)\s*$/
+
     /** 造一个「符号」span：文本照留，靠 CSS 决定看不看得见。 */
     function mdMarkNode(text) {
       const mark = document.createElement('span')
@@ -1374,7 +1384,7 @@ function useScrollMemo(bucket, selector, ready) {
     }
 
     /** 造一行的展示节点。active 只管 CSS 显示符号，不影响 DOM 里有没有符号。 */
-    function mdLineNode(raw, index, active, forcedKind) {
+    function mdLineNode(raw, index, active, forcedKind, imageSrc) {
       const span = document.createElement('span')
       span.className = 'md-line'
       span.setAttribute('data-line', String(index))
@@ -1396,6 +1406,28 @@ function useScrollMemo(bucket, selector, ready) {
       if (forcedKind === 'hr') {
         span.setAttribute('data-kind', 'hr')
         span.appendChild(mdMarkNode(raw))
+        return span
+      }
+      /*
+       * 图片行（2026-11-24）：
+       *   · 原始语法整段塞进 .md-mark —— 它 display:none，但 textContent 还在，
+       *     所以 editorToText 读回来与 draft 一字不差（存盘安全的前提）；
+       *   · 非当前行再叠一张缩略图（CSS 负责隐藏语法、显示图）；
+       *   · 当前行只显示语法，方便改路径（与标题、列表的行内符号同一套语义）。
+       */
+      const imageMatch = MD_IMAGE_LINE_PATTERN.exec(raw)
+      if (imageMatch) {
+        span.setAttribute('data-kind', 'img')
+        span.appendChild(mdMarkNode(raw))
+        const url = typeof imageSrc === 'function' ? imageSrc(imageMatch[1]) : null
+        if (typeof url === 'string' && url !== '') {
+          const image = document.createElement('img')
+          image.className = 'md-img'
+          image.setAttribute('alt', '')
+          image.setAttribute('loading', 'lazy')
+          image.src = url
+          span.appendChild(image)
+        }
         return span
       }
       const head = MD_HEAD_PATTERN.exec(raw)
@@ -1592,7 +1624,7 @@ function useScrollMemo(bucket, selector, ready) {
      * 行数超过 MD_PREVIEW_LINE_LIMIT 时降级为纯文本（node.textContent = text），
      * 行为与改造前一致，只是没有预览效果 —— 大文档不至于卡死。
      */
-    function mdPaintEditor(editor, text, activeLine, globalCaret) {
+    function mdPaintEditor(editor, text, activeLine, globalCaret, imageSrc) {
       if (!editor) return
       const focused = typeof document !== 'undefined' && document.activeElement === editor
       const source = String(text).replaceAll('\u00a0', ' ')
@@ -1649,7 +1681,7 @@ function useScrollMemo(bucket, selector, ready) {
         } else if (/^(-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
           forcedKind = 'hr'
         }
-        fragment.appendChild(mdLineNode(raw, index, index === visible, forcedKind))
+        fragment.appendChild(mdLineNode(raw, index, index === visible, forcedKind, imageSrc))
         if (index < lines.length - 1) fragment.appendChild(document.createElement('br'))
       }
       editor.textContent = ''
@@ -1912,14 +1944,14 @@ function useScrollMemo(bucket, selector, ready) {
      *
      * 返回 true 表示这一行的结构确实变了、调用方需要重摆光标。
      */
-    function mdRepaintLine(editor, line, text) {
+    function mdRepaintLine(editor, line, text, imageSrc) {
       if (!editor) return false
       const lines = editor.querySelectorAll('.md-line')
       const target = lines[line]
       if (!target) return false
       const raw = String(text).replaceAll('\u00a0', ' ')
       if (target.textContent === raw) return false
-      const fresh = mdLineNode(raw, line, true)
+      const fresh = mdLineNode(raw, line, true, '', imageSrc)
       target.replaceWith(fresh)
       return true
     }
@@ -1928,6 +1960,125 @@ function useScrollMemo(bucket, selector, ready) {
     function mdLineTextOf(text, line) {
       const lines = String(text).split('\n')
       return line >= 0 && line < lines.length ? lines[line] : ''
+    }
+
+
+    /* ══ [图片粘贴 · 2026-11-24] ══════════════════════════════════════════════
+     * 大王问「md 文件不支持粘贴图片？」—— 当时确实不支持：三个编辑区都由
+     * useMdPreview 接管粘贴，只读 clipboardData 的 text/plain，图片直接被丢掉。
+     * 现在补上一条完整链路：
+     *   粘贴 → 找 clipboard 里的 image/* → canvas 等比缩放 + JPEG 压缩
+     *   → POST /raw 落到 素材/图片/paste-<时间戳>.jpg（沿用 Host 的按类型归位）
+     *   → 光标处插一整行 ![](素材/图片/xxx.jpg) → 编辑区非当前行显示缩略图。
+     *
+     * 为什么存「库根相对路径」而不是「相对当前文档」：
+     *   粘一次图，之后这份 md 可能被移动位置、或被别的板块引用；
+     *   写 素材/图片/x.jpg 永远指向同一份文件，不会因为文档挪目录就 404。
+     *   mdLineNode 的 imageSrc 认这个前缀，其余相对路径仍按文档目录解析。
+     */
+    const IMAGE_PASTE_DIR = '素材/图片'
+    /* 请求体上限是 2MB（index.js 的 BODY_LIMIT），base64 膨胀 4/3，
+       所以压到 1.4MB 以内留出余量。手机原图（3~8MB）走这条都会缩下来。 */
+    const IMAGE_PASTE_MAX_BYTES = 1400 * 1024
+    const IMAGE_PASTE_MAX_EDGE = 1600
+
+    /** 从剪贴板事件里挑第一张图片文件（复制文件、截图、手机相册都走这条）。 */
+    function clipboardImageOf(data) {
+      if (!data || !data.items) return null
+      for (let index = 0; index < data.items.length; index += 1) {
+        const item = data.items[index]
+        if (!item || item.kind !== 'file' || typeof item.type !== 'string') continue
+        if (!item.type.startsWith('image/')) continue
+        const file = item.getAsFile()
+        if (file) return file
+      }
+      return null
+    }
+
+    function loadImageFile(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file)
+        const image = new Image()
+        image.onload = () => { URL.revokeObjectURL(url); resolve(image) }
+        image.onerror = () => { URL.revokeObjectURL(url); reject(new Error('image/decode-failed')) }
+        image.src = url
+      })
+    }
+
+    /**
+     * 把粘贴进来的图片压成 JPEG base64。
+     * 先按最长边 1600 缩，再逐档降质量；仍超限就再缩 20%，最多 6 轮。
+     * 透明区域铺白底 —— JPEG 没有 alpha，不铺会变黑块（截图常见）。
+     */
+    async function compressPastedImage(file) {
+      const image = await loadImageFile(file)
+      const naturalWidth = image.naturalWidth || image.width || 1
+      const naturalHeight = image.naturalHeight || image.height || 1
+      const scale = Math.min(1, IMAGE_PASTE_MAX_EDGE / Math.max(naturalWidth, naturalHeight))
+      let width = Math.max(1, Math.round(naturalWidth * scale))
+      let height = Math.max(1, Math.round(naturalHeight * scale))
+      const canvas = document.createElement('canvas')
+      const context = canvas.getContext('2d')
+      let base64 = ''
+      for (let attempt = 0; attempt < 6; attempt += 1) {
+        canvas.width = width
+        canvas.height = height
+        context.fillStyle = '#ffffff'
+        context.fillRect(0, 0, width, height)
+        context.drawImage(image, 0, 0, width, height)
+        const quality = attempt === 0 ? 0.92 : Math.max(0.42, 0.92 - attempt * 0.12)
+        const dataUrl = canvas.toDataURL('image/jpeg', quality)
+        const comma = dataUrl.indexOf(',')
+        base64 = comma === -1 ? '' : dataUrl.slice(comma + 1)
+        if (base64 !== '' && Math.floor((base64.length * 3) / 4) <= IMAGE_PASTE_MAX_BYTES) {
+          return { dataBase64: base64, ext: 'jpg' }
+        }
+        width = Math.max(1, Math.round(width * 0.8))
+        height = Math.max(1, Math.round(height * 0.8))
+      }
+      if (base64 === '') throw new Error('image/encode-failed')
+      return { dataBase64: base64, ext: 'jpg' }
+    }
+
+    /** 压缩 + 落盘，返回真正写进去的库根相对路径（Host 会按后缀归位，以返回值为准）。 */
+    async function uploadPastedImage(file) {
+      const made = await compressPastedImage(file)
+      const now = new Date()
+      const pad = (value) => String(value).padStart(2, '0')
+      const stamp = String(now.getFullYear())
+        + pad(now.getMonth() + 1) + pad(now.getDate())
+        + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds())
+      const salt = Math.random().toString(36).slice(2, 6)
+      const path = IMAGE_PASTE_DIR + '/paste-' + stamp + '-' + salt + '.' + made.ext
+      const saved = await vaultApiPost('/raw', { path, dataBase64: made.dataBase64 })
+      return saved && typeof saved.path === 'string' && saved.path !== '' ? saved.path : path
+    }
+
+    /**
+     * 编辑区预览用的图片地址解析（只在 Live Preview 里用）。
+     * 与素材区阅读态的 resolveImage 有两点不同：
+     *   ① 认 素材/ 文案/ 写作/ 开头的库根相对路径（粘贴进来的图就是这种）；
+     *   ② 没有选中项就不拼 URL，直接返回 null（图片行只显示语法）。
+     */
+    function previewImageSrcOf(docPath, tick) {
+      const suffix = '&tick=' + String(typeof tick === 'number' ? tick : 0)
+      return (src) => {
+        const raw = String(src || '').trim()
+        if (raw === '') return null
+        if (/^(https?:|data:|blob:)/i.test(raw)) return raw
+        if (raw.startsWith('/')) return raw
+        if (/^(素材|文案|写作)\//.test(raw)) return VAULT_API + '/raw?path=' + encodeURIComponent(raw) + suffix
+        const base = typeof docPath === 'string' && docPath.includes('/') ? docPath.slice(0, docPath.lastIndexOf('/')) : ''
+        const parts = (base === '' ? [] : base.split('/')).concat(raw.split('/'))
+        const out = []
+        for (const part of parts) {
+          if (part === '' || part === '.') continue
+          if (part === '..') out.pop()
+          else out.push(part)
+        }
+        if (out.length === 0) return null
+        return VAULT_API + '/raw?path=' + encodeURIComponent(out.join('/')) + suffix
+      }
     }
 
         /* ══════════════════════════════════════════════════════════════════════
@@ -1962,6 +2113,10 @@ function useScrollMemo(bucket, selector, ready) {
           const editorToText = config.editorToText
           const onDirty = config.onDirty
           const onSave = config.onSave
+          /* 图片粘贴（2026-11-24）：传上传函数才接管图片粘贴；imageSrc 负责把
+             图片行里的路径换成本地 /raw 地址（不给就只显示语法、不出缩略图）。 */
+          const uploadImage = config.uploadImage
+          const imageSrc = config.imageSrc
 
           /* draft 的最新值：事件回调拿到的 props 可能是上一轮的，统一从这里读 */
           const draftRef = useRef(draft)
@@ -1989,7 +2144,7 @@ function useScrollMemo(bucket, selector, ready) {
             const active = typeof line === 'number' ? line : spot.line
             activeRef.current = active
             caretRef.current = at
-            mdPaintEditor(node, text, active, at)
+            mdPaintEditor(node, text, active, at, imageSrc)
           }
 
           /**
@@ -2032,7 +2187,7 @@ function useScrollMemo(bucket, selector, ready) {
             const spot = mdSpotOfGlobal(next, caret)
             activeRef.current = spot.line
             setDraft(next)
-            mdPaintEditor(node, next, spot.line, caret)
+            mdPaintEditor(node, next, spot.line, caret, imageSrc)
             markDirty()
           }
 
@@ -2062,7 +2217,7 @@ function useScrollMemo(bucket, selector, ready) {
             activeRef.current = line
             /* 聚焦时要让本行露出符号，所以必须重画一次（此时用 DOM 里的光标） */
             const at = mdCaretGlobal(node)
-            mdPaintEditor(node, draftRef.current, line, at)
+            mdPaintEditor(node, draftRef.current, line, at, imageSrc)
           }
 
           const onBlur = () => {
@@ -2133,11 +2288,47 @@ function useScrollMemo(bucket, selector, ready) {
             commit(result.draft, result.caret)
           }
 
+          /*
+           * 粘贴：图片优先（2026-11-24）。
+           *   · 剪贴板里有 image/* → 上传到 素材/图片/ 再在光标处插一行 ![](路径)；
+           *   · 否则退回纯文本粘贴（mdPasteInto 会归一 \r\n）。
+           * 上传是异步的，所以这里先 preventDefault 把粘贴吞掉，等图落盘再 commit；
+           * 失败只报错、不动 draft —— 绝不能因为图没传上去把文字粘贴也吃掉。
+           */
           const onPaste = (event) => {
             const node = el()
             if (!node) return
             event.preventDefault()
-            const raw = event.clipboardData ? event.clipboardData.getData('text/plain') : ''
+            const data = event.clipboardData
+            const picture = typeof uploadImage === 'function' ? clipboardImageOf(data) : null
+            if (picture) {
+              const source = draftRef.current
+              const sel = mdSelectionGlobal(node)
+              const start = sel ? sel.start : Math.max(0, Math.min(caretRef.current, source.length))
+              const end = sel ? sel.end : start
+              void (async () => {
+                let path = ''
+                try {
+                  path = await uploadImage(picture)
+                } catch (err) {
+                  if (typeof config.onError === 'function') config.onError(err)
+                  return
+                }
+                if (typeof path !== 'string' || path === '') return
+                /* 图片语法必须独占一行，否则 mdLineNode 认不出、也不会有缩略图 */
+                const before = source.slice(0, start)
+                const after = source.slice(end)
+                const head = before === '' || before.endsWith('\n') ? '' : '\n'
+                const tail = after.startsWith('\n') || after === '' ? '' : '\n'
+                const chunk = head + '![](' + path + ')' + tail
+                const result = mdInsertText(draftRef.current, start, chunk)
+                if (typeof result.next !== 'string' || result.next === draftRef.current) return
+                pushUndo()
+                commit(result.next, result.caret)
+              })()
+              return
+            }
+            const raw = data ? data.getData('text/plain') : ''
             if (raw === '') return
             const result = mdPasteInto(node, draftRef.current, raw)
             if (result.draft === draftRef.current) return
@@ -2169,11 +2360,11 @@ function useScrollMemo(bucket, selector, ready) {
             setDraft(next)
             if (next.split('\n').length !== node.querySelectorAll('.md-line').length) {
               /* 行数变了，说明浏览器做了结构性编辑（不该发生）：退回整块重画 */
-              mdPaintEditor(node, next, line, caretRef.current)
+              mdPaintEditor(node, next, line, caretRef.current, imageSrc)
               return
             }
             mdSetActiveLine(node, line)
-            const repainted = mdRepaintLine(node, line, mdLineTextOf(next, line))
+            const repainted = mdRepaintLine(node, line, mdLineTextOf(next, line), imageSrc)
             if (repainted) {
               const offset = mdSpotOfGlobal(next, caretRef.current).offset
               mdPlaceCaret(node, line, offset)
@@ -2202,7 +2393,7 @@ function useScrollMemo(bucket, selector, ready) {
               const next = editorToText(target)
               if (next === draftRef.current) {
                 /* 内容没变也要重画一次：组合期间 DOM 结构与预览不一致 */
-                mdPaintEditor(target, draftRef.current, activeRef.current)
+                mdPaintEditor(target, draftRef.current, activeRef.current, undefined, imageSrc)
                 return
               }
               draftRef.current = next
@@ -2211,7 +2402,7 @@ function useScrollMemo(bucket, selector, ready) {
               caretRef.current = at === null ? next.length : at
               activeRef.current = spot ? spot.line : 0
               setDraft(next)
-              mdPaintEditor(target, next, activeRef.current, caretRef.current)
+              mdPaintEditor(target, next, activeRef.current, caretRef.current, imageSrc)
               markDirty()
             }
             if (typeof queueMicrotask === 'function') queueMicrotask(finish)
@@ -3591,11 +3782,15 @@ function useScrollMemo(bucket, selector, ready) {
         return out.replaceAll('\u00a0', ' ')
       }
 
+      /* 图片行的地址解析（2026-11-24 粘贴图片）：把 ![](路径) 里的路径换成本地 /raw 地址。
+         传的是当前文档路径，相对路径按它所在目录解析；素材/文案/写作 开头的按库根算。 */
+      const docImageSrc = previewImageSrcOf(doc ? doc.path : '', imageTick)
+
       /** md 原文 → contenteditable。真实 \n 靠 white-space: pre-wrap 显示成换行。 */
       const textToEditor = (node, text) => {
         if (!node) return
         /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
-        mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
+        mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1, null, docImageSrc)
       }
 
       /** 读 contenteditable 的纯文本选区，换算成 draft 里的 [start,end) 偏移。 */
@@ -3666,6 +3861,9 @@ function useScrollMemo(bucket, selector, ready) {
         editorToText,
         onDirty: () => setDoc((current) => (current ? { ...current, dirty: true } : current)),
         onSave: () => void saveDoc(),
+        uploadImage: uploadPastedImage,
+        imageSrc: docImageSrc,
+        onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
       })
 
       /** 在编辑框里插入/包裹格式标记。 */
@@ -8372,6 +8570,10 @@ function useScrollMemo(bucket, selector, ready) {
         const [createPending, setCreatePending] = useState(null)
         const [doc, setDoc] = useState(null)
         const [draft, setDraft] = useState('')
+        /* 图片缓存戳（2026-11-24 粘贴图片）：重传同名图片时靠它刷掉浏览器缓存。 */
+        const [imageTick, setImageTick] = useState(0)
+        /* 图片行的地址解析：传当前文档路径，相对路径按它的目录算。 */
+        const docImageSrc = previewImageSrcOf(doc ? doc.path : '', imageTick)
         /* 单模式（2026-11-23）：普通稿件恒为编辑态，只读电子书才走阅读态。 */
         const mode = doc !== null && doc.readOnly === true ? 'read' : 'edit'
         const [saveState, setSaveState] = useState('idle')
@@ -8717,8 +8919,9 @@ function useScrollMemo(bucket, selector, ready) {
 
         const textToEditor = (node, text) => {
           if (!node) return
-          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
-          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
+          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。
+             imageSrc 让图片行画出缩略图（2026-11-24 粘贴图片）。 */
+          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1, null, docImageSrc)
         }
 
         /** 读选区，换算成 draft 的 [start,end) 偏移。 */
@@ -8787,6 +8990,9 @@ function useScrollMemo(bucket, selector, ready) {
           setDraft,
           editorToText,
           onSave: () => void save(true),
+          uploadImage: uploadPastedImage,
+          imageSrc: docImageSrc,
+          onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
         })
 
         /**
@@ -10195,6 +10401,10 @@ function useScrollMemo(bucket, selector, ready) {
         }, [activeProject])
         const [file, setFile] = useState(null)
         const [draft, setDraft] = useState('')
+        /* 图片缓存戳（2026-11-24 粘贴图片）：重传同名图片时靠它刷掉浏览器缓存。 */
+        const [imageTick, setImageTick] = useState(0)
+        /* 图片行的地址解析：传当前正文路径，相对路径按它的目录算。 */
+        const docImageSrc = previewImageSrcOf(file ? file.path : '', imageTick)
         /* 阅读设置副本（2026-11-18）：ReaderBar 回调上来，应用到正文 */
         const [readerCfg, setReaderCfg] = useState({ fontSize: 14, font: '', line: 1.85, bg: '' })
         /* 单模式（2026-11-23）：普通正文恒为编辑态，只读电子书才走阅读态。 */
@@ -10791,8 +11001,9 @@ function useScrollMemo(bucket, selector, ready) {
 
         const textToEditor = (node, text) => {
           if (!node) return
-          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。 */
-          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1)
+          /* 预览模式下整块画成结构化的行；-1 表示「没有当前行」，全部收成预览。
+             imageSrc 让图片行画出缩略图（2026-11-24 粘贴图片）。 */
+          mdPaintEditor(node, String(text).replaceAll('\u00a0', ' '), -1, null, docImageSrc)
         }
 
         const readSelection = () => {
@@ -10860,6 +11071,9 @@ function useScrollMemo(bucket, selector, ready) {
           setDraft,
           editorToText,
           onSave: () => void save(true),
+          uploadImage: uploadPastedImage,
+          imageSrc: docImageSrc,
+          onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
         })
 
         /** 格式按钮：插 markdown 标记，绝不生成 HTML。 */
@@ -11988,6 +12202,19 @@ body.dsh-resizing, body.dsh-resizing * {
   line-height: 1.85em;
 }
 .md-line[data-kind="hr"]:not([data-active="true"]) .md-mark { display: none; }
+
+/* 图片行（2026-11-24 粘贴图片）：非当前行只显示缩略图，当前行显示 ![]() 语法便于改路径。
+   语法层放在 .md-mark 里，隐藏后 textContent 仍保留 → editorToText 与 draft 永远一致。 */
+.md-line[data-kind="img"] .md-mark { display: none; }
+.md-line[data-kind="img"][data-active="true"] .md-mark { display: inline; }
+.md-line[data-kind="img"] .md-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 4px 0;
+  border-radius: 8px;
+}
+.md-line[data-kind="img"][data-active="true"] .md-img { display: none; }
 
 /* 阅读面板本体：撑满并留出圆角，滚动条在 .vp-read 上（原有行为不变） */
 .dn-reader { flex: 1; min-height: 0; display: flex; flex-direction: column; border-radius: 8px; }
