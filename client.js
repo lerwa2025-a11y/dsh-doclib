@@ -231,8 +231,8 @@ window.__ModuleLoader__.load({
         copyDrafts: '稿件',
         copyNewDraftName: '新稿件',
         copyNewGroup: '新建分组',
-        copyPanelHide: '收起左栏',
-        copyPanelShow: '展开左栏',
+        panelHide: '收起左栏',
+        panelShow: '展开左栏',
         copyLoadFailed: '稿件读取失败：',
         copyNoMetaHint: '这篇没有元数据，状态按「草稿」显示',
         copyStatusDraft: '草稿',
@@ -589,8 +589,8 @@ window.__ModuleLoader__.load({
         copyDrafts: 'Drafts',
         copyNewDraftName: 'New draft',
         copyNewGroup: 'New group',
-        copyPanelHide: 'Hide list',
-        copyPanelShow: 'Show list',
+        panelHide: 'Hide list',
+        panelShow: 'Show list',
         copyLoadFailed: 'Failed to load draft: ',
         copyNoMetaHint: 'This draft has no metadata; status shows as Draft',
         copyStatusDraft: 'Draft',
@@ -2483,6 +2483,8 @@ function useScrollMemo(bucket, selector, ready) {
           return 260
         }
       })
+      /* 左栏收起（2026-11-24 大王要求）：整条缩成 30px 窄栏，只留一个展开按钮 */
+      const [treeHidden, setTreeHidden] = useState(false)
       const [moveOpen, setMoveOpen] = useState(false)
       const [moveTargets, setMoveTargets] = useState([])
       // ── [t4 阅读排版] ── 正文字体 / 字号 / 行距。默认值先本地兜底，服务端读取失败也不影响阅读。
@@ -4514,9 +4516,29 @@ function useScrollMemo(bucket, selector, ready) {
           h(
             'div',
             {
-              className: 'vp-tree',
-              style: { width: `${treeWidth}px` },
+              className: treeHidden ? 'vp-tree vp-tree-fold' : 'vp-tree',
+              style: { width: `${treeHidden ? 30 : treeWidth}px` },
             },
+            /* 收起态（2026-11-24 大王要求）：整条缩成 30px 窄栏，只留一个展开按钮。
+               照抄文案区 .cb-list-fold 的做法，左右两侧观感一致。 */
+            treeHidden
+              ? h(
+                Fragment,
+                null,
+                h('button', {
+                  type: 'button',
+                  className: 'cb-list-rail',
+                  title: t('panelShow'),
+                  'aria-label': t('panelShow'),
+                  onClick: () => setTreeHidden(false),
+                },
+                  h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }),
+                  h('span', { className: 'cb-list-rail-t' }, t('vaultTreeTitle')),
+                ),
+              )
+              : h(
+                Fragment,
+                null,
             /*
              * 这里原来有一条「库 / 工作台」标题行（.vp-libhead），标题下面还挂着库根路径。
              * 大王要的是「和其他工作台一样，直接就是搜索框」——
@@ -4637,6 +4659,13 @@ function useScrollMemo(bucket, selector, ready) {
             h(
               'div',
               { className: 'vp-treehead' },
+              h('button', {
+                type: 'button',
+                className: 'cb-fold',
+                title: t('panelHide'),
+                'aria-label': t('panelHide'),
+                onClick: () => setTreeHidden((hidden) => !hidden),
+              }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
               h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
             /*
              * 顶部加号（2026-11-22）：新建文件夹改由各分类行右侧的 ＋ 建，
@@ -4753,9 +4782,11 @@ function useScrollMemo(bucket, selector, ready) {
                   ? h('div', { className: 'vp-tree-empty vp-pad' }, t('vaultEmptyDir'))
                   : flatTree.map((node) => treeNode(node, 0)),
             ),
+              ),
           ),
 
-          h('div', {
+          /* 左栏收起时不渲染分隔线（没有可拖的东西了） */
+          treeHidden ? null : h('div', {
             className: 'vp-splitter',
             title: '拖动调整宽度',
             onMouseDown: (event) => {
@@ -7819,14 +7850,31 @@ function useScrollMemo(bucket, selector, ready) {
         const setQuery = props.onQuery
         const activePath = props.activePath
         const sortBy = props.sortBy
-        /* 加号下拉：新建分组 / 新建文案 */
+        /* 加号下拉（2026-11-24 大王复定：新建分组 / 新建稿件仍然走加号打开，不铺开） */
         /* 树的实际展开状态由父组件传入（见 CopyBoard 里的说明） */
         const treeExpanded = props.treeExpanded || {}
+        const [newOpen, setNewOpen] = useState(false)
+        /* 下拉菜单的 fixed 坐标（2026-11-18 改 fixed 置顶，坐标由 dropPositionOf 算） */
+        const [newMenuPos, setNewMenuPos] = useState(null)
+        /* 加号按钮 ref —— 算菜单位置要用它的 getBoundingClientRect */
+        const newBtnRef = useRef(null)
         /* 排序下拉开合（2026-11-18 修黑屏：以前漏定义，读 sortOpen 直接崩） */
         const [sortOpen, setSortOpen] = useState(false)
 
 
 
+        /* 点外面收起加号菜单 */
+        useEffect(() => {
+          if (!newOpen) return undefined
+          const onDown = (event) => {
+            const node = event.target
+            if (node && typeof node.closest === 'function' && node.closest('.vp-newinline') !== null) return
+            setNewOpen(false)
+            setNewMenuPos(null)
+          }
+          document.addEventListener('mousedown', onDown)
+          return () => document.removeEventListener('mousedown', onDown)
+        }, [newOpen])
         /* 只要有目录展开过，按钮就显示「全部收起」（点它收起全部） */
         const hasAnyExpanded = Object.keys(treeExpanded).length > 0
 
@@ -7843,8 +7891,8 @@ function useScrollMemo(bucket, selector, ready) {
             h('button', {
               type: 'button',
               className: 'cb-list-rail',
-              title: t('copyPanelShow'),
-              'aria-label': t('copyPanelShow'),
+              title: t('panelShow'),
+              'aria-label': t('panelShow'),
               onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
             },
               h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }),
@@ -7869,32 +7917,67 @@ function useScrollMemo(bucket, selector, ready) {
             }),
           ),
           /*
-           * 标题行（2026-11-24 大王改定）：
-           * 最左一个「收起/展开左栏」按钮（DSH 侧边栏同款图标）；
-           * 「新建分组」「新建稿件」直接露在标题旁边，不再走加号下拉 ——
-           * 只有两项、点开还要多一次点击，不如铺开。
+           * 标题行（2026-11-24 大王定）：
+           *   · 最左一个「收起/展开左栏」按钮（DSH 侧边栏同款图标）
+           *   · 标题「稿件」右边仍是加号，点开给「新建分组 / 新建稿件」两项
+           *     （大王复定：这两项继续用加号打开，不铺开成两个按钮）
            */
           h('div', { className: 'cb-head' },
             h('button', {
               type: 'button',
               className: 'cb-fold',
-              title: t('copyPanelHide'),
-              'aria-label': t('copyPanelHide'),
+              title: t('panelHide'),
+              'aria-label': t('panelHide'),
               onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
             }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
             h('span', { className: 'cb-head-title' }, t('copyDrafts')),
-            h('button', {
-              type: 'button',
-              className: 'cb-newbtn',
-              title: t('copyNewGroup'),
-              onClick: () => { if (typeof props.onCreateDir === 'function') props.onCreateDir() },
-            }, h(BoardIcon, { name: 'folder', className: 'wb-ic-xs' }), h('span', null, t('copyNewGroup'))),
-            h('button', {
-              type: 'button',
-              className: 'cb-newbtn',
-              title: t('copyNewDraft'),
-              onClick: () => { if (typeof props.onCreate === 'function') props.onCreate() },
-            }, h(BoardIcon, { name: 'fileText', className: 'wb-ic-xs' }), h('span', null, t('copyNewDraft'))),
+            h('div', { className: 'vp-newinline' },
+              h('button', {
+                type: 'button',
+                className: 'vp-newbtn-round',
+                ref: newBtnRef,
+                'data-open': newOpen ? 'true' : 'false',
+                title: t('vaultNew'),
+                'aria-label': t('vaultNew'),
+                onClick: () => {
+                  /* fixed 定位：打开时用加号 rect 算坐标并夹在视口内 */
+                  if (newOpen) { setNewOpen(false); setNewMenuPos(null); return }
+                  const pos = dropPositionOf(newBtnRef.current, DROP_W)
+                  if (pos === null) return
+                  setNewMenuPos(pos)
+                  setNewOpen(true)
+                },
+              }, '＋'),
+              newOpen && newMenuPos ? h('div', {
+                className: 'vp-newdrop',
+                style: { left: newMenuPos.left + 'px', top: newMenuPos.top + 'px', width: DROP_W + 'px' },
+              },
+                h('button', {
+                  type: 'button',
+                  className: 'vp-newdrop-item',
+                  onClick: () => {
+                    setNewOpen(false)
+                    setNewMenuPos(null)
+                    if (typeof props.onCreateDir === 'function') props.onCreateDir()
+                  },
+                },
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('copyNewGroup')),
+                ),
+                h('button', {
+                  type: 'button',
+                  className: 'vp-newdrop-item',
+                  onClick: () => {
+                    setNewOpen(false)
+                    setNewMenuPos(null)
+                    if (typeof props.onCreate === 'function') props.onCreate()
+                  },
+                },
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('copyNewDraft')),
+                ),
+              ) : null,
+            ),
           /* 全部展开/收起 + 排序（2026-11-18 大王要求，与素材库一致） */
           h('button', {
             type: 'button',
@@ -9165,7 +9248,7 @@ function useScrollMemo(bucket, selector, ready) {
         const exists = props.exists === true
         const loading = props.loading === true
         const openVolumes = props.openVolumes || {}
-
+        /* 左栏收起（2026-11-24 大王要求，与文案区同一套）：缩成 30px 窄栏 */
         const volumes = project ? (Array.isArray(project.volumes) ? project.volumes : []) : []
         const settings = project && Array.isArray(project.settings) ? project.settings : []
         /*
@@ -9179,6 +9262,27 @@ function useScrollMemo(bucket, selector, ready) {
          * 固定六类只是在新建项目时先按模板铺好。这里只按顺序列，不做筛选。
          */
         const settingTotal = settings.length
+
+        /*
+         * 收起状态（2026-11-24 大王要求）：整条左栏缩成 30px 窄栏，只留一个展开按钮。
+         * 与文案区 .cb-list-fold 同一套观感，左右两侧一致。
+         */
+        if (props.panelHidden === true) {
+          return h(
+            'div',
+            { className: 'cb-list cb-list-fold', style: props.style },
+            h('button', {
+              type: 'button',
+              className: 'cb-list-rail',
+              title: t('panelShow'),
+              'aria-label': t('panelShow'),
+              onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
+            },
+              h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }),
+              h('span', { className: 'cb-list-rail-t' }, t('writeProjects')),
+            ),
+          )
+        }
 
         return h(
           'div',
@@ -9197,6 +9301,14 @@ function useScrollMemo(bucket, selector, ready) {
           ),
           /* 标题行「项目」+ 新建加号（2026-11-18：加号从浮动挪进来，与素材库同构） */
           h('div', { className: 'wbg-head' },
+            /* 收起/展开左栏（2026-11-24 大王要求，与文案区同一个按钮样式） */
+            h('button', {
+              type: 'button',
+              className: 'cb-fold',
+              title: t('panelHide'),
+              'aria-label': t('panelHide'),
+              onClick: () => { if (typeof props.onTogglePanel === 'function') props.onTogglePanel() },
+            }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })),
             h('span', { className: 'wbg-head-title' }, t('writeProjects')),
             h('button', {
               type: 'button',
@@ -9991,6 +10103,8 @@ function useScrollMemo(bucket, selector, ready) {
         /* 三块区域宽度（2026-11-18 大王要求可拖宽） */
         const [listW, setListW] = useState(240)
         const [asideW, setAsideW] = useState(268)
+        /* 左栏收起（2026-11-24 大王要求，与文案区同一套）：整条缩成 30px 窄栏 */
+        const [headHidden, setHeadHidden] = useState(false)
         /* 新建项目的自绘输入条（不用 window.prompt：Electron 不支持） */
         const [newProjectOpen, setNewProjectOpen] = useState(false)
         const [projectDraft, setProjectDraft] = useState('')
@@ -11027,10 +11141,12 @@ function useScrollMemo(bucket, selector, ready) {
                 cancel: () => setNewProjectOpen(false),
               }
               : null,
-            style: { width: listW + 'px' },
+            panelHidden: headHidden,
+            onTogglePanel: () => setHeadHidden((hidden) => !hidden),
+            style: { width: (headHidden ? 30 : listW) + 'px' },
           }),
-          /* 列表 | 正文 分隔线（2026-11-18 可拖宽） */
-          h(Splitter, {
+          /* 列表 | 正文 分隔线（2026-11-18 可拖宽；左栏收起时不渲染） */
+          headHidden ? null : h(Splitter, {
             className: 'wbg-split',
             width: listW,
             applyWidth: setListW,
@@ -12338,6 +12454,8 @@ mark.df-hit[data-active="true"] {
 }
 .cb-newbtn:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l1); }
 .cb-newbtn:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -2px; }
+/* 素材库左栏收起态（2026-11-24 大王要求）：宽度由内联 style 压到 30px，这里把内边距与滚动条去掉，让竖排按钮铺满 */
+.vp-tree.vp-tree-fold { padding: 0; overflow: hidden; }
 /* 收起状态的左栏：整条只剩 30px 窄栏，一个按钮点回来（2026-11-24 大王要求） */
 /* 两条 .cb-list 规则同特异性、而 .cb-list 排在文件更后面，所以这里必须用复合选择器 .cb-list.cb-list-fold 提特异性，否则宽度压不过 240px */
 .cb-list.cb-list-fold { width: 30px; padding: 0; align-items: stretch; border-right: 1px solid var(--dsw-alias-border-l1); }
