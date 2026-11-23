@@ -1261,7 +1261,7 @@ function useScrollMemo(bucket, selector, ready) {
      * ══════════════════════════════════════════════════════════════════════
      * 二、为什么这样做（三条约束来自 client.js 里 t10 契约 §4.3）
      * ══════════════════════════════════════════════════════════════════════
-     *   1. draft 必须还是 string —— 防抖/saveDoc/Ctrl+S/onBlur/按钮 disabled 全依赖它。
+     *   1. draft 必须还是 string —— 防抖/saveDoc/onBlur/按钮 disabled 全依赖它。
      *   2. 严禁 md↔HTML 互转 —— 这里只做「md 字符串 → 展示结构」的正向一次性渲染，
      *      反向永远走 editorToText 的纯文本逆转，不产生任何富文本序列化。
      *   3. 符号**不删**，包进 .md-mark，只靠 CSS 隐藏。
@@ -2100,7 +2100,9 @@ function useScrollMemo(bucket, selector, ready) {
          *   setDraft      更新 draft
          *   editorToText  DOM → 纯文本（三处各有一份，语义必须与 mdPaintEditor 同源）
          *   onDirty       标记文档已改动（可选）
-         *   onSave        Ctrl/Cmd+S（可选；不传就不拦 Ctrl+S）
+         *   uploadImage   粘贴图片时的上传函数（可选；不传就只粘文字）
+         *   imageSrc      图片行路径 → 可显示地址（可选）
+         *   onError       上传失败的回调（可选）
          *
          * 返回 { props, paint, sync, ... }：
          *   props 展开到 contenteditable 节点上；
@@ -2112,7 +2114,6 @@ function useScrollMemo(bucket, selector, ready) {
           const setDraft = config.setDraft
           const editorToText = config.editorToText
           const onDirty = config.onDirty
-          const onSave = config.onSave
           /* 图片粘贴（2026-11-24）：传上传函数才接管图片粘贴；imageSrc 负责把
              图片行里的路径换成本地 /raw 地址（不给就只显示语法、不出缩略图）。 */
           const uploadImage = config.uploadImage
@@ -2228,51 +2229,8 @@ function useScrollMemo(bucket, selector, ready) {
           }
 
           /* ── 结构变更一律不让浏览器做 ── */
-          /* Ctrl/Cmd+B / +I：格式按钮行已删（2026-11-19 大王要求），
-             但加粗/斜体照样要能打出来 —— 所以快捷键留在这里。
-             有选中就包住，已经包着就再按一次拆掉；没选中就插一对符号、
-             光标落在中间，接着打字直接生效。 */
-          const toggleInline = (marker) => {
-            const node = el()
-            if (!node) return
-            const source = draftRef.current
-            const sel = mdSelectionGlobal(node)
-            const start = sel ? sel.start : Math.max(0, Math.min(caretRef.current, source.length))
-            const end = sel ? sel.end : start
-            const picked = source.slice(start, end)
-            const before = source.slice(Math.max(0, start - marker.length), start)
-            const after = source.slice(end, end + marker.length)
-            let next = ''
-            let caret = start
-            if (picked !== '' && before === marker && after === marker) {
-              next = source.slice(0, start - marker.length) + picked + source.slice(end + marker.length)
-              caret = start - marker.length + picked.length
-            } else if (picked !== '') {
-              next = source.slice(0, start) + marker + picked + marker + source.slice(end)
-              caret = start + marker.length + picked.length
-            } else {
-              next = source.slice(0, start) + marker + marker + source.slice(start)
-              caret = start + marker.length
-            }
-            pushUndo()
-            commit(next, caret)
-          }
 
           const onKeyDown = (event) => {
-            if ((event.ctrlKey || event.metaKey) && !event.altKey) {
-              const key = String(event.key).toLowerCase()
-              const marker = key === 'b' ? '**' : (key === 'i' ? '*' : '')
-              if (marker !== '') {
-                event.preventDefault()
-                toggleInline(marker)
-                return
-              }
-            }
-            if ((event.ctrlKey || event.metaKey) && (event.key === 's' || event.key === 'S')) {
-              event.preventDefault()
-              if (typeof onSave === 'function') onSave()
-              return
-            }
             const node = el()
             if (!node) return
             const result = mdKeyDown(event, node, draftRef.current, {
@@ -3750,7 +3708,7 @@ function useScrollMemo(bucket, selector, ready) {
       //
       // 方案 B：编辑区用 contenteditable 替代 textarea，但 **磁盘仍存 md 原文**。
       // 三条不可协商的底线（t3 契约 §4.3，违反会崩）：
-      //   1. draft 必须是 string —— 防抖(依赖 [draft]) / saveDoc / Ctrl+S /
+      //   1. draft 必须是 string —— 防抖(依赖 [draft]) / saveDoc /
       //      onBlur / 手动保存按钮 disabled 五处全靠它
       //   2. 严禁 md↔HTML 转换 —— 会毁掉全库搜索、复制全文、发送到对话、
       //      83 个既有文件与 Obsidian 生态（t1 §2.4）
@@ -3860,7 +3818,6 @@ function useScrollMemo(bucket, selector, ready) {
         setDraft,
         editorToText,
         onDirty: () => setDoc((current) => (current ? { ...current, dirty: true } : current)),
-        onSave: () => void saveDoc(),
         uploadImage: uploadPastedImage,
         imageSrc: docImageSrc,
         onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
@@ -8989,7 +8946,6 @@ function useScrollMemo(bucket, selector, ready) {
           draft,
           setDraft,
           editorToText,
-          onSave: () => void save(true),
           uploadImage: uploadPastedImage,
           imageSrc: docImageSrc,
           onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
@@ -11070,7 +11026,6 @@ function useScrollMemo(bucket, selector, ready) {
           draft,
           setDraft,
           editorToText,
-          onSave: () => void save(true),
           uploadImage: uploadPastedImage,
           imageSrc: docImageSrc,
           onError: (err) => { setError(t('imagePasteFailed') + messageOf(err)); setImageTick((tick) => tick + 1) },
