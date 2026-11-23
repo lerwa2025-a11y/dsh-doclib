@@ -9918,19 +9918,24 @@ function useScrollMemo(bucket, selector, ready) {
                 )
               : null,
             /*
-             * 设定分类 + 条目（2026-11-24 大王改定：设定改分组）。
+             * 设定（2026-11-24 大王定案：只有三个分类是分组）。
              *
-             * 磁盘上是两级：设定\<分类>\<条目>.md。左栏也分两级：
-             * 分类行（条目数徽章 + 折叠箭头）→ 条目行。
-             * 只有一篇的分类（武器）点分类行直接打开那一篇 —— 省一次点击；
-             * 多篇的分类点一下展开/收起，分类行右侧「＋」给该分类加条目。
+             *   分组  大纲 / 人物 / 势力结构 → 设定\<分类>\<条目>.md
+             *         左栏：可折叠的分类行 + 条目数徽章，右侧「＋」给该分类加子文件；
+             *   单文件 世界地图 / 核心冲突设定 / 修行体系 / 武器 / 灵感与废案
+             *         → 设定\<分类>.md，左栏就是一行，点开直接写，没有 ＋ 也没有徽章。
+             *
+             * 两者在 readWriteProject 里都被包成 entries 数组（单文件类 count 恒为 1），
+             * 所以这里必须按 row.group 判断，不能按 entries.length —— 否则「只有一篇的分组」
+             * 会被误当成单文件，用户就没法给它加第二篇了。
              */
             project
               ? (settingOpen
                 ? settings.map((row) => {
                   const kind = row.kind
+                  const isGroup = row.group === true
                   const entries = Array.isArray(row.entries) ? row.entries : []
-                  const open = !!(props.openSettings && props.openSettings[kind] === true)
+                  const open = isGroup && !!(props.openSettings && props.openSettings[kind] === true)
                   /* 原地改分类名：正在改的这一类，标题换成输入框 */
                   const kindRenaming = props.editProj
                     && props.editProj.kind === 'rename-setting-kind'
@@ -9940,17 +9945,14 @@ function useScrollMemo(bucket, selector, ready) {
                       {
                         className: 'wbg-set',
                         'data-open': open ? 'true' : 'false',
-                        'data-multi': entries.length > 1 ? 'true' : 'false',
+                        'data-group': isGroup ? 'true' : 'false',
                         role: 'button',
                         tabIndex: 0,
                         title: row.path,
                         onClick: () => {
-                          /*
-                           * 只有一篇：直接打开它（不展开一层空壳）；
-                           * 多篇：折叠 / 展开。
-                           */
-                          if (entries.length === 1) {
-                            if (typeof props.onOpenSettingEntry === 'function') {
+                          /* 单文件类：直接打开那一篇；分组类：折叠 / 展开 */
+                          if (!isGroup) {
+                            if (typeof props.onOpenSettingEntry === 'function' && entries.length > 0) {
                               props.onOpenSettingEntry(kind, entries[0])
                             }
                             return
@@ -9973,7 +9975,7 @@ function useScrollMemo(bucket, selector, ready) {
                           })
                         },
                       },
-                      entries.length > 1
+                      isGroup
                         ? h(WbgIcon, {
                           name: open ? 'caretDown' : 'caretRight',
                           small: true,
@@ -10004,25 +10006,28 @@ function useScrollMemo(bucket, selector, ready) {
                           : h('b', null, kind),
                         h('small', null, row.words + ' ' + t('writeWordUnit')),
                       ),
-                      /* 条目数徽章：多篇时才显示，一篇的分类不必占地方 */
-                      entries.length > 1
+                      /* 条目数徽章：只有分组类才有「几条」这个概念 */
+                      isGroup
                         ? h('span', { className: 'wbg-set-n' }, String(entries.length))
                         : null,
-                      h(
-                        'button',
-                        {
-                          type: 'button',
-                          className: 'wbg-vol-add',
-                          title: t('writeAddSettingEntryTip'),
-                          'aria-label': t('writeAddSettingEntryTip'),
-                          onClick: (event) => {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            if (typeof props.onAddSettingEntry === 'function') props.onAddSettingEntry(kind)
+                      /* ＋：只有分组类能加子文件 */
+                      isGroup
+                        ? h(
+                          'button',
+                          {
+                            type: 'button',
+                            className: 'wbg-vol-add',
+                            title: t('writeAddSettingEntryTip'),
+                            'aria-label': t('writeAddSettingEntryTip'),
+                            onClick: (event) => {
+                              event.preventDefault()
+                              event.stopPropagation()
+                              if (typeof props.onAddSettingEntry === 'function') props.onAddSettingEntry(kind)
+                            },
                           },
-                        },
-                        '＋',
-                      ),
+                          '＋',
+                        )
+                        : null,
                     ),
                     open && entries.length > 0
                       ? entries.map((entry) => {
@@ -10824,9 +10829,14 @@ function useScrollMemo(bucket, selector, ready) {
           if (!window.confirm(t('writeDeleteSettingKindConfirm') + kind + '？\n' + t('writeDeleteSettingKindSub'))) return
           try {
             await vaultApiPost('/write-del-setting-kind', { path: project.path, kind })
-            /* 删的是当前打开条目的分类 → 清空右栏 */
-            /* 删的是当前打开条目所在的分类 → 清空右栏（2026-11-24 改成目录：判前缀） */
-            if (file && typeof file.path === 'string' && file.path.indexOf(project.path + '/设定/' + kind + '/') === 0) {
+            /*
+             * 删掉的分类里正开着条目 → 清空右栏。
+             * 分组类看目录前缀（设定\<分类>/...），单文件类就是那一篇（设定\<分类>.md）。
+             */
+            const openPath = file && typeof file.path === 'string' ? file.path : ''
+            const kindDir = project.path + '/设定/' + kind + '/'
+            const kindFile = project.path + '/设定/' + kind + '.md'
+            if (openPath !== '' && (openPath.indexOf(kindDir) === 0 || openPath === kindFile)) {
               setFile(null)
               setActiveFile('')
               setDraft('')
@@ -11018,8 +11028,6 @@ function useScrollMemo(bucket, selector, ready) {
           }
         }
 
-        /*
-         * 标题原地改名（2026-11-19 大王要求）：
         /*
          * 标题原地改名（2026-11-19 大王要求）：
          * 编辑模式下点标题变输入框；阅读模式纯文本、无悬停提示。
