@@ -7858,28 +7858,11 @@ function useScrollMemo(bucket, selector, ready) {
            */
           props.outline !== undefined && props.outline !== null ? props.outline : null,
           /*
-           * 会话区（2026-11-24 大王要求「做小，只留两个按钮」）：
-           * 原来还有「会话」小标题、会话名 / 占位文字、空白会话提示，三层堆下来
-           * 占掉右栏一大截。现在只留「打开会话」与「新会话」两颗按钮，
-           * 会话状态看标题行右侧那颗 ●（statusText）。
+           * 隔离线（2026-11-24 大王要求「两个板块做个隔离线」）：
+           * 上半区是章节目录、下半区是助手，中间画一条通栏细线把两块分开。
+           * 只在自己带了目录的板块出现；素材区是纯助手栏，不画。
            */
-          h('div', { className: 'cb-sess' },
-            sessionId !== ''
-              ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
-              : null,
-            h('button', {
-              type: 'button',
-              className: 'cb-sess-btn',
-              disabled: sessionBusy,
-              onClick: () => {
-                if (confirmSess !== 'new') { askConfirm('new'); return }
-                setConfirmSess('')
-                void ensureSessionNow()
-              },
-            }, confirmSess === 'new'
-              ? t('assistConfirmNew')
-              : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
-          ),
+          props.outline !== undefined && props.outline !== null ? h('div', { className: 'cb-aside-sep' }) : null,
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
           /*
            * 聊天记录区（2026-11-18 大王要求）：
@@ -8070,7 +8053,30 @@ function useScrollMemo(bucket, selector, ready) {
                 title: t('assistSend'),
                 disabled: busy || draft.trim() === '',
                 onClick: () => void send(),
-              }, h(CbIcon, { name: 'arrowUp', small: true })))))
+              }, h(CbIcon, { name: 'arrowUp', small: true })))),
+          /*
+           * 会话按钮（2026-11-24 大王要求：挪到最底下）：
+           * 原来贴在标题行下面占掉一截，现在沉到右栏最底部、输入框之后。
+           * 只留「打开会话」+「新会话」两颗；会话状态看标题行右侧那颗 ●。
+           */
+          h('div', { className: 'cb-sess' },
+            sessionId !== ''
+              ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
+              : null,
+            h('button', {
+              type: 'button',
+              className: 'cb-sess-btn',
+              disabled: sessionBusy,
+              onClick: () => {
+                if (confirmSess !== 'new') { askConfirm('new'); return }
+                setConfirmSess('')
+                void ensureSessionNow()
+              },
+            }, confirmSess === 'new'
+              ? t('assistConfirmNew')
+              : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
+          ),
+      )
       }
 
       // ── 文案台：接真实数据（2026-11-17）────────────────────────────────
@@ -14100,18 +14106,25 @@ mark.df-hit[data-active="true"] {
 .cb-outline-m { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-outline-empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; font-size: 11px; line-height: 1.6; text-align: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 /*
+ * 上半区（章节目录）与下半区（助手）之间的隔离线（2026-11-24 大王要求）。
+ * aside 有 gap:12px 和 padding:12px，这里用负边距把线拉满整栏宽度，
+ * 让它读起来是「两块」而不是「一堆卡片」。
+ */
+.cb-aside-sep { flex: none; height: 1px; margin: 0 -12px; background: var(--dsw-alias-border-l1); }
+/*
  * 会话区（2026-11-18 美化）：
  * 原来一整块 bg-layer-2 深色方块显得很重，改成细边框 + 透明底的轻卡片。
+ */
+/*
+ * 会话按钮组（2026-11-24 大王要求：挪到最底下）：
+ * 沉到右栏底部后不再需要卡片外框，直接两颗按钮并排贴底。
  */
 .cb-sess {
   flex: none;
   display: flex;
-  flex-direction: column;
-  gap: 7px;
-  padding: 9px 10px;
-  border-radius: var(--dsw-radius-sm, 8px);
-  border: 1px solid var(--dsw-alias-border-l1);
-  background: transparent;
+  flex-direction: row;
+  gap: 6px;
+  padding: 0;
 }
 
 /*
@@ -14134,6 +14147,7 @@ mark.df-hit[data-active="true"] {
   font-size: 11px;
   white-space: nowrap;
   cursor: pointer;
+  flex: 1 1 auto;
   transition: background .15s, color .15s, border-color .15s;
 }
 .cb-sess-btn:hover {
