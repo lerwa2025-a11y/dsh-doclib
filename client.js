@@ -7145,6 +7145,11 @@ function useScrollMemo(bucket, selector, ready) {
         h('div', { className: 'cb-outline-h' },
           h('span', null, t(props.titleKey)),
           count > 0 ? h('span', { className: 'cb-outline-n' }, String(count)) : null,
+          /*
+           * 收起侧边栏按钮（2026-11-24 大王 m17329：搬到「章节」这一行来）。
+           * 由 BoardAssistant 造好传进来 —— 板块自己拿不到 setCollapsed。
+           */
+          props.fold !== undefined && props.fold !== null ? props.fold : null,
         ),
         count === 0
           ? h('div', { className: 'cb-outline-empty' }, t(props.emptyKey))
@@ -7832,26 +7837,42 @@ function useScrollMemo(bucket, selector, ready) {
          * 抽成变量，因为它现在挂在两处之一 ——
          *   有章节目录（文案区 / 写作区）→ 挪到隔离线下面，当「下半区」的标题；
          *   没有目录（素材区）→ 仍在最上面，行为与以前完全一致。
-         * 「空闲 / 运行中」那颗状态胶囊、收起按钮都在这行里，跟着一起走。
+         * 「空闲 / 运行中」那颗状态胶囊就在这行里，跟着一起走。
          */
+        /*
+         * 收起侧边栏按钮（2026-11-24 大王要求：照素材区左栏那颗做）。
+         * .cb-fold 是素材区在用的小按钮：20×20、透明底、panelLeft 图标、贴行尾。
+         * 造两遍是因为要放到两处之一：
+         *   有章节目录（文案区 / 写作区）→ 放进「章节」那一行的行尾（大王 m17329）；
+         *   没有目录（素材区）→ 仍旧在助手标题行行尾。
+         * extra 是位置类（.cb-aside-fold / .cb-outline-fold），只负责 margin。
+         */
+        const foldButton = (extra) => h('button', {
+          type: 'button',
+          className: 'cb-fold ' + extra,
+          title: t('assistCollapse'),
+          'aria-label': t('assistCollapse'),
+          onClick: () => setCollapsed(true),
+        }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }));
+
         const asideHead = h('div', { className: 'cb-aside-h' },
           h('span', { className: 'cb-aside-ic' }, h(CbIcon, { name: 'sparkle', small: true })),
           h('span', null, t(props.titleKey)),
           h('span', { className: 'cb-status' },
             h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
             statusText),
-          /*
-           * 收起侧边栏（2026-11-24 大王要求：照素材区左栏那颗做）。
-           * 素材区用的是 .cb-fold：20×20 透明底 + panelLeft 图标，贴在行尾；
-           * 这里照抄，换成 CbIcon 里没有的 panelLeft 就借 BoardIcon。
-           */
-          h('button', {
-            type: 'button',
-            className: 'cb-fold cb-aside-fold',
-            title: t('assistCollapse'),
-            'aria-label': t('assistCollapse'),
-            onClick: () => setCollapsed(true),
-          }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })));
+          /* 有目录时收起按钮在「章节」那一行（大王 m17329），这里就不重复放了。 */
+          props.outline !== undefined && props.outline !== null ? null : foldButton('cb-aside-fold'));
+
+        /*
+         * 章节目录节点（2026-11-24 大王定案方案 B：右栏上下分区，上目录、下助手）。
+         * props.outline 是函数 (fold) => 节点：板块拼目录时把「收起侧边栏」那颗按钮
+         * 顺手放进章节行行尾（大王 m17329 要求按钮做到章节那一行）。
+         * 兼容旧写法：直接给节点也行，那就没有收起按钮。
+         */
+        const outlineNode = props.outline === undefined || props.outline === null
+          ? null
+          : (typeof props.outline === 'function' ? props.outline(foldButton('cb-outline-fold')) : props.outline);
 
         return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', style: props.style },
           /*
@@ -7870,7 +7891,7 @@ function useScrollMemo(bucket, selector, ready) {
            * 章节目录插槽（2026-11-24 大王定案方案 B：右栏上下分区，上目录、下助手）。
            * 板块自己拼好节点传进来；不给就是纯助手栏（素材区不受影响）。
            */
-          props.outline !== undefined && props.outline !== null ? props.outline : null,
+          outlineNode,
           /*
            * 隔离线（2026-11-24 大王要求「两个板块做个隔离线」）：
            * 上半区是章节目录、下半区是助手，中间画一条通栏细线把两块分开。
@@ -9513,12 +9534,13 @@ function useScrollMemo(bucket, selector, ready) {
             placeholderKey: 'copyAssistantInput',
             tasks: [],
             /* 右栏上半区：当前稿件的标题大纲（点条目滚到那一段） */
-            outline: h(BoardOutline, {
+            outline: (fold) => h(BoardOutline, {
               t,
               titleKey: 'tocPanel',
               emptyKey: doc === null ? 'tocEmptyNoDoc' : 'tocEmpty',
               items: outlineItems,
               activeId: outlineActive,
+              fold,
               onPick: (item) => {
                 setOutlineActive(item.id)
                 const surface = editorRef.current
@@ -11951,12 +11973,13 @@ function useScrollMemo(bucket, selector, ready) {
             placeholderKey: 'writeInput',
             tasks: [],
             /* 右栏上半区：项目卷章目录（点章打开，跟左栏同一个入口） */
-            outline: h(BoardOutline, {
+            outline: (fold) => h(BoardOutline, {
               t,
               titleKey: 'tocPanel',
               emptyKey: 'writeNoStructure',
               items: outlineItems,
               activeId: activeFile,
+              fold,
               onPick: (item) => void openChapter(item.chapter, item.volumeIndex, item.chapterIndex),
             }),
             style: { width: asideW + 'px' },
@@ -13441,6 +13464,9 @@ mark.df-hit[data-active="true"] {
  * 这里只补一条「推到行最右侧」——标题字后面可能还跟着状态胶囊。
  */
 .cb-aside-fold { margin-left: auto; }
+/* 章节那一行的收起按钮（2026-11-24 大王 m17329）：紧跟在计数后面、行尾。 */
+.cb-outline-fold { flex: none; margin-left: 2px; }
+.cb-outline-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .cb-aside-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
 
@@ -14108,7 +14134,8 @@ mark.df-hit[data-active="true"] {
  * 和助手同宽、同一栏内上下排；两块都 flex:1 各占一半，各自滚动。
  */
 .cb-outline { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); overflow: hidden; }
-.cb-outline-h { flex: none; display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
+/* 上下内边距收到 5px：行尾那颗 20×20 的收起按钮不能把标题行撑高（2026-11-24）。 */
+.cb-outline-h { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
 .cb-outline-n { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
 .cb-outline-body::-webkit-scrollbar { width: 6px; }
