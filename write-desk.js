@@ -166,8 +166,15 @@ function settingKindPath(base, kind) {
 async function ensureSettingLayout(base) {
   const settingRoot = join(base, SETTING_DIR)
   await mkdir(settingRoot, { recursive: true })
+  /*
+   * 只在「设定 里一个分类都没有」时播种固定分类。
+   * 否则用户改名/删掉的固定分类会在每次读项目时被无脑补回来 ——
+   * 改名之后马上又冒出一个空的 势力结构，看上去就像改名失败。
+   */
+  const existing = await listSettingKinds(base)
+  if (existing.length > 0) return
   for (const kind of SETTING_DIRS) {
-    if (isSettingGroup(kind)) {
+    if (await settingIsGroup(base, kind)) {
       const dir = join(settingRoot, kind)
       await mkdir(dir, { recursive: true })
       const rows = await listMd(dir)
@@ -513,6 +520,33 @@ async function listSettingKinds(base) {
   return kinds
 }
 
+/**
+ * 这个分类在磁盘上是「分组（目录）」还是「单文件（.md）」。
+ *
+ * 判据必须以磁盘为准，不能只看 SETTING_GROUPS 那份预设名单：
+ * 用户可以把 势力结构 改名成 势力，改完它已经不在名单里了，
+ * 若仍按名单判成单文件，读的时候读不到目录里的条目，
+ * 归一化还会把整个目录压成一个 .md —— 实测就是这样丢过一次数据。
+ *
+ * 磁盘上都没有（新建、或还没建出来的固定分类）时才回落到预设名单。
+ */
+async function settingIsGroup(base, kind) {
+  const name = String(kind)
+  try {
+    const info = await stat(join(base, SETTING_DIR, name))
+    if (info.isDirectory()) return true
+  } catch {
+    /* 没有这个目录 */
+  }
+  try {
+    const info = await stat(join(base, SETTING_DIR, name + '.md'))
+    if (info.isFile()) return false
+  } catch {
+    /* 也没有这个单文件 */
+  }
+  return isSettingGroup(name)
+}
+
 /** 时间戳（文件名安全，不带冒号点）。 */
 function stampOf() {
   return new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
@@ -558,11 +592,17 @@ async function normalizeSettingLayout(base) {
       continue
     }
 
-    /* 情况 2：单文件类现在是目录 */
+    /* 情况 2：固定单文件类现在是目录 */
     if (entry.isDirectory()) {
       const kind = entry.name
-      if (isSettingGroup(kind)) continue
+      /*
+       * 只压平「预设的单文件类」。不在 SETTING_DIRS 里的目录（自建分类、或用户
+       * 把 势力结构 改名成 势力）一律当成正常分组原样保留 ——
+       * 2026-11-24 事故：原来这里对未知目录也压平，把改名后的 势力 4 篇
+       * 合并进 势力.md，目录直接删掉。
+       */
       if (SETTING_DIRS.includes(kind) === false) continue
+      if (isSettingGroup(kind)) continue
       const dir = join(settingRoot, kind)
       let rows
       try {
@@ -617,11 +657,16 @@ async function migrateIfNeeded(base) {
     }
   }
   /*
-   * 老结构的判据是「设定\ 根下直接躺着 .md」（一类一篇）。
-   * 不能拿「设定\ 下有目录」当判据 —— 新架构里目录才是正常结构。
+   * 触发判据（2026-11-24 修）：只看「正文根下散着 .md」与「项目根下还躺着老设定目录」。
+   *
+   * 曾经把「设定\ 根下直接躺着 .md」也当判据 —— 但在新架构里
+   * 世界地图 / 核心冲突设定 / 修行体系 / 武器 / 灵感与废案 本来就该是 设定\<分类>.md，
+   * 于是这个判据永远为真：每读一次项目就整份递归备份一次，
+   * 而备份目录本身又被下一次备份复制进去 → 指数级膨胀。
+   * 实测一个项目炸到 28 个备份、65 万个文件、1.36 GB，打开项目直接卡死。
+   * 形态纠形交给 normalizeSettingLayout（幂等、不备份、只在真要改时才动盘）。
    */
-  const staleSettingFiles = await listMd(join(base, SETTING_DIR))
-  if (looseBodies.length === 0 && legacyDirs.length === 0 && staleSettingFiles.length === 0) return false
+  if (looseBodies.length === 0 && legacyDirs.length === 0) return false
 
   /*
    * 先整份备份（点开头，列表与统计都会跳过）。
@@ -629,15 +674,46 @@ async function migrateIfNeeded(base) {
    * 所以先建目录，再逐个把顶层的条目复制进去（跳过备份目录本身）。
    */
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  /*
+   * 备份体积上限（2026-11-24）：项目里可能已经堆了历史备份，
+   * 整份复制会非常慢。超过上限就放弃备份（迁移本身照做，只是没副本）。
+   */
+  const BACKUP_MAX_ENTRIES = 3000
+  let backupSkipped = false
+  {
+    let counted = 0
+    const walk = async (dir) => {
+      let items
+      try {
+        items = await readdir(dir, { withFileTypes: true })
+      } catch {
+        return
+      }
+      for (const item of items) {
+        if (item.name.startsWith('.')) continue
+        counted += 1
+        if (counted > BACKUP_MAX_ENTRIES) return
+        if (item.isDirectory()) await walk(join(dir, item.name))
+      }
+    }
+    await walk(base)
+    backupSkipped = counted > BACKUP_MAX_ENTRIES
+  }
   const backupName = '.迁移备份-' + stamp
   const backup = join(base, backupName)
   let backedUp = false
-  try {
+  if (backupSkipped) {
+    /* 体积太大，放弃备份（不要在这里 mkdir，留一个空备份目录反而误导） */
+  } else try {
     await mkdir(backup, { recursive: true })
     const entries = await readdir(base, { withFileTypes: true })
     let allOk = true
     for (const entry of entries) {
-      if (entry.name === backupName) continue
+      /*
+       * 跳过所有点开头的条目（上一次的 .迁移备份-* 就在里面）。
+       * 只跳过「本次备份目录」是不够的 —— 旧备份会被再复制一份，层层嵌套。
+       */
+      if (entry.name.startsWith('.')) continue
       try {
         await cp(join(base, entry.name), join(backup, entry.name), { recursive: true, force: true })
       } catch {
@@ -850,7 +926,7 @@ export async function readWriteProject(root, projectRel) {
   for (const kind of presentKinds) if (!ordered.includes(kind)) ordered.push(kind)
   const settings = []
   for (const kind of ordered) {
-    if (isSettingGroup(kind)) {
+    if (await settingIsGroup(base, kind)) {
       const rows = await listSettingEntries(join(settingRoot, kind))
       const entries = rows.map((row) => ({
         name: row.name,
@@ -1184,7 +1260,7 @@ export async function addSettingKind(root, projectRel, kind) {
   await migrateIfNeeded(base)
   const name = settingKindName(kind)
   const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!isSettingGroup(name)) {
+  if (!(await settingIsGroup(base, name))) {
     const target = join(base, SETTING_DIR, name + '.md')
     await mkdir(join(base, SETTING_DIR), { recursive: true })
     try {
@@ -1220,7 +1296,7 @@ export async function renameSettingKind(root, projectRel, from, to) {
   const fromName = settingKindName(from)
   const toName = settingKindName(to)
   if (fromName === toName) return { ok: true, kind: toName }
-  const group = isSettingGroup(fromName)
+  const group = await settingIsGroup(base, fromName)
   const srcPath = group ? settingKindPath(base, fromName) : join(base, SETTING_DIR, fromName + '.md')
   const dstPath = group ? join(base, SETTING_DIR, toName) : join(base, SETTING_DIR, toName + '.md')
   try {
@@ -1247,7 +1323,7 @@ export async function deleteSettingKind(root, projectRel, kind) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const name = settingKindName(kind)
-  const group = isSettingGroup(name)
+  const group = await settingIsGroup(base, name)
   const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
   const relative = rel + '/' + SETTING_DIR + '/' + (group ? name : name + '.md')
   try {
@@ -1271,7 +1347,7 @@ export async function addSettingEntry(root, projectRel, kind, title) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const kindName = settingKindName(kind)
-  if (!isSettingGroup(kindName)) throw new Error('这个分类是单独文件，不能加子文件')
+  if (!(await settingIsGroup(base, kindName))) throw new Error('这个分类是单独文件，不能加子文件')
   const fileName = settingEntryFileName(title)
   const dir = join(base, SETTING_DIR, kindName)
   await mkdir(dir, { recursive: true })
@@ -1294,7 +1370,7 @@ export async function renameSettingEntry(root, projectRel, kind, from, to) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const kindName = settingKindName(kind)
-  if (!isSettingGroup(kindName)) throw new Error('这个分类是单独文件，没有单独的条目名')
+  if (!(await settingIsGroup(base, kindName))) throw new Error('这个分类是单独文件，没有单独的条目名')
   const dir = join(base, SETTING_DIR, kindName)
   const fromFile = /\.md$/i.test(String(from)) ? String(from) : settingEntryFileName(from)
   const toFile = settingEntryFileName(to)
@@ -1327,7 +1403,7 @@ export async function deleteSettingEntry(root, projectRel, kind, name) {
   await migrateIfNeeded(base)
   const kindName = settingKindName(kind)
   const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!isSettingGroup(kindName)) {
+  if (!(await settingIsGroup(base, kindName))) {
     const target = join(base, SETTING_DIR, kindName + '.md')
     try {
       await deleteToTrash(root, rel + '/' + SETTING_DIR + '/' + kindName + '.md')
