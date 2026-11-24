@@ -9,19 +9,23 @@
 //   │   │   ├── 0001-第一章.md
 //   │   │   └── 0002-第二章.md
 //   │   └── 第二卷\
-//   └── 设定\                ← 一个分类 = 一个文件（2026-11-22 大王改定）
-//       ├── 世界背景.md
-//       ├── 大纲.md
-//       ├── 世界地图.md
-//       ├── 情节线.md
-//       ├── 核心冲突设定.md
-//       └── 人物.md
+//   ├── 设定\                ← 一个分类 = 平铺的一个 .md（2026-11-24 大王重做）
+//   │   ├── 大纲.md
+//   │   ├── 情节线.md
+//   │   └── 地图.md
+//   └── 人物\                ← 人物独立板块，一个人 = 一个文件（2026-11-24 新增）
+//       ├── 沈秋水.md
+//       └── 沈一行.md
 //
 // 为什么设定是「一个分类一个文件」而不是「一个分类一个文件夹装多个条目」：
-//   设定不是清单，是成篇的底稿（世界背景要连着写、大纲是一份完整提纲、
-//   人物是一份人物表）。做成文件夹再拆条目，用户得先建条目才能写东西，
-//   写的时候还要在多个文件之间来回跳 —— 那是负担不是帮助。
-//   单文件后：点分类名直接在右栏写，新建项目就预填好模板。
+//   设定不是清单，是成篇的底稿（世界背景要连着写、大纲是一份完整提纲）。
+//   做成文件夹再拆条目，用户得先建条目才能写东西，写的时候还要在多个
+//   文件之间来回跳 —— 那是负担不是帮助。单文件后：点分类名直接在右栏写，
+//   新建项目就预填好模板。
+//   2026-11-24 大王明确「不要分组和子文件了」，并把 人物 从设定里拆出来
+//   单独成板块 —— 人物天然是「多个独立条目」，适合一人一篇。
+//
+// 左栏板块顺序（2026-11-24 大王定）：正文 → 设定 → 人物。
 //
 // 为什么「目录即结构」：
 //   原来的 项目.md 结构段与 正文\ 里的文件是两份真相，两边一对不上就要写
@@ -46,160 +50,112 @@ export const BODY_DIR = '正文'
 /** 设定目录名。 */
 export const SETTING_DIR = '设定'
 /**
- * 固定的设定分类（2026-11-24 大王定：设定分组架构）。
+ * 固定的设定分类（2026-11-24 大王重做设定板块）。
  *
- * 分两种形态：
- *   - 分组：设定\<分类>\ 是目录，目录里一个子文件 = 一条设定
- *   - 单文件：设定\<分类>.md 就是那一条
+ * 大王原话：「写作区的设定板块重做，不要分组和子文件了。新建项目的时候
+ * 固定的设定子文件为，大纲、情节线，地图。」
  *
- * 大王原话：「大纲作为一个分组，下面是总纲、情节线、世界背景三个子文件；
- * 人物作为一个分组，新建一个人物就是新建子文件；势力作为一个分组，每个势力一个子文件；
- * 其他的都是单独文件。」
- *
- * 所以只有前三个是分组，其余五个都是单文件。之后可自建分类（默认按分组处理）。
+ * 所以设定\ 是平铺目录，一篇 .md 一类设定，没有分组、没有子目录。
+ * 人物不在这里 —— 它已经是独立的左栏板块（见 CHARACTER_DIR）。
  */
-export const SETTING_DIRS = ['大纲', '人物', '势力结构', '世界地图', '核心冲突设定', '修行体系', '武器', '灵感与废案']
-
-/** 三个「分组」形态的分类：目录 + 子文件。其余固定分类都是单文件。 */
-export const SETTING_GROUPS = ['大纲', '人物', '势力结构']
-
-/** 这个分类是不是分组形态（目录）。 */
-export function isSettingGroup(kind) {
-  return SETTING_GROUPS.includes(kind)
-}
-
-/** 分组新建时默认子文件的名字：大纲组叫「总纲」，其它跟分类同名。 */
-function defaultEntryTitle(kind) {
-  return kind === '大纲' ? '总纲' : kind
-}
+export const SETTING_DIRS = ['大纲', '情节线', '地图']
 
 /**
- * 八个固定分类的初始模板。
+ * 老单文件分类名 → 新分类名的迁移映射（2026-11-24 改造时用）。
+ *
+ * 原来叫「世界地图」，大王把固定三类定成「大纲、情节线、地图」，所以
+ * 老项目里如果已经有 设定\世界地图.md，第一次读会顺手改名成 地图.md。
+ * 目标已存在就不动，绝不覆盖。
+ */
+const SETTING_RENAME = { 世界地图: '地图' }
+
+/**
+ * 人物独立板块的目录名（项目根下，与 正文\ / 设定\ 平级）。
+ *
+ * 大王原话：「人物单独做板块，板块位置调整，正文改为第一个板块，
+ * 然后是设定，最后人物。」所以人物不再是 设定\ 下的一个分类，
+ * 而是自己一层目录：人物\<人名>.md，每人一篇。
+ */
+export const CHARACTER_DIR = '人物'
+
+/**
+ * 三个固定设定文件的初始模板。
  *
  * 只给「该写什么」的小标题，不写正文：模板是用来删的脚手架，
  * 不是必须保留的格式。用户全删掉也不会影响任何解析（设定文件是纯正文）。
  */
 const SETTING_TEMPLATES = {
   大纲: [
-    '# 总纲',
+    '# 大纲',
     '## 一句话故事',
     '## 开端',
     '## 发展',
     '## 高潮',
     '## 结尾',
   ].join('\n'),
-  人物: [
-    '# 人物',
-    '## 简介',
-    '## 社会身份',
-    '## 人物关系',
-    '## 外貌',
-    '## 性格',
-    '## 背景',
-    '## 其他',
+  情节线: [
+    '# 情节线',
+    '## 主线',
+    '## 支线',
+    '## 时间顺序',
   ].join('\n'),
-  世界地图: [
-    '# 世界地图',
+  地图: [
+    '# 地图',
     '## 大区域',
     '## 关键地点',
     '## 距离与行程',
   ].join('\n'),
-  核心冲突设定: [
-    '# 核心冲突设定',
-    '## 贯穿全局的设定',
-    '## 关键设定',
-    '## 可能会写',
-  ].join('\n'),
-  修行体系: [
-    '# 修行体系',
-    '## 境界划分',
-    '## 道法分类',
-    '## 突破条件',
-  ].join('\n'),
-  势力结构: [
-    '# 势力结构',
-    '## 主要势力',
-    '## 势力关系',
-    '## 权力结构',
-  ].join('\n'),
-  武器: [
-    '# 武器',
-    '## 有名有姓的',
-    '## 类型与品级',
-  ].join('\n'),
-  灵感与废案: [
-    '# 灵感与废案',
-    '## 灵感',
-    '## 废案',
-  ].join('\n'),
 }
-/** 某个分类的初始模板：固定六类有，自建分类给一个空标题。 */
+/** 某个分类的初始模板：三个固定分类有，自建分类给一个空标题。 */
 function settingTemplateOf(kind) {
   const hit = SETTING_TEMPLATES[kind]
   return typeof hit === 'string' ? hit : '# ' + kind + '\n\n'
 }
 
-/** 分类目录名清洗：去掉 Windows 保留字符，空名报错。 */
+/** 分类文件名清洗：去掉 Windows 保留字符，空名报错。 */
 function settingKindName(kind) {
   const name = safeTitle(kind, '')
   if (name === '') throw new Error('分类名不能为空')
   return name
 }
 
-/** 条目文件名（条目名 + .md）。 */
-function settingEntryFileName(title) {
+const SETTING_ROOT_DIR = SETTING_DIR
+
+/** 人物文件名清洗：去掉 Windows 保留字符，空名报错，补 .md。 */
+function characterFileName(title) {
   const name = safeTitle(title, '')
-  if (name === '') throw new Error('条目名不能为空')
+  if (name === '') throw new Error('人物名不能为空')
   return name + '.md'
 }
 
-/** 分类目录的绝对路径（设定\<分类>）。 */
-function settingKindPath(base, kind) {
-  return join(base, SETTING_DIR, settingKindName(kind))
-}
-
 /**
- * 保证 设定\ 下固定的分类都在（分组建目录 + 一篇默认子文件，单文件类建 .md）。
+ * 保证 设定\ 下三个固定设定文件都在（2026-11-24 大王重做设定板块）。
  *
- * 已存在的一律不碰：用户可能已经改过模板、加过条目、删过默认文字。
+ * 大王原话：「写作区的设定板块重做，不要分组和子文件了。新建项目的时候
+ * 固定的设定子文件为，大纲、情节线，地图。」
+ *
+ *   - 设定\ 就是一个平铺目录，每个 .md 一类设定，没有子目录、没有分组；
+ *   - 新建项目只铺这三篇：大纲.md / 情节线.md / 地图.md；
+ *   - 已存在的一律不碰（用户可能改过模板、删过默认文字）。
  */
-async function ensureSettingLayout(base) {
+async function ensureSettingFiles(base) {
   const settingRoot = join(base, SETTING_DIR)
   await mkdir(settingRoot, { recursive: true })
   /*
-   * 只在「设定 里一个分类都没有」时播种固定分类。
-   * 否则用户改名/删掉的固定分类会在每次读项目时被无脑补回来 ——
-   * 改名之后马上又冒出一个空的 势力结构，看上去就像改名失败。
+   * 只在「设定\ 里一篇 .md 都没有」时播种固定三篇。
+   * 否则用户删掉的固定分类会在每次读项目时被无脑补回来。
    */
-  const existing = await listSettingKinds(base)
-  if (existing.length > 0) return
+  const rows = await listMd(settingRoot)
+  if (rows.length > 0) return
   for (const kind of SETTING_DIRS) {
-    if (await settingIsGroup(base, kind)) {
-      const dir = join(settingRoot, kind)
-      await mkdir(dir, { recursive: true })
-      const rows = await listMd(dir)
-      if (rows.length > 0) continue
-      const title = defaultEntryTitle(kind)
-      const target = join(dir, title + '.md')
+    const target = join(settingRoot, kind + ".md")
+    try {
+      await stat(target)
+    } catch {
       try {
-        await stat(target)
+        await writeFile(target, settingTemplateOf(kind), { encoding: "utf8", flag: "wx" })
       } catch {
-        try {
-          await writeFile(target, settingTemplateOf(kind), { encoding: 'utf8', flag: 'wx' })
-        } catch {
-          /* 并发建过就算了 */
-        }
-      }
-    } else {
-      const target = join(settingRoot, kind + '.md')
-      try {
-        await stat(target)
-      } catch {
-        try {
-          await writeFile(target, settingTemplateOf(kind), { encoding: 'utf8', flag: 'wx' })
-        } catch {
-          /* 并发建过就算了 */
-        }
+        /* 并发建过就算了 */
       }
     }
   }
@@ -490,16 +446,10 @@ function setFrontMatter(text, key, value) {
 const LEGACY_SETTING_DIRS = ['人物', '地点', '情节线']
 
 /**
- * 检测并执行迁移。返回 true 表示这次真的迁移了。
+ * 设定\ 下现有的全部分类名 —— 平铺的 .md，一个文件一类。
  *
- * 任何一步失败都只在内部吞掉（界面不该因为迁移失败就打不开项目），
- * 但会尽力把能挪的挪完 —— 挪不动的那部分老代码仍能按旧路径读。
- */
-/**
- * 设定\ 下现有的全部分类名 —— 既有分组（目录）也有单文件（<分类>.md）。
- *
- * 2026-11-24：只有 大纲 / 人物 / 势力结构 是分组，其余固定分类是单文件，
- * 所以这里必须两种都收，不能只看目录。
+ * 2026-11-24 大王重做设定板块之后没有分组了，所以这里只看文件、
+ * 忽略目录（历史目录由 normalizeSettingLayout 并成单文件）。
  */
 async function listSettingKinds(base) {
   let entries
@@ -510,41 +460,43 @@ async function listSettingKinds(base) {
   }
   const kinds = []
   for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue
-    if (entry.isDirectory()) {
-      kinds.push(entry.name)
-      continue
-    }
-    if (entry.isFile() && /\.md$/i.test(entry.name)) kinds.push(entry.name.replace(/\.md$/i, ''))
+    if (!entry.isFile()) continue
+    if (entry.name.startsWith(".")) continue
+    if (!/\.md$/i.test(entry.name)) continue
+    kinds.push(entry.name.replace(/\.md$/i, ""))
   }
+  kinds.sort(compareNames)
   return kinds
 }
 
 /**
- * 这个分类在磁盘上是「分组（目录）」还是「单文件（.md）」。
+ * 把一个目录里的 .md 逐篇搬进另一个目录（重名加序号，绝不覆盖）。
+ * 返回搬成功的篇数。
  *
- * 判据必须以磁盘为准，不能只看 SETTING_GROUPS 那份预设名单：
- * 用户可以把 势力结构 改名成 势力，改完它已经不在名单里了，
- * 若仍按名单判成单文件，读的时候读不到目录里的条目，
- * 归一化还会把整个目录压成一个 .md —— 实测就是这样丢过一次数据。
- *
- * 磁盘上都没有（新建、或还没建出来的固定分类）时才回落到预设名单。
+ * 只搬第一层：设定\人物\ 当初就是平铺 27 篇，没有更深一层。
  */
-async function settingIsGroup(base, kind) {
-  const name = String(kind)
-  try {
-    const info = await stat(join(base, SETTING_DIR, name))
-    if (info.isDirectory()) return true
-  } catch {
-    /* 没有这个目录 */
+async function moveMarkdownInto(fromDir, toDir) {
+  const rows = await listMd(fromDir).catch(() => [])
+  if (rows.length === 0) return 0
+  await mkdir(toDir, { recursive: true })
+  let moved = 0
+  for (const row of rows) {
+    let target = join(toDir, row.name)
+    let n = 2
+    for (;;) {
+      const exists = await stat(target).then(() => true).catch(() => false)
+      if (!exists) break
+      target = join(toDir, row.name.replace(/\.md$/i, "") + " (" + n + ").md")
+      n += 1
+    }
+    try {
+      await rename(row.path, target)
+      moved += 1
+    } catch {
+      /* 单篇搬不动就留着 */
+    }
   }
-  try {
-    const info = await stat(join(base, SETTING_DIR, name + '.md'))
-    if (info.isFile()) return false
-  } catch {
-    /* 也没有这个单文件 */
-  }
-  return isSettingGroup(name)
+  return moved
 }
 
 /** 时间戳（文件名安全，不带冒号点）。 */
@@ -553,91 +505,128 @@ function stampOf() {
 }
 
 /**
- * 把 设定\ 的形态整理成「三组 + 五单文件」。
+ * 设定走「平铺单文件」之后，把历史结构整理成新形态（幂等，不备份）。
  *
- * 两个方向都要纠：
- *   1) 分组类（大纲 / 人物 / 势力结构）如果还是单文件 设定\<分类>.md
- *      → 搬进目录 设定\<分类>\<默认子文件>.md
- *   2) 单文件类（世界地图 / 核心冲突设定 / 修行体系 / 武器 / 灵感与废案）
- *      如果被上一版建成了目录 设定\<分类>\
- *      → 把里面的 md 并成 设定\<分类>.md，再删掉空目录
+ * 要处理的历史形态有三种：
+ *   1) 设定\人物\      —— 上一版把人物当成设定分组；现在人物是独立板块，
+ *                          逐篇搬进项目根的 人物\，目录删掉。
+ *   2) 设定\<分类>\<篇>.md —— 上一版的分组；现在没有分组，逐篇并进 设定\<分类>.md。
+ *                          其中若有一篇名字正好等于某个固定分类名（例如 情节线.md），
+ *                          优先把它单独挪成 设定\<那个分类>.md，而不是并进父分类。
+ *                          实测：旧 大纲\ 里有 总纲 / 情节线 / 世界背景 三篇，
+ *                          这样正好拆成 大纲.md（总纲+世界背景）与 情节线.md。
+ *   3) 设定\世界地图.md  —— 固定分类改名成「地图」，顺手改文件名。
  *
- * 内容不丢：合并是「逐篇拼接」，源文件在合并成功后才删。
- * 返回本次整理过的分类名清单（空数组 = 本来就是对的）。
+ * 内容不丢：合并是「逐篇拼接」，源文件在写成功后才删。
+ * 返回本次整理过的名字清单（空数组 = 本来就是对的）。
  */
 async function normalizeSettingLayout(base) {
   const settingRoot = join(base, SETTING_DIR)
+  const changed = []
+
+  /* 1) 设定\人物\ → 项目根 人物\ */
+  const legacyPeople = join(settingRoot, CHARACTER_DIR)
+  try {
+    const info = await stat(legacyPeople)
+    if (info.isDirectory()) {
+      const moved = await moveMarkdownInto(legacyPeople, join(base, CHARACTER_DIR))
+      await rm(legacyPeople, { recursive: true, force: true })
+      if (moved > 0) changed.push(CHARACTER_DIR)
+    }
+  } catch {
+    /* 没有这个目录 */
+  }
+
   let entries
   try {
     entries = await readdir(settingRoot, { withFileTypes: true })
   } catch {
-    return []
+    return changed
   }
-  const changed = []
-  for (const entry of entries) {
-    if (entry.name.startsWith('.')) continue
 
-    /* 情况 1：分组类现在是单文件 */
-    if (entry.isFile() && /\.md$/i.test(entry.name)) {
-      const kind = entry.name.replace(/\.md$/i, '')
-      if (!isSettingGroup(kind)) continue
-      const dir = join(settingRoot, kind)
+  /* 3) 单个文件的改名映射（世界地图 → 地图） */
+  for (const entry of entries) {
+    if (!entry.isFile()) continue
+    const bare = entry.name.replace(/\.md$/i, "")
+    const next = SETTING_RENAME[bare]
+    if (next === undefined) continue
+    const from = join(settingRoot, entry.name)
+    const to = join(settingRoot, next + ".md")
+    try {
+      const exists = await stat(to).then(() => true).catch(() => false)
+      if (exists) continue
+      await rename(from, to)
+      changed.push(next)
+    } catch {
+      /* 改不动就留着，读的时候按原名也能列出 */
+    }
+  }
+
+  /* 2) 设定\<分类>\ → 设定\<分类>.md */
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (entry.name.startsWith(".")) continue
+    const kind = entry.name
+    const dir = join(settingRoot, kind)
+    let rows
+    try {
+      rows = await listMd(dir)
+    } catch {
+      continue
+    }
+    if (rows.length === 0) {
       try {
-        await mkdir(dir, { recursive: true })
-        await rename(join(settingRoot, entry.name), join(dir, entry.name))
-        changed.push(kind)
+        await rm(dir, { recursive: true, force: true })
       } catch {
-        /* 挪不动就留着，读的时候按单文件兜底 */
+        /* 删不掉不影响读 */
       }
       continue
     }
-
-    /* 情况 2：固定单文件类现在是目录 */
-    if (entry.isDirectory()) {
-      const kind = entry.name
-      /*
-       * 只压平「预设的单文件类」。不在 SETTING_DIRS 里的目录（自建分类、或用户
-       * 把 势力结构 改名成 势力）一律当成正常分组原样保留 ——
-       * 2026-11-24 事故：原来这里对未知目录也压平，把改名后的 势力 4 篇
-       * 合并进 势力.md，目录直接删掉。
-       */
-      if (SETTING_DIRS.includes(kind) === false) continue
-      if (isSettingGroup(kind)) continue
-      const dir = join(settingRoot, kind)
-      let rows
-      try {
-        rows = await listMd(dir)
-      } catch {
-        continue
-      }
-      if (rows.length === 0) {
+    /* 子文件里名字等于某个固定分类的，单独拎出去成一篇 */
+    const own = []
+    for (const row of rows) {
+      const bare = row.name.replace(/\.md$/i, "")
+      if (SETTING_DIRS.includes(bare) && bare !== kind) {
+        const target = join(settingRoot, bare + ".md")
         try {
-          await rm(dir, { recursive: true, force: true })
-          changed.push(kind)
+          const exists = await stat(target).then(() => true).catch(() => false)
+          if (!exists) {
+            await rename(row.path, target)
+            changed.push(bare)
+            continue
+          }
         } catch {
-          /* 删不掉不影响读 */
-        }
-        continue
-      }
-      const parts = []
-      for (const row of rows) {
-        try {
-          parts.push(await readFile(row.path, 'utf8'))
-        } catch {
-          /* 单篇读不到就跳过，其余照并 */
+          /* 挪不动就并进父分类 */
         }
       }
-      const merged = parts.join('\n\n')
-      const target = join(settingRoot, kind + '.md')
+      own.push(row)
+    }
+    if (own.length === 0) {
       try {
-        const existing = await readFile(target, 'utf8').catch(() => '')
-        const text = existing === '' ? merged : existing + '\n\n' + merged
-        await writeFile(target, text, 'utf8')
         await rm(dir, { recursive: true, force: true })
-        changed.push(kind)
       } catch {
-        /* 合并失败就留着，读的时候按目录兜底 */
+        /* 删不掉不影响读 */
       }
+      continue
+    }
+    const parts = []
+    for (const row of own) {
+      try {
+        parts.push(await readFile(row.path, "utf8"))
+      } catch {
+        /* 单篇读不到就跳过，其余照并 */
+      }
+    }
+    const merged = parts.join("\n\n")
+    const target = join(settingRoot, kind + ".md")
+    try {
+      const existing = await readFile(target, "utf8").catch(() => "")
+      const text = existing === "" ? merged : existing + "\n\n" + merged
+      await writeFile(target, text, "utf8")
+      await rm(dir, { recursive: true, force: true })
+      changed.push(kind)
+    } catch {
+      /* 合并失败就留着，读的时候按目录兜底 */
     }
   }
   return changed
@@ -905,20 +894,16 @@ export async function readWriteProject(root, projectRel) {
   }
 
   /*
-   * 设定（2026-11-24 大王定案）：只有 大纲 / 人物 / 势力结构 三个是分组，
-   * 世界地图 / 核心冲突设定 / 修行体系 / 武器 / 灵感与废案 都是单文件。
+   * 设定（2026-11-24 大王重做）：平铺单文件，没有分组、没有子文件。
    *
-   *   - 分组：设定\<分类>\<条目>.md，左栏分类行可折叠、右侧 ＋ 新建子文件；
-   *   - 单文件：设定\<分类>.md，左栏就是一行，点开直接写。
+   * 大王原话：「写作区的设定板块重做，不要分组和子文件了。新建项目的时候
+   * 固定的设定子文件为，大纲、情节线，地图。」
    *
-   * 两种形态在返回值里统一成同一个形状，界面只有一套渲染逻辑：
-   *   group:true   → entries 有 N 篇，dir 是目录
-   *   group:false  → entries 恒 1 篇（就是那个 .md），dir 为 ''
-   *
-   * 顺序：八个固定分类在前（SETTING_DIRS 的顺序），自建分类按名字排后面。
-   * 固定分类即使没内容也列出来 —— 否则用户看不出「有这一类、还没写」。
+   *   - 设定\<分类>.md，左栏一行一类，点开直接写；
+   *   - 固定三类（大纲 / 情节线 / 地图）在前，自建分类按名字排后面；
+   *   - 固定分类即使没内容也列出来 —— 否则用户看不出「有这一类、还没写」。
    */
-  await ensureSettingLayout(base)
+  await ensureSettingFiles(base)
   await normalizeSettingLayout(base)
   const settingRoot = join(base, SETTING_DIR)
   const presentKinds = await listSettingKinds(base)
@@ -926,49 +911,40 @@ export async function readWriteProject(root, projectRel) {
   for (const kind of presentKinds) if (!ordered.includes(kind)) ordered.push(kind)
   const settings = []
   for (const kind of ordered) {
-    if (await settingIsGroup(base, kind)) {
-      const rows = await listSettingEntries(join(settingRoot, kind))
-      const entries = rows.map((row) => ({
-        name: row.name,
-        title: row.title,
-        words: row.words,
-        camp: row.camp,
-        path: `${rel}/${SETTING_DIR}/${kind}/${row.name}`,
-      }))
-      settings.push({
-        kind,
-        fixed: SETTING_DIRS.includes(kind),
-        group: true,
-        dir: `${rel}/${SETTING_DIR}/${kind}`,
-        path: `${rel}/${SETTING_DIR}/${kind}`,
-        entries,
-        count: entries.length,
-        words: entries.reduce((sum, entry) => sum + entry.words, 0),
-      })
-    } else {
-      const file = join(settingRoot, kind + '.md')
-      let words = 0
-      let camp = ''
-      try {
-        const text = await readFile(file, 'utf8')
-        const parsed = splitFrontMatter(text)
-        words = countWords(parsed.body)
-        camp = typeof parsed.meta['阵营'] === 'string' ? parsed.meta['阵营'] : ''
-      } catch {
-        /* 还没建出来就是 0 字 */
-      }
-      settings.push({
-        kind,
-        fixed: SETTING_DIRS.includes(kind),
-        group: false,
-        dir: '',
-        path: `${rel}/${SETTING_DIR}/${kind}.md`,
-        entries: [{ name: kind + '.md', title: kind, words, camp, path: `${rel}/${SETTING_DIR}/${kind}.md` }],
-        count: 1,
-        words,
-      })
+    const file = join(settingRoot, kind + ".md")
+    let words = 0
+    try {
+      const text = await readFile(file, "utf8")
+      words = countWords(splitFrontMatter(text).body)
+    } catch {
+      /* 还没建出来就是 0 字 */
     }
+    settings.push({
+      kind,
+      fixed: SETTING_DIRS.includes(kind),
+      name: kind + ".md",
+      path: `${rel}/${SETTING_DIR}/${kind}.md`,
+      words,
+    })
   }
+
+  /*
+   * 人物（2026-11-24 大王新要求）：独立板块，平铺在项目根 人物\ 下，一人一篇。
+   *
+   * 大王原话：「人物单独做板块，板块位置调整，正文改为第一个板块，
+   * 然后是设定，最后人物。」所以它不再是 设定\ 下的分类，
+   * 左栏顺序是 正文 → 设定 → 人物。
+   *
+   * `阵营` 仍从 front-matter 读，用来在行尾显示小字标签（枢机殿 / 周帝国…）。
+   */
+  const characterRows = await listSettingEntries(join(base, CHARACTER_DIR))
+  const characters = characterRows.map((row) => ({
+    name: row.name,
+    title: row.title,
+    words: row.words,
+    camp: row.camp,
+    path: `${rel}/${CHARACTER_DIR}/${row.name}`,
+  }))
   const bodies = []
   for (const volume of volumes) {
     for (const chapter of volume.chapters) {
@@ -985,6 +961,8 @@ export async function readWriteProject(root, projectRel) {
     volumes,
     bodies,
     settings,
+    /* 人物板块（2026-11-24 从设定里拆出来独立成板块，一人一篇） */
+    characters,
     /* 固定的设定分类清单：界面按它把空的分类也画出来 */
     settingKinds: ordered,
     fixedSettingKinds: SETTING_DIRS.slice(),
@@ -1044,7 +1022,10 @@ export async function createWriteProject(root, nameInput) {
   const projectAbsolute = join(writeDir, name)
   await mkdir(projectAbsolute, { recursive: false })
   await mkdir(join(projectAbsolute, BODY_DIR, '第一卷'), { recursive: true })
-  await ensureSettingLayout(projectAbsolute)
+  /* 人物\ 是独立板块的目录（2026-11-24）：建出来但不预铺文件 ——
+     人物是用户自己一个个加，不像设定那样有固定三类。 */
+  await mkdir(join(projectAbsolute, CHARACTER_DIR), { recursive: true })
+  await ensureSettingFiles(projectAbsolute)
   const stamp = new Date().toISOString().slice(0, 10)
   const template = [
     '---',
@@ -1052,7 +1033,7 @@ export async function createWriteProject(root, nameInput) {
     '创建: ' + stamp,
     '---',
     '',
-    '正文与设定都在磁盘上：正文\\<卷>\\<章>.md；设定里 大纲 / 人物 / 势力结构 是分组（\\<分类>\\<子文件>.md），其余是单独文件。',
+    '正文 / 设定 / 人物都在磁盘上：正文\\<卷>\\<章>.md；设定\\<分类>.md（平铺，固定三类 大纲 / 情节线 / 地图）；人物\\<人名>.md（一人一篇）。',
     '这个文件只放元数据，卷章结构以目录为准。',
     '',
   ].join('\n')
@@ -1242,189 +1223,146 @@ export async function deleteWriteChapter(root, projectRel, volumeIndex, chapterI
 }
 
 /* ══════════════════════════════════════════════════════════════════════
-   设定（= 设定\ 下的分类目录 + 里面的条目文件）
+   设定 CRUD（2026-11-24 大王重做：平铺单文件，没有分组、没有子文件）
 
-   2026-11-24 大王定案：
-     只有 大纲 / 人物 / 势力结构 是分组（设定\<分类>\<条目>.md）；
-     世界地图 / 核心冲突设定 / 修行体系 / 武器 / 灵感与废案 是单文件
-     （设定\<分类>.md）。哪些是分组由 SETTING_GROUPS 决定，见 isSettingGroup()。
+   磁盘形态：设定\<分类>.md，一个文件一类设定。
+   固定三类是 大纲 / 情节线 / 地图，自建分类随便加。
+   人物不在这里 —— 人物是独立板块（见 CHARACTER_DIR 与下面的 CRUD）。
    ══════════════════════════════════════════════════════════════════════ */
 
 /**
- * 新建设定分类。已存在就当成功，绝不覆盖。
- *   分组（大纲/人物/势力结构）→ 建目录，并按模板放过一篇默认条目；
- *   单文件（其余）           → 直接建 设定\<分类>.md。
+ * 新建设定分类 = 建 设定\<分类>.md。已存在就当成功，绝不覆盖。
  */
 export async function addSettingKind(root, projectRel, kind) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const name = settingKindName(kind)
-  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!(await settingIsGroup(base, name))) {
-    const target = join(base, SETTING_DIR, name + '.md')
-    await mkdir(join(base, SETTING_DIR), { recursive: true })
-    try {
-      await stat(target)
-    } catch {
-      await writeFile(target, settingTemplateOf(name), { encoding: 'utf8', flag: 'wx' })
-    }
-    return { ok: true, kind: name, group: false, path: rel + '/' + SETTING_DIR + '/' + name + '.md' }
+  const rel = String(projectRel).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")
+  const settingRoot = join(base, SETTING_DIR)
+  await mkdir(settingRoot, { recursive: true })
+  const target = join(settingRoot, name + ".md")
+  try {
+    await stat(target)
+  } catch {
+    await writeFile(target, settingTemplateOf(name), { encoding: "utf8", flag: "wx" })
   }
-  const dir = join(base, SETTING_DIR, name)
-  await mkdir(dir, { recursive: true })
-  const rows = await listMd(dir)
-  if (rows.length === 0) {
-    const title = defaultEntryTitle(name)
-    const target = join(dir, settingEntryFileName(title))
-    try {
-      await stat(target)
-    } catch {
-      await writeFile(target, settingTemplateOf(name), { encoding: 'utf8', flag: 'wx' })
-    }
-  }
-  return { ok: true, kind: name, group: true, path: rel + '/' + SETTING_DIR + '/' + name }
+  return { ok: true, kind: name, path: rel + "/" + SETTING_DIR + "/" + name + ".md" }
 }
 
-/**
- * 改设定分类名。
- *   分组 → 改目录名（连带里面的条目一起搬）；
- *   单文件 → 改那个 <分类>.md 的文件名。
- */
+/** 改设定分类名 = 改 设定\<分类>.md 的文件名。 */
 export async function renameSettingKind(root, projectRel, from, to) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const fromName = settingKindName(from)
   const toName = settingKindName(to)
   if (fromName === toName) return { ok: true, kind: toName }
-  const group = await settingIsGroup(base, fromName)
-  const srcPath = group ? settingKindPath(base, fromName) : join(base, SETTING_DIR, fromName + '.md')
-  const dstPath = group ? join(base, SETTING_DIR, toName) : join(base, SETTING_DIR, toName + '.md')
+  const settingRoot = join(base, SETTING_DIR)
+  const srcPath = join(settingRoot, fromName + ".md")
+  const dstPath = join(settingRoot, toName + ".md")
   try {
-    await stat(srcPath)
+    const info = await stat(srcPath)
+    if (!info.isFile()) throw new Error("分类不存在")
   } catch {
-    throw new Error('分类不存在')
+    throw new Error("分类不存在")
   }
-  try {
-    await stat(dstPath)
-    throw new Error('同名分类已存在')
-  } catch (err) {
-    if (err && err.message === '同名分类已存在') throw err
-  }
+  const exists = await stat(dstPath).then(() => true).catch(() => false)
+  if (exists) throw new Error("同名分类已存在")
   await rename(srcPath, dstPath)
-  return { ok: true, kind: toName, group, renamedFrom: fromName }
+  return { ok: true, kind: toName, renamedFrom: fromName }
 }
 
-/**
- * 删设定分类。
- *   分组 → 整个目录进回收站（含里面所有条目）；
- *   单文件 → 那一篇进回收站。
- */
+/** 删设定分类 = 那一篇进回收站。 */
 export async function deleteSettingKind(root, projectRel, kind) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const name = settingKindName(kind)
-  const group = await settingIsGroup(base, name)
-  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  const relative = rel + '/' + SETTING_DIR + '/' + (group ? name : name + '.md')
+  const rel = String(projectRel).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")
+  const relative = rel + "/" + SETTING_DIR + "/" + name + ".md"
   try {
     await deleteToTrash(root, relative)
   } catch {
     try {
-      if (group) await rm(settingKindPath(base, name), { recursive: true, force: true })
-      else await rm(join(base, SETTING_DIR, name + '.md'), { force: true })
+      await rm(join(base, SETTING_DIR, name + ".md"), { force: true })
     } catch {
       /* 已经没了就当成功 */
     }
   }
-  return { ok: true, kind: name, group }
+  return { ok: true, kind: name }
 }
 
-/**
- * 新建设定条目 = 在分类目录里建一篇带 `.md` 的文件。已存在就当成功。
- * 只有分组类（大纲/人物/势力结构）能有多个条目；单文件类就是那一篇本身。
- */
-export async function addSettingEntry(root, projectRel, kind, title) {
+/* ══════════════════════════════════════════════════════════════════════
+   人物 CRUD（2026-11-24 大王新要求：人物独立板块，一人一篇）
+
+   磁盘形态：人物\<人名>.md，平铺在项目根下，与 正文\ / 设定\ 平级。
+   阵营写在 front-matter 的 `阵营:` 里，左栏行尾显示成小字标签。
+   ══════════════════════════════════════════════════════════════════════ */
+
+/** 人物文件的初始模板：与老的设定模板「人物」一致，方便直接接着写。 */
+const CHARACTER_TEMPLATE = [
+  "# 人物",
+  "## 简介",
+  "## 社会身份",
+  "## 人物关系",
+  "## 外貌",
+  "## 性格",
+  "## 背景",
+  "## 其他",
+].join("\n")
+
+/** 新建人物 = 建 人物\<人名>.md。已存在就当成功，绝不覆盖。 */
+export async function addCharacter(root, projectRel, title) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
-  const kindName = settingKindName(kind)
-  if (!(await settingIsGroup(base, kindName))) throw new Error('这个分类是单独文件，不能加子文件')
-  const fileName = settingEntryFileName(title)
-  const dir = join(base, SETTING_DIR, kindName)
+  const rel = String(projectRel).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")
+  const fileName = characterFileName(title)
+  const dir = join(base, CHARACTER_DIR)
   await mkdir(dir, { recursive: true })
   const target = join(dir, fileName)
-  const entryTitle = fileName.replace(/\.md$/i, '')
+  const person = fileName.replace(/\.md$/i, "")
   try {
     await stat(target)
   } catch {
-    await writeFile(target, '# ' + entryTitle + '\n\n', { encoding: 'utf8', flag: 'wx' })
+    await writeFile(target, CHARACTER_TEMPLATE.replace("# 人物", "# " + person), { encoding: "utf8", flag: "wx" })
   }
-  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  return { ok: true, kind: kindName, name: fileName, title: entryTitle, path: rel + '/' + SETTING_DIR + '/' + kindName + '/' + fileName }
+  return { ok: true, name: fileName, title: person, path: rel + "/" + CHARACTER_DIR + "/" + fileName }
 }
 
-/**
- * 改设定条目名 = 改文件名（按分类定位，文件名里不加序号）。
- * 单文件类没有「条目名」这一层 —— 要改就改分类名，或者直接改文件里的标题。
- */
-export async function renameSettingEntry(root, projectRel, kind, from, to) {
+/** 改人物名 = 改文件名（front-matter 里的阵营不动）。 */
+export async function renameCharacter(root, projectRel, from, to) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
-  const kindName = settingKindName(kind)
-  if (!(await settingIsGroup(base, kindName))) throw new Error('这个分类是单独文件，没有单独的条目名')
-  const dir = join(base, SETTING_DIR, kindName)
-  const fromFile = /\.md$/i.test(String(from)) ? String(from) : settingEntryFileName(from)
-  const toFile = settingEntryFileName(to)
-  if (fromFile === toFile) return { ok: true, title: toFile.replace(/\.md$/i, '') }
+  const dir = join(base, CHARACTER_DIR)
+  const fromFile = /\.md$/i.test(String(from)) ? String(from) : characterFileName(from)
+  const toFile = characterFileName(to)
+  if (fromFile === toFile) return { ok: true, title: toFile.replace(/\.md$/i, "") }
   const srcPath = join(dir, fromFile)
   const dstPath = join(dir, toFile)
-  let info
   try {
-    info = await stat(srcPath)
+    const info = await stat(srcPath)
+    if (!info.isFile()) throw new Error("人物不存在")
   } catch {
-    throw new Error('条目不存在')
+    throw new Error("人物不存在")
   }
-  if (!info.isFile()) throw new Error('条目不存在')
-  try {
-    await stat(dstPath)
-    throw new Error('同名条目已存在')
-  } catch (err) {
-    if (err && err.message === '同名条目已存在') throw err
-  }
+  const exists = await stat(dstPath).then(() => true).catch(() => false)
+  if (exists) throw new Error("同名人物已存在")
   await rename(srcPath, dstPath)
-  return { ok: true, title: toFile.replace(/\.md$/i, ''), renamedFrom: fromFile }
+  return { ok: true, title: toFile.replace(/\.md$/i, ""), renamedFrom: fromFile }
 }
 
-/**
- * 删设定条目：文件进回收站。
- * 单文件类只有一个「条目」= 那一篇本身，所以这里删的就是 设定\<分类>.md。
- */
-export async function deleteSettingEntry(root, projectRel, kind, name) {
+/** 删人物：文件进回收站。 */
+export async function deleteCharacter(root, projectRel, name) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
-  const kindName = settingKindName(kind)
-  const rel = String(projectRel).replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-  if (!(await settingIsGroup(base, kindName))) {
-    const target = join(base, SETTING_DIR, kindName + '.md')
-    try {
-      await deleteToTrash(root, rel + '/' + SETTING_DIR + '/' + kindName + '.md')
-    } catch {
-      try {
-        await rm(target, { force: true })
-      } catch {
-        /* 已经没了就当成功 */
-      }
-    }
-    return { ok: true, kind: kindName, title: kindName }
-  }
-  const fileName = /\.md$/i.test(String(name)) ? String(name) : settingEntryFileName(name)
+  const rel = String(projectRel).replaceAll("\\", "/").replace(/^\/+|\/+$/g, "")
+  const fileName = /\.md$/i.test(String(name)) ? String(name) : characterFileName(name)
   try {
-    await deleteToTrash(root, rel + '/' + SETTING_DIR + '/' + kindName + '/' + fileName)
+    await deleteToTrash(root, rel + "/" + CHARACTER_DIR + "/" + fileName)
   } catch {
     try {
-      await rm(join(base, SETTING_DIR, kindName, fileName), { force: true })
+      await rm(join(base, CHARACTER_DIR, fileName), { force: true })
     } catch {
       /* 已经没了就当成功 */
     }
   }
-  return { ok: true, kind: kindName, title: fileName.replace(/\.md$/i, '') }
+  return { ok: true, title: fileName.replace(/\.md$/i, "") }
 }

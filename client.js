@@ -320,17 +320,17 @@ window.__ModuleLoader__.load({
         writeSettingKindRenamed: '分类名已改',
         writeSettingKindDeleted: '分类已移入回收站',
         writeDeleteSettingKindConfirm: '确定删除这个设定分类？',
-        writeDeleteSettingKindSub: '这一分类下所有条目文件都会移入回收站。',
-        writeAddSettingEntryTip: '在这个分类下新建一篇',
-        writeSettingEntryDefault: '新条目',
-        writeSettingEntryAdded: '已新建条目',
-        writeRenameSettingEntry: '重命名条目',
-        writeRenameSettingEntryPrompt: '条目名',
-        writeSettingEntryRenamed: '条目名已改',
-        writeSettingEntryDeleted: '条目已移入回收站',
-        writeDeleteSettingEntryConfirm: '确定删除这个条目？',
-        writeDeleteSettingEntrySub: '这一篇会移入回收站，之后可以恢复。',
-        writeEmptySettingKind: '还没有条目',
+        writeDeleteSettingKindSub: '这一篇会移入回收站，之后可以恢复。',
+        writeCharacters: '人物',
+        writeAddCharacterTip: '新建一个人物',
+        writeCharacterDefault: '新人物',
+        writeCharacterAdded: '已新建人物',
+        writeCharacterNamePrompt: '人物名',
+        writeRenameCharacter: '重命名人物',
+        writeCharacterRenamed: '人物名已改',
+        writeCharacterDeleted: '人物已移入回收站',
+        writeDeleteCharacterConfirm: '确定删除这个人物？',
+        writeDeleteCharacterSub: '这一篇会移入回收站，之后可以恢复。',
         writeProjects: '项目',
         writeLoadFailed: '读取失败：',
         writeSaveFailed: '保存失败：',
@@ -688,17 +688,17 @@ window.__ModuleLoader__.load({
         writeSettingKindRenamed: 'Category renamed',
         writeSettingKindDeleted: 'Category moved to trash',
         writeDeleteSettingKindConfirm: 'Delete this setting category?',
-        writeDeleteSettingKindSub: 'All entry files in it will be moved to trash.',
-        writeAddSettingEntryTip: 'New page in this category',
-        writeSettingEntryDefault: 'New entry',
-        writeSettingEntryAdded: 'Setting entry added',
-        writeRenameSettingEntry: 'Rename entry',
-        writeRenameSettingEntryPrompt: 'Entry name',
-        writeSettingEntryRenamed: 'Entry renamed',
-        writeSettingEntryDeleted: 'Entry moved to trash',
-        writeDeleteSettingEntryConfirm: 'Delete this entry?',
-        writeDeleteSettingEntrySub: 'This page will be moved to trash and can be restored.',
-        writeEmptySettingKind: 'No entries yet',
+        writeDeleteSettingKindSub: 'This page will be moved to trash and can be restored.',
+        writeCharacters: 'Characters',
+        writeAddCharacterTip: 'New character',
+        writeCharacterDefault: 'New character',
+        writeCharacterAdded: 'Character added',
+        writeCharacterNamePrompt: 'Character name',
+        writeRenameCharacter: 'Rename character',
+        writeCharacterRenamed: 'Character renamed',
+        writeCharacterDeleted: 'Character moved to trash',
+        writeDeleteCharacterConfirm: 'Delete this character?',
+        writeDeleteCharacterSub: 'This page will be moved to trash and can be restored.',
         writeProjectCreated: 'Project created',
         writeProjects: 'Projects',
         writeLoadFailed: 'Load failed: ',
@@ -9534,6 +9534,8 @@ function useScrollMemo(bucket, selector, ready) {
         const [bodyOpen, setBodyOpen] = useState(true)
         /* 设定分组的展开态（2026-11-18：与正文分组保持一致，都可收起） */
         const [settingOpen, setSettingOpen] = useState(true)
+        /* 人物分组的展开态（2026-11-24 新增板块） */
+        const [charactersOpen, setCharactersOpen] = useState(true)
 
         /* 点外面 / 按 Esc 关项目右键菜单 */
         useEffect(() => {
@@ -9577,16 +9579,17 @@ function useScrollMemo(bucket, selector, ready) {
         const volumes = project ? (Array.isArray(project.volumes) ? project.volumes : []) : []
         const settings = project && Array.isArray(project.settings) ? project.settings : []
         /*
-         * 设定分类清单（2026-11-22 大王要求：目录即结构）。
-         * 八个固定分类在新建项目时就建好，之后可自建；
-         * 空分类也要显示出来 —— 否则用户看不到「有这一类、只是还没写」。
-         */
-        /*
-         * 设定分类清单（2026-11-24 大王定案：分类 = 目录，目录里是条目文件）。
-         * 后端 readWriteProject 不区分「固定」与「自建」—— 都是 设定\<分类>\ 一个目录，
-         * 八个固定分类在新建项目时先按模板铺好。这里只按顺序列，不做筛选。
+         * 设定清单（2026-11-24 大王重做：平铺单文件，不再有分组和子文件）。
+         * 新建项目时固定铺 大纲 / 情节线 / 地图 三篇，之后可自建；
+         * 每篇就是一个 设定\<分类>.md，path 直接给出来，点一行开一篇。
          */
         const settingTotal = settings.length
+        /*
+         * 人物清单（2026-11-24 大王新要求：人物单独做板块）。
+         * 磁盘上是 人物\<人名>.md，与 正文\ / 设定\ 平级；阵营在 front-matter 里。
+         */
+        const characters = project && Array.isArray(project.characters) ? project.characters : []
+        const characterTotal = characters.length
 
         /*
          * 收起状态（2026-11-24 大王要求）：整条左栏缩成 30px 窄栏，只留一个展开按钮。
@@ -9822,14 +9825,14 @@ function useScrollMemo(bucket, selector, ready) {
                     if (typeof props.onRenameChapter === 'function') props.onRenameChapter(menu.vi, menu.ci, menu.title)
                   } else if (menu.kind === 'setting-kind' && typeof props.onRenameSettingKind === 'function') {
                     props.onRenameSettingKind(menu.settingKind)
-                  } else if (menu.kind === 'setting-entry' && typeof props.onRenameSettingEntry === 'function') {
-                    props.onRenameSettingEntry(menu.settingKind, menu.settingEntry)
+                  } else if (menu.kind === 'character' && typeof props.onRenameCharacter === 'function') {
+                    props.onRenameCharacter(menu.characterRow)
                   }
                 },
               }, t(
                 nodeMenu.kind === 'volume' ? 'writeRenameVolume'
                   : nodeMenu.kind === 'chapter' ? 'writeRenameChapter'
-                    : nodeMenu.kind === 'setting-entry' ? 'writeRenameSettingEntry'
+                    : nodeMenu.kind === 'character' ? 'writeRenameCharacter'
                       : 'writeRenameSettingKind',
               )),
               /* 复制绝对路径（2026-11-22）：卷 / 章 / 设定分类 / 设定条目 都支持 */
@@ -9854,8 +9857,8 @@ function useScrollMemo(bucket, selector, ready) {
                     if (typeof props.onDeleteChapter === 'function') props.onDeleteChapter(menu.vi, menu.ci, menu.title)
                   } else if (menu.kind === 'setting-kind' && typeof props.onDeleteSettingKind === 'function') {
                     props.onDeleteSettingKind(menu.settingKind)
-                  } else if (menu.kind === 'setting-entry' && typeof props.onDeleteSettingEntry === 'function') {
-                    props.onDeleteSettingEntry(menu.settingKind, menu.settingEntry)
+                  } else if (menu.kind === 'character' && typeof props.onDeleteCharacter === 'function') {
+                    props.onDeleteCharacter(menu.characterRow)
                   }
                 },
               }, t('vaultDelete')),
@@ -9883,268 +9886,10 @@ function useScrollMemo(bucket, selector, ready) {
                 )
               : null,
             /*
-             * 设定（2026-11-22 大王要求：排在正文上面）
-             *
-             * 理由：设定是写作前的底稿（人物 / 世界观 / 大纲），
-             * 打开项目先看得到它；正文是产出，放下面按卷章往下排。
-             */
-            project
-              ? h(
-                  'div',
-                  {
-                    className: 'wbg-vol wbg-sect',
-                    'data-kind': 'setting',
-                    'data-open': settingOpen ? 'true' : 'false',
-                    role: 'button',
-                    tabIndex: 0,
-                    title: t('writeSettings'),
-                    onClick: () => setSettingOpen((open) => !open),
-                    onKeyDown: (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        setSettingOpen((open) => !open)
-                      }
-                    },
-                  },
-                  h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
-                  h(WbgIcon, { name: 'layers', className: 'wbg-sect-ic' }),
-                  h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
-                  h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
-                  /*
-                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
-                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
-                   * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
-                   */
-                  h(
-                    'button',
-                    {
-                      type: 'button',
-                      className: 'wbg-vol-add',
-                      title: t('writeAddSettingKindTip'),
-                      'aria-label': t('writeAddSettingKindTip'),
-                      onClick: (event) => {
-                        event.preventDefault()
-                        event.stopPropagation()
-                        if (typeof props.onAddSettingKind === 'function') props.onAddSettingKind()
-                      },
-                    },
-                    '＋',
-                  ),
-                )
-              : null,
-            /*
-             * 设定区（2026-11-24 大王要求「不计成本改版」）。
-             *
-             * 大王原话：「现在的写作区设定板块很难看，又难用，还有bug，你自己优化，要么换个思路去做」。
-             * 旧版的问题：分类行和条目行共用 .wbg-set 一套样式，只有 padding-left 差 16px，两层分不清；
-             * 字数小字压在名字下面把行撑成两行；＋ 常驻把行挤满；点开哪一篇也没有任何选中反馈。
-             *
-             * 新版分三种行，各自一套样式（见 CSS 的「设定区三层」段落）：
-             *   分组分类 .wbg-set-kind   → 小节标题：caret + 图标 + 名字 + 条目数胶囊，＋ 只在悬停/聚焦时浮现
-             *   分组条目 .wbg-set-entry  → 缩进一级 + 左侧一根导引线，名字与字数同一行
-             *   单独文件 .wbg-set-sole   → 没有 caret、没有 ＋，图标 + 名字 + 右侧字数
-             *
-             * 必须按 row.group 判断，不能按 entries.length —— 单文件类 count 恒为 1，
-             * 「只写了一篇的分组」也 count === 1，按长度判会把分组误判成单文件、用户就加不了第二篇。
-             *
-             * 选中态（2026-11-24 补）：旧版压根没有，点开一篇左栏看不出点的是哪篇。
-             * 用 props.activeSettingPath 比对（Board 里 file.path，含 设定/<分类>/ 前缀）。
-             */
-            project
-              ? (settingOpen
-                ? settings.map((row) => {
-                  const kind = row.kind
-                  const isGroup = row.group === true
-                  const entries = Array.isArray(row.entries) ? row.entries : []
-                  const open = isGroup && !!(props.openSettings && props.openSettings[kind] === true)
-                  const activePath = typeof props.activeSettingPath === 'string' ? props.activeSettingPath : ''
-                  /* 这一分类里有没有正在看的那一篇 —— 有就让分类行也带一点选中色，否则收起时看不出在看哪一类 */
-                  const kindActive = activePath !== '' && entries.some((entry) => entry.path === activePath)
-                  /* 原地改分类名：正在改的这一类，标题换成输入框 */
-                  const kindRenaming = props.editProj
-                    && props.editProj.kind === 'rename-setting-kind'
-                    && props.editProj.settingKind === kind
-                  return h(Fragment, { key: row.path },
-                    h('div',
-                      {
-                        className: isGroup ? 'wbg-set wbg-set-kind' : 'wbg-set wbg-set-sole',
-                        'data-open': open ? 'true' : 'false',
-                        'data-group': isGroup ? 'true' : 'false',
-                        'data-active': kindActive ? 'true' : 'false',
-                        role: 'button',
-                        tabIndex: 0,
-                        title: row.path,
-                        onClick: () => {
-                          /* 单文件类：直接打开那一篇；分组类：折叠 / 展开 */
-                          if (!isGroup) {
-                            if (typeof props.onOpenSettingEntry === 'function' && entries.length > 0) {
-                              props.onOpenSettingEntry(kind, entries[0])
-                            }
-                            return
-                          }
-                          if (typeof props.onToggleSettingKind === 'function') {
-                            props.onToggleSettingKind(kind)
-                          }
-                        },
-                        onKeyDown: (event) => {
-                          if (event.key !== 'Enter' && event.key !== ' ') return
-                          event.preventDefault()
-                          if (!isGroup) {
-                            if (typeof props.onOpenSettingEntry === 'function' && entries.length > 0) {
-                              props.onOpenSettingEntry(kind, entries[0])
-                            }
-                            return
-                          }
-                          if (typeof props.onToggleSettingKind === 'function') {
-                            props.onToggleSettingKind(kind)
-                          }
-                        },
-                        onContextMenu: (event) => {
-                          event.preventDefault()
-                          event.stopPropagation()
-                          setNodeMenu({
-                            kind: 'setting-kind',
-                            settingKind: kind,
-                            settingRow: row,
-                            title: kind,
-                            path: row.path,
-                            x: event.clientX,
-                            y: event.clientY,
-                          })
-                        },
-                      },
-                      isGroup
-                        ? h(WbgIcon, {
-                          name: open ? 'caretDown' : 'caretRight',
-                          small: true,
-                          className: 'wbg-set-caret',
-                        })
-                        : null,
-                      h(WbgIcon, {
-                        name: SETTING_ICON_OF(kind),
-                        small: true,
-                        className: 'wbg-set-ic',
-                      }),
-                      h('div', { className: 'wbg-set-t' },
-                        kindRenaming
-                          ? h('input', {
-                            className: 'wbg-nameinput wbg-setk-input',
-                            autoFocus: true,
-                            value: props.editProj.draft,
-                            onFocus: (event) => event.target.select(),
-                            onClick: (event) => event.stopPropagation(),
-                            onChange: (event) => props.editProj.onDraft(event.target.value),
-                            onKeyDown: (event) => {
-                              event.stopPropagation()
-                              if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
-                            },
-                            onBlur: () => props.editProj.commit(),
-                          })
-                          : h('b', null, kind),
-                      ),
-                      /* 条目数胶囊：只有分组才有「几条」这个概念；单文件行把字数放右边，不占第二行 */
-                      isGroup
-                        ? h('span', { className: 'wbg-set-n', title: t('writeAddSettingEntryTip') }, String(entries.length))
-                        : h('span', { className: 'wbg-set-w' }, row.words + ' ' + t('writeWordUnit')),
-                      /* ＋：只有分组能加子文件；平常用 opacity 收着，悬停 / 键盘聚焦才浮现 */
-                      isGroup
-                        ? h('button',
-                          {
-                            type: 'button',
-                            className: 'wbg-set-add',
-                            title: t('writeAddSettingEntryTip'),
-                            'aria-label': t('writeAddSettingEntryTip'),
-                            onClick: (event) => {
-                              event.preventDefault()
-                              event.stopPropagation()
-                              if (typeof props.onAddSettingEntry === 'function') props.onAddSettingEntry(kind)
-                            },
-                          },
-                          '＋',
-                        )
-                        : null,
-                    ),
-                    open && entries.length > 0
-                      ? h('div', { className: 'wbg-set-group', 'data-kind': kind },
-                        entries.map((entry) => {
-                          /* 原地改条目名：正在改的这一篇，标题换成输入框 */
-                          const entryRenaming = props.editProj
-                            && props.editProj.kind === 'rename-setting-entry'
-                            && props.editProj.settingKind === kind
-                            && props.editProj.entryName === entry.name
-                          const entryActive = activePath !== '' && entry.path === activePath
-                          return h('div',
-                            {
-                              key: row.path + '/' + entry.name,
-                              className: 'wbg-set wbg-set-entry',
-                              'data-active': entryActive ? 'true' : 'false',
-                              role: 'button',
-                              tabIndex: 0,
-                              title: entry.path,
-                              onClick: () => {
-                                if (typeof props.onOpenSettingEntry === 'function') {
-                                  props.onOpenSettingEntry(kind, entry)
-                                }
-                              },
-                              onKeyDown: (event) => {
-                                if (event.key !== 'Enter' && event.key !== ' ') return
-                                event.preventDefault()
-                                if (typeof props.onOpenSettingEntry === 'function') {
-                                  props.onOpenSettingEntry(kind, entry)
-                                }
-                              },
-                              onContextMenu: (event) => {
-                                event.preventDefault()
-                                event.stopPropagation()
-                                setNodeMenu({
-                                  kind: 'setting-entry',
-                                  settingKind: kind,
-                                  settingEntry: entry,
-                                  title: entry.title,
-                                  path: entry.path,
-                                  x: event.clientX,
-                                  y: event.clientY,
-                                })
-                              },
-                            },
-                            h(WbgIcon, { name: 'fileText', small: true, className: 'wbg-set-ic' }),
-                            h('div', { className: 'wbg-set-t' },
-                              entryRenaming
-                                ? h('input', {
-                                  className: 'wbg-nameinput wbg-setk-input',
-                                  autoFocus: true,
-                                  value: props.editProj.draft,
-                                  onFocus: (event) => event.target.select(),
-                                  onClick: (event) => event.stopPropagation(),
-                                  onChange: (event) => props.editProj.onDraft(event.target.value),
-                                  onKeyDown: (event) => {
-                                    event.stopPropagation()
-                                    if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
-                                  },
-                                  onBlur: () => props.editProj.commit(),
-                                })
-                                : h('b', null, entry.title),
-                            ),
-                            /* 有阵营就显示阵营（人物的分组名），没有就显示字数 —— 都放右侧，不占第二行 */
-                            h('span', { className: entry.camp !== '' ? 'wbg-set-w wbg-set-camp' : 'wbg-set-w' },
-                              entry.camp !== '' ? entry.camp : entry.words + ' ' + t('writeWordUnit'),
-                            ),
-                          )
-                        }),
-                      )
-                      : null,
-                  )
-                })
-                : null)
-              : null,            // 正文与设定之间的分隔线（2026-11-22 起设定排在正文上面）
-            project
-              ? h('div', { className: 'wbg-sep' })
-              : null,
-            /*
-             * 「正文」分组头（2026-11-18 大王要求）：
-             * 样式照下面的「设定」——同样的 wbg-vol / wbg-vol-t / wbg-vol-n，
-             * 但这里可点、可展开收起（设定那组也是可展开的，各自独立）。
-             * 2026-11-22 起这个分组排在设定后面。
+             * 「正文」分组头（2026-11-24 大王改定：正文是第一个板块）。
+             * 样式与「设定」「人物」一致：wbg-vol / wbg-vol-t / wbg-vol-n，
+             * 可展开收起，各自的展开态独立。
+             * 左栏三段顺序：正文 → 设定 → 人物。
              */
             project
               ? h(
@@ -10319,6 +10064,231 @@ function useScrollMemo(bucket, selector, ready) {
                       )
                     })
                   : null,
+              )
+            }) : null,
+            project
+              ? h('div', { className: 'wbg-sep' })
+              : null,
+            /*
+             * 设定（2026-11-24 大王重做：平铺单文件，不要再分组和子文件）。
+             *
+             * 大王原话：「写作区的设定板块重做，不要分组和子文件了。新建项目的时候
+             * 固定的设定子文件为，大纲、情节线，地图。」
+             */
+            project
+              ? h(
+                  'div',
+                  {
+                    className: 'wbg-vol wbg-sect',
+                    'data-kind': 'setting',
+                    'data-open': settingOpen ? 'true' : 'false',
+                    role: 'button',
+                    tabIndex: 0,
+                    title: t('writeSettings'),
+                    onClick: () => setSettingOpen((open) => !open),
+                    onKeyDown: (event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault()
+                        setSettingOpen((open) => !open)
+                      }
+                    },
+                  },
+                  h(WbgIcon, { name: settingOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                  h(WbgIcon, { name: 'layers', className: 'wbg-sect-ic' }),
+                  h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
+                  h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
+                  /*
+                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
+                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
+                   * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
+                   */
+                  h(
+                    'button',
+                    {
+                      type: 'button',
+                      className: 'wbg-vol-add',
+                      title: t('writeAddSettingKindTip'),
+                      'aria-label': t('writeAddSettingKindTip'),
+                      onClick: (event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (typeof props.onAddSettingKind === 'function') props.onAddSettingKind()
+                      },
+                    },
+                    '＋',
+                  ),
+                )
+              : null,
+            project
+              ? (settingOpen
+                ? settings.map((row) => {
+                  const kind = row.kind
+                  const activePath = typeof props.activeSettingPath === 'string' ? props.activeSettingPath : ''
+                  const kindActive = activePath !== '' && activePath === row.path
+                  /* 原地改分类名（2026-11-19 起的做法，设定沿用）：这一行变输入框 */
+                  const kindRenaming = props.editProj
+                    && props.editProj.kind === 'rename-setting-kind'
+                    && props.editProj.settingKind === kind
+                  return h(
+                    'div',
+                    {
+                      key: row.path,
+                      className: 'wbg-set wbg-set-sole',
+                      'data-active': kindActive ? 'true' : 'false',
+                      role: 'button',
+                      tabIndex: 0,
+                      title: row.path,
+                      onClick: () => {
+                        if (typeof props.onOpenSetting === 'function') props.onOpenSetting(row)
+                      },
+                      onKeyDown: (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          if (typeof props.onOpenSetting === 'function') props.onOpenSetting(row)
+                        }
+                      },
+                      onContextMenu: (event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        setNodeMenu({
+                          kind: 'setting-kind',
+                          settingKind: kind,
+                          settingRow: row,
+                          title: kind,
+                          path: row.path,
+                          x: event.clientX,
+                          y: event.clientY,
+                        })
+                      },
+                    },
+                    h(WbgIcon, { name: SETTING_ICON_OF(kind), className: 'wbg-set-ic' }),
+                    h('div', { className: 'wbg-set-t' },
+                      kindRenaming
+                        ? h('input', {
+                          className: 'wbg-nameinput wbg-setk-input',
+                          autoFocus: true,
+                          value: props.editProj.draft,
+                          onFocus: (event) => event.target.select(),
+                          onClick: (event) => event.stopPropagation(),
+                          onChange: (event) => props.editProj.onDraft(event.target.value),
+                          onKeyDown: (event) => {
+                            event.stopPropagation()
+                            if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                          },
+                          onBlur: () => props.editProj.commit(),
+                        })
+                        : h('b', null, kind),
+                    ),
+                    h('span', { className: 'wbg-set-w' }, row.words + ' ' + t('writeWordUnit')),
+                  )
+                })
+                : null)
+              : null,
+            project
+              ? h('div', { className: 'wbg-sep' })
+              : null,
+            /*
+             * 人物（2026-11-24 大王新要求：人物单独做板块）。
+             *
+             * 大王原话：「人物单独做板块，板块位置调整，正文改为第一个板块，
+             * 然后是设定，最后人物。」
+             *
+             * 磁盘上是一人一篇：人物\<人名>.md，与 正文\ / 设定\ 平级。
+             * 阵营写在 front-matter 里，这里显示在行尾当小字标签。
+             */
+            project
+              ? h(
+                'div',
+                {
+                  className: 'wbg-vol wbg-sect',
+                  'data-kind': 'character',
+                  'data-open': charactersOpen ? 'true' : 'false',
+                  role: 'button',
+                  tabIndex: 0,
+                  title: t('writeCharacters'),
+                  onClick: () => setCharactersOpen((open) => !open),
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      setCharactersOpen((open) => !open)
+                    }
+                  },
+                },
+                h(WbgIcon, { name: charactersOpen ? 'caretDown' : 'caretRight', small: true, className: 'wbg-vol-caret' }),
+                h(WbgIcon, { name: 'people', className: 'wbg-sect-ic' }),
+                h('span', { className: 'wbg-vol-t' }, t('writeCharacters')),
+                h('span', { className: 'wbg-vol-n' }, String(characterTotal)),
+                h('button', {
+                  type: 'button',
+                  className: 'wbg-vol-add',
+                  title: t('writeAddCharacterTip'),
+                  'aria-label': t('writeAddCharacterTip'),
+                  onClick: (event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    if (typeof props.onAddCharacter === 'function') props.onAddCharacter()
+                  },
+                }, '＋'),
+              )
+              : null,
+            charactersOpen ? characters.map((row) => {
+              const activePath = typeof props.activeSettingPath === 'string' ? props.activeSettingPath : ''
+              const rowActive = activePath !== '' && activePath === row.path
+              const rowRenaming = props.editProj
+                && props.editProj.kind === 'rename-character'
+                && props.editProj.characterName === row.name
+              return h(
+                'div',
+                {
+                  key: row.path,
+                  className: 'wbg-set wbg-set-sole',
+                  'data-active': rowActive ? 'true' : 'false',
+                  role: 'button',
+                  tabIndex: 0,
+                  title: row.path,
+                  onClick: () => {
+                    if (typeof props.onOpenCharacter === 'function') props.onOpenCharacter(row)
+                  },
+                  onKeyDown: (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      if (typeof props.onOpenCharacter === 'function') props.onOpenCharacter(row)
+                    }
+                  },
+                  onContextMenu: (event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    setNodeMenu({
+                      kind: 'character',
+                      characterRow: row,
+                      title: row.title,
+                      path: row.path,
+                      x: event.clientX,
+                      y: event.clientY,
+                    })
+                  },
+                },
+                h(WbgIcon, { name: 'people', className: 'wbg-set-ic' }),
+                h('div', { className: 'wbg-set-t' },
+                  rowRenaming
+                    ? h('input', {
+                      className: 'wbg-nameinput wbg-setk-input',
+                      autoFocus: true,
+                      value: props.editProj.draft,
+                      onFocus: (event) => event.target.select(),
+                      onClick: (event) => event.stopPropagation(),
+                      onChange: (event) => props.editProj.onDraft(event.target.value),
+                      onKeyDown: (event) => {
+                        event.stopPropagation()
+                        if (event.key === 'Enter') { event.preventDefault(); props.editProj.commit() } else if (event.key === 'Escape') { event.preventDefault(); props.editProj.cancel() }
+                      },
+                      onBlur: () => props.editProj.commit(),
+                    })
+                    : h('b', null, row.title),
+                ),
+                h('span', { className: row.camp !== '' ? 'wbg-set-w wbg-set-camp' : 'wbg-set-w' },
+                  row.camp !== '' ? row.camp : row.words + ' ' + t('writeWordUnit'),
+                ),
               )
             }) : null,
           ),
@@ -10566,11 +10536,8 @@ function useScrollMemo(bucket, selector, ready) {
         const [outlineOpen, setOutlineOpen] = useState(false)
         const [openVolumes, setOpenVolumes] = useState({})
         /*
-         * 设定分类的展开态（2026-11-24 设定改分组）：默认全折叠 ——
-         * 大王要的是「分类行 + 条目数」，不是把 26 个人名一次铺开。
-         * 只有一篇的分类（武器）压根不展开，点分类行直接打开那一篇。
+         * 设定（2026-11-24 重做）已改成平铺单文件，不再需要「分类展开态」。
          */
-        const [openSettings, setOpenSettings] = useState({})
         /* AI 请求进行中：防止连点把同一条续写发两次 */
         const [aiBusy, setAiBusy] = useState(false)
         /*
@@ -10810,64 +10777,58 @@ function useScrollMemo(bucket, selector, ready) {
 
 
         /*
-         * 一键新建条目（2026-11-24）：照卷章的做法，点 ＋ 直接建，
-         * 名字由 Host 自动起（新条目 / 新条目 2 …），建完立刻进原地改名态。
+         * 一键新建人物（2026-11-24）：与卷章一致，点 ＋ 直接建，
+         * 名字由 Host 自动起（新人物 / 新人物 2 …），建完立刻进原地改名态。
          */
-        const addSettingEntryNow = async (kind) => {
+        const addCharacterNow = async () => {
           if (!project) {
             setError(t('writePickProject'))
             return
           }
           try {
-            const base = t('writeSettingEntryDefault')
-            const row = (project.settings || []).find((item) => item.kind === kind)
-            const taken = row && Array.isArray(row.entries) ? row.entries.map((entry) => entry.title) : []
+            const base = t('writeCharacterDefault')
+            const taken = (project.characters || []).map((row) => row.title)
             let title = base
             let seq = 2
             while (taken.includes(title)) {
               title = base + ' ' + seq
               seq += 1
             }
-            const made = await vaultApiPost('/write-add-setting-entry', {
+            const made = await vaultApiPost('/write-add-character', {
               path: project.path,
-              kind,
               title,
             })
-            /* 新建后把这一组展开，否则新条目藏在折叠里看不见 */
-            setOpenSettings((next) => ({ ...next, [kind]: true }))
             await loadProject(project.path)
-            flash(t('writeSettingEntryAdded'))
+            flash(t('writeCharacterAdded'))
             if (made && typeof made.name === 'string' && made.name !== '') {
-              openEdit('rename-setting-entry', { settingKind: kind, entryName: made.name }, made.title || title)
+              openEdit('rename-character', { characterName: made.name }, made.title || title)
             }
           } catch (err) {
             setError(t('writeSaveFailed') + messageOf(err))
           }
         }
 
-        const deleteSettingEntry = async (kind, entry) => {
-          if (!project || !entry || typeof entry.name !== 'string' || entry.name === '') return
-          const shown = entry.title !== '' ? entry.title : entry.name
-          if (!window.confirm(t('writeDeleteSettingEntryConfirm') + shown + '？\n' + t('writeDeleteSettingEntrySub'))) return
+        const deleteCharacter = async (row) => {
+          if (!project || !row || typeof row.name !== 'string' || row.name === '') return
+          const shown = row.title !== '' ? row.title : row.name
+          if (!window.confirm(t('writeDeleteCharacterConfirm') + shown + '？\n' + t('writeDeleteCharacterSub'))) return
           try {
-            await vaultApiPost('/write-del-setting-entry', {
+            await vaultApiPost('/write-del-character', {
               path: project.path,
-              kind,
-              name: entry.name,
+              name: row.name,
             })
             /* 删的正好是当前打开的这一篇 → 清空右栏 */
-            if (file && file.path === entry.path) {
+            if (file && file.path === row.path) {
               setFile(null)
               setActiveFile('')
               setDraft('')
             }
             await loadProject(project.path)
-            flash(t('writeSettingEntryDeleted'))
+            flash(t('writeCharacterDeleted'))
           } catch (err) {
             flash(t('writeDeleteFailed') + messageOf(err))
           }
         }
-
         const deleteSettingKind = async (kind) => {
           if (!project || kind === '') return
           if (!window.confirm(t('writeDeleteSettingKindConfirm') + kind + '？\n' + t('writeDeleteSettingKindSub'))) return
@@ -11047,18 +11008,18 @@ function useScrollMemo(bucket, selector, ready) {
         }
 
         /*
-         * 打开设定条目（2026-11-24 起设定是两级：分类目录 + 条目文件）。
-         * 左栏真正点开的是条目；「只有一篇的分类」点分类行也是走到这里。
+         * 打开设定（2026-11-24 起设定是平铺单文件：设定\<分类>.md）。
+         * 左栏一行就是一篇，点一下直接开。
          */
-        const openSettingEntry = async (kind, entry) => {
-          if (!entry || typeof entry.path !== 'string' || entry.path === '') return
+        const openSetting = async (row) => {
+          if (!row || typeof row.path !== 'string' || row.path === '') return
           try {
-            const data = await vaultApiGet('/file?path=' + encodeURIComponent(entry.path))
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(row.path))
             const text = typeof data.text === 'string' ? data.text : ''
             setFile({
-              path: entry.path,
-              name: entry.name,
-              title: entry.title !== '' ? entry.title : kind,
+              path: row.path,
+              name: row.name,
+              title: typeof row.kind === 'string' && row.kind !== '' ? row.kind : row.name,
               text,
               mtime: data.mtime,
               readOnly: data.readOnly === true,
@@ -11072,6 +11033,30 @@ function useScrollMemo(bucket, selector, ready) {
           }
         }
 
+        /*
+         * 打开人物（2026-11-24）：人物是独立板块，一人一篇 人物\<人名>.md。
+         */
+        const openCharacter = async (row) => {
+          if (!row || typeof row.path !== 'string' || row.path === '') return
+          try {
+            const data = await vaultApiGet('/file?path=' + encodeURIComponent(row.path))
+            const text = typeof data.text === 'string' ? data.text : ''
+            setFile({
+              path: row.path,
+              name: row.name,
+              title: row.title !== '' ? row.title : row.name,
+              text,
+              mtime: data.mtime,
+              readOnly: data.readOnly === true,
+            })
+            setActiveFile('')
+            setDraft(text)
+            setSaveState('idle')
+            setError('')
+          } catch (err) {
+            setError(t('writeLoadFailed') + messageOf(err))
+          }
+        }
         /*
          * 标题原地改名（2026-11-19 大王要求）：
          * 编辑模式下点标题变输入框；阅读模式纯文本、无悬停提示。
@@ -11528,7 +11513,7 @@ function useScrollMemo(bucket, selector, ready) {
           if (editPrompt.kind === 'rename-volume') return t('writeVolumeNamePrompt')
           if (editPrompt.kind === 'rename-chapter') return t('writeChapterNamePrompt')
           if (editPrompt.kind === 'rename-setting-kind') return t('writeRenameSettingKindPrompt')
-          if (editPrompt.kind === 'rename-setting-entry') return t('writeRenameSettingEntryPrompt')
+          if (editPrompt.kind === 'rename-character') return t('writeCharacterNamePrompt')
           return ''
         }
 
@@ -11538,7 +11523,7 @@ function useScrollMemo(bucket, selector, ready) {
           if (editPrompt.kind === 'rename-volume') return t('writeRenameVolume')
           if (editPrompt.kind === 'rename-chapter') return t('writeRenameChapter')
           if (editPrompt.kind === 'rename-setting-kind') return t('writeRenameSettingKind')
-          if (editPrompt.kind === 'rename-setting-entry') return t('writeRenameSettingEntry')
+          if (editPrompt.kind === 'rename-character') return t('writeRenameCharacter')
           return ''
         }
 
@@ -11609,15 +11594,14 @@ function useScrollMemo(bucket, selector, ready) {
               })
               await loadProject(project.path)
               flash(t('writeSettingKindRenamed'))
-            } else if (kind === 'rename-setting-entry') {
-              await vaultApiPost('/write-rename-setting-entry', {
+            } else if (kind === 'rename-character') {
+              await vaultApiPost('/write-rename-character', {
                 path: project.path,
-                kind: editPrompt.settingKind,
-                from: editPrompt.entryName,
+                from: editPrompt.characterName,
                 to: typed,
               })
               await loadProject(project.path)
-              flash(t('writeSettingEntryRenamed'))
+              flash(t('writeCharacterRenamed'))
             }
             closeEdit()
           } catch (err) {
@@ -11657,22 +11641,22 @@ function useScrollMemo(bucket, selector, ready) {
             onProject: (path) => void loadProject(path),
             onOpenChapter: (ch, vi, ci) => void openChapter(ch, vi, ci),
             /*
-             * 设定（2026-11-24 改成分组）：分类行可折叠，条目行才是文件。
-             * 一键建条目、改名删除走右键 —— 与卷章保持一致手感。
+             * 设定（2026-11-24 重做）：平铺单文件，一行一篇，点开就写。
+             * 一键建分类、改名删除走右键 —— 与卷章保持一致手感。
              */
-            openSettings,
-            onToggleSettingKind: (kind) => setOpenSettings((next) => ({ ...next, [kind]: next[kind] !== true })),
-            onOpenSettingEntry: (kind, entry) => void openSettingEntry(kind, entry),
+            onOpenSetting: (row) => void openSetting(row),
             onAddSettingKind: () => void addSettingKindNow(),
-            onAddSettingEntry: (kind) => void addSettingEntryNow(kind),
             onRenameSettingKind: (kind) => openEdit('rename-setting-kind', { settingKind: kind }, kind),
             onDeleteSettingKind: (kind) => void deleteSettingKind(kind),
-            onRenameSettingEntry: (kind, entry) => openEdit(
-              'rename-setting-entry',
-              { settingKind: kind, entryName: entry.name },
-              entry.title !== '' ? entry.title : entry.name,
+            /* 人物板块（2026-11-24 新增）：一人一篇，点开就写，右键改名/删除 */
+            onOpenCharacter: (row) => void openCharacter(row),
+            onAddCharacter: () => void addCharacterNow(),
+            onRenameCharacter: (row) => openEdit(
+              'rename-character',
+              { characterName: row.name },
+              row.title !== '' ? row.title : row.name,
             ),
-            onDeleteSettingEntry: (kind, entry) => void deleteSettingEntry(kind, entry),
+            onDeleteCharacter: (row) => void deleteCharacter(row),
             onToggleVolume: (vi) => setOpenVolumes((next) => ({ ...next, [vi]: next[vi] === false })),
             onCreate: () => openNewProject(),
             /* 右键删除项目（2026-11-18） */
@@ -11704,8 +11688,8 @@ function useScrollMemo(bucket, selector, ready) {
                 ci: editPrompt.chapterIndex,
                 path: editPrompt.path,
                 settingKind: editPrompt.settingKind,
-                settingName: editPrompt.settingName,
-                entryName: editPrompt.entryName,
+                /* 人物原地改名要用：左栏拿它和 row.name 比，决定哪一行换成输入框 */
+                characterName: editPrompt.characterName,
                 label: editLabelOf(),
                 placeholder: editPlaceholderOf(),
                 draft: editDraft,
@@ -13431,10 +13415,14 @@ mark.df-hit[data-active="true"] {
 .wbg-sect .wbg-vol-n { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .wbg-sect[data-kind="body"] { color: var(--dsw-alias-brand-primary); }
 .wbg-sect[data-kind="setting"] { color: var(--dsw-alias-state-warn-primary); }
+/* 人物板块（2026-11-24 新增）：用语义色里的紫，和正文蓝 / 设定琥珀区分开 */
+.wbg-sect[data-kind="character"] { color: var(--dsw-alias-state-done-primary, var(--dsw-alias-brand-primary)); }
 .wbg-sect[data-kind="body"] .wbg-vol-t,
 .wbg-sect[data-kind="body"] .wbg-vol-caret { color: var(--dsw-alias-brand-primary); }
 .wbg-sect[data-kind="setting"] .wbg-vol-t,
 .wbg-sect[data-kind="setting"] .wbg-vol-caret { color: var(--dsw-alias-state-warn-primary); }
+.wbg-sect[data-kind="character"] .wbg-vol-t,
+.wbg-sect[data-kind="character"] .wbg-vol-caret { color: var(--dsw-alias-state-done-primary, var(--dsw-alias-brand-primary)); }
 
 .wbg-vol { display: flex; align-items: center; gap: 6px; padding: 8px 6px 4px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); }
 .wbg-vol[data-open="false"] { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-weight: 500; }
@@ -13450,15 +13438,17 @@ mark.df-hit[data-active="true"] {
 .wbg-ch-w { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 /* 2026-11-22 起两个分区都是胶囊，不再需要分隔线；保留元素只为留一点垂直间距 */
 .wbg-sep { height: 0; margin: 6px 0 0; background: none; }
-/* ── 设定区三层（2026-11-24 大王要求「不计成本改版」）──────────────────────
- * 旧版分类行和条目行共用一套 .wbg-set，只差 padding-left 16px，两层糊在一起；
- * 字数小字压在名字下面把每行撑成两行；＋ 常驻把行挤满；点开哪一篇也没有选中反馈。
- * 新版拆成三行三种观感：
- *   .wbg-set-kind   分组分类 —— 小节标题：caret + 图标 + 名字 + 条目数胶囊，＋ 悬停才浮现
- *   .wbg-set-entry  分组条目 —— 缩进一级 + 左侧一根导引线，名字与字数同一行
- *   .wbg-set-sole   单独文件 —— 没有 caret、没有 ＋，图标 + 名字 + 右侧字数
+/* ── 设定 / 人物 区（2026-11-24 大王重做：设定平铺单文件 + 人物独立板块）────────
+ * 大王原话：「写作区的设定板块重做，不要分组和子文件了。新建项目的时候固定的
+ * 设定子文件为，大纲、情节线，地图。」「人物单独做板块，板块位置调整，
+ * 正文改为第一个板块，然后是设定，最后人物。」
+ *
+ * 所以这里只剩一种行：.wbg-set。设定一行一篇、人物一人一篇，都是平铺（没有分组、
+ * 没有子条目），行右侧显示字数（人物有阵营时显示阵营）。
+ * 三种历史样式（.wbg-set-kind / .wbg-set-entry / .wbg-set-group）连同它们的 caret、
+ * 条目数胶囊、导引线、＋ 按钮全部删掉 —— 分组结构没了，样式留着就是死代码。
+ *
  * 颜色一律走主题令牌；圆角只用 4px / var(--dsw-radius-sm, 8px)（画风约束：档位总数有上限）。
- * .wbg-set 只留三种行的共同基座：flex / 圆角 / 光标 / 相对定位。
  * ────────────────────────────────────────────────────────────────────── */
 .wbg-set { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: var(--dsw-radius-sm, 8px); position: relative; cursor: pointer; box-sizing: border-box; }
 .wbg-set:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
@@ -13468,27 +13458,6 @@ mark.df-hit[data-active="true"] {
 /* 右侧的字数 / 阵营：单行、次级色、等宽数字，不再另起一行 */
 .wbg-set-w { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); white-space: nowrap; }
 .wbg-set-camp { max-width: 68px; overflow: hidden; text-overflow: ellipsis; color: var(--dsw-alias-brand-primary); opacity: .85; }
-/* 分组分类行：像小节标题，比条目重一档 */
-.wbg-set-kind { padding-left: 2px; }
-.wbg-set-kind .wbg-set-t b { font-size: 12px; font-weight: 650; }
-.wbg-set-kind[data-active="true"] .wbg-set-t b { color: var(--dsw-alias-brand-primary); }
-.wbg-set-caret { flex: none; width: 12px; color: var(--dsw-alias-label-secondary); }
-/* 条目数胶囊：分组才有 */
-.wbg-set-n { flex: none; min-width: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 4px; background: var(--dsw-alias-bg-layer-2); font-size: 10px; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-/* ＋ 只在悬停 / 键盘聚焦时浮现，平时收着 —— 按键触屏没有悬停，所以不能彻底隐藏，保留 0.5 的底 */
-.wbg-set-add { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-size: 13px; line-height: 1; cursor: pointer; opacity: .5; transition: opacity .12s ease, background .12s ease, color .12s ease; }
-.wbg-set-kind:hover .wbg-set-add, .wbg-set-add:focus-visible { opacity: 1; }
-.wbg-set-add:hover { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); opacity: 1; }
-.wbg-set-add:active { opacity: 1; }
-/* 分组条目：外面包一层带导引线的容器，条目自己不再画线 */
-.wbg-set-group { position: relative; margin: 0 0 2px 10px; padding-left: 9px; }
-.wbg-set-group::before { content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 1px; background: var(--dsw-alias-border-l1); }
-.wbg-set-entry { padding-left: 2px; }
-.wbg-set-entry .wbg-set-t b { font-weight: 400; font-size: 11.5px; color: var(--dsw-alias-label-secondary); }
-.wbg-set-entry[data-active="true"] { background: var(--dsw-alias-bg-layer-2); }
-.wbg-set-entry[data-active="true"] .wbg-set-t b { color: var(--dsw-alias-brand-primary); font-weight: 600; }
-.wbg-set-entry[data-active="true"]::after { content: ""; position: absolute; left: 0; top: 3px; bottom: 3px; width: 2px; border-radius: 4px; background: var(--dsw-alias-brand-primary); }
-/* 单独文件行：图标跟名字同色一档，别比名字还亮 */
 .wbg-set-sole .wbg-set-t b { font-weight: 450; }
 .wbg-set-sole[data-active="true"] { background: var(--dsw-alias-bg-layer-2); }
 .wbg-set-sole[data-active="true"] .wbg-set-t b { color: var(--dsw-alias-brand-primary); font-weight: 600; }

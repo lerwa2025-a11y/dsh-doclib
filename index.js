@@ -19,19 +19,19 @@ import { parseBook, readEbookAsText, isEbookName, ebookAssetPath } from './ebook
 import { clearBinding, getBinding, setBinding } from './studio-binding.js'
 import { copyStatuses, listCopyDocs } from './copy-desk.js'
 import {
-  addSettingEntry,
   addSettingKind,
   addWriteChapter,
+  addCharacter,
   addWriteVolume,
   attachWriteChapterBody,
   createWriteProject,
-  deleteSettingEntry,
+  deleteCharacter,
   deleteSettingKind,
   deleteWriteChapter,
   deleteWriteVolume,
   listWriteProjects,
   readWriteProject,
-  renameSettingEntry,
+  renameCharacter,
   renameSettingKind,
   renameWriteChapter,
   renameWriteProject,
@@ -502,10 +502,10 @@ export function apply(ctx) {
               /*
                * 设定：分类目录 + 条目文件（2026-11-24 大王改定：设定分组）。
                *
-               * 结构是两级：设定\<分类>\<条目>.md。八个固定分类
-               * （大纲/人物/世界地图/核心冲突设定/修行体系/势力结构/武器/灵感与废案）
-               * 在新建项目时就建好、各铺一篇同名条目，之后可自建分类、
-               * 可在任何分类里加条目、可改名、可删。
+               * 2026-11-24 大王重做：设定是平铺单文件 设定\<分类>.md，
+               * 固定三类（大纲 / 情节线 / 地图）在新建项目时铺好；可自建分类、
+               * 可改名、可删。人物拆成独立板块（人物\<人名>.md，一人一篇），
+               * 所以下面另外三条路由是给人物用的。
                */
               if (route === '/write-add-setting-kind' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
@@ -531,27 +531,27 @@ export function apply(ctx) {
                 })
                 return
               }
-              if (route === '/write-add-setting-entry' && req.method === 'POST') {
+              if (route === '/write-add-character' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, {
                   ok: true,
-                  ...(await addSettingEntry(root, body && body.path, body && body.kind, body && body.title)),
+                  ...(await addCharacter(root, body && body.path, body && body.title)),
                 })
                 return
               }
-              if (route === '/write-rename-setting-entry' && req.method === 'POST') {
+              if (route === '/write-rename-character' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, {
                   ok: true,
-                  ...(await renameSettingEntry(root, body && body.path, body && body.kind, body && body.from, body && body.to)),
+                  ...(await renameCharacter(root, body && body.path, body && body.from, body && body.to)),
                 })
                 return
               }
-              if (route === '/write-del-setting-entry' && req.method === 'POST') {
+              if (route === '/write-del-character' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, {
                   ok: true,
-                  ...(await deleteSettingEntry(root, body && body.path, body && body.kind, body && body.name)),
+                  ...(await deleteCharacter(root, body && body.path, body && body.name)),
                 })
                 return
               }
