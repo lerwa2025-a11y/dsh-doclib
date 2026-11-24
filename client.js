@@ -55,7 +55,6 @@ window.__ModuleLoader__.load({
         vaultExpandAll: '全部展开',
         vaultCollapseAll: '全部收起',
         vaultOpenFolder: '打开文件夹',
-        vaultOpenFolderRoot: '库根',
         vaultHistory: '历史版本',
         vaultHistoryEmpty: '还没有历史版本；改动保存后会自动留一份（5 分钟内最多一份）',
         vaultSnapshotTaken: '已拍快照',
@@ -439,7 +438,6 @@ window.__ModuleLoader__.load({
         vaultExpandAll: 'Expand all',
         vaultCollapseAll: 'Collapse all',
         vaultOpenFolder: 'Open folder',
-        vaultOpenFolderRoot: 'library root',
         vaultHistory: 'History',
         vaultHistoryEmpty: 'No versions yet — one is kept automatically after a change (at most one per 5 min)',
         vaultSnapshotTaken: 'Snapshot taken',
@@ -833,6 +831,28 @@ window.__ModuleLoader__.load({
       } catch {
         return false
       }
+    }
+
+    /**
+     * 在系统资源管理器里打开「某个库内路径」所在的目录（2026-11-24 大王要求）。
+     *
+     * 入口从顶栏挪进三个板块的左栏右键菜单后，这个函数只做一件事：
+     * 把相对路径原样交给 Host 的 /open —— 它自己 stat，是文件就开它所在目录。
+     * 第一级失败（路径被外部删了、目录不存在）退到库根再试一次，
+     * 免得用户右击一个还没正文文件的章时点了完全没反应。
+     */
+    async function openFolderAt(relPath) {
+      const picked = typeof relPath === 'string' ? relPath.trim().replaceAll('\\', '/') : ''
+      const candidates = picked !== '' ? [picked, ''] : ['']
+      for (const candidate of candidates) {
+        try {
+          await vaultApiPost('/open', { path: candidate })
+          return true
+        } catch {
+          /* 这一级不存在，试下一级 */
+        }
+      }
+      return false
     }
 
     // ── 数据访问 ─────────────────────────────────────────────────────────────
@@ -2715,17 +2735,6 @@ function useScrollMemo(bucket, selector, ready) {
       /** 大纲轨是否收起。跟 reader-settings 的 tocCollapsed 同步。
        *  初始 true = 与 reader-settings 的默认值一致，避免「先展开一帧再收起」的闪烁。 */
       const [outlineCollapsed, setOutlineCollapsed] = useState(true)
-      /**
-       * 把当前选中的路径报给顶栏，让「打开文件夹」能开对地方。
-       *
-       * 用 effect 监听 selected，而不是在 6 个 setSelected 调用点各加一次回调 ——
-       * 那样漏一处就会出现「明明选了文件、按钮还开旧目录」的怪现象。
-       * 没选中时上报空串，交给顶栏退到板块目录。
-       */
-      useEffect(() => {
-        if (typeof props.onFocusPath !== 'function') return
-        props.onFocusPath(selected && typeof selected.path === 'string' ? selected.path : '')
-      }, [selected, props.onFocusPath])
 
       /** 文档工具条自绘下拉的互斥开关：'' = 全收起；否则是当前打开的那个（font / line / bg）。
        *  docBar 是常量 JSX（不是组件），不能在里面调 hook，所以展开状态必须提到这里。 */
@@ -3679,14 +3688,6 @@ function useScrollMemo(bucket, selector, ready) {
       const cancelRename = () => {
         renameGuard.current.cancelled = true
         setRenaming(false)
-      }
-
-      const openInExplorer = async () => {
-        try {
-          await vaultApiPost('/open', { path: selected && selected.type === 'dir' ? selected.path : '' })
-        } catch (err) {
-          setError(messageOf(err))
-        }
       }
 
       const refreshHistory = async () => {
@@ -4925,6 +4926,15 @@ function useScrollMemo(bucket, selector, ready) {
                     void copyNodePath(node)
                   },
                 }, t('vaultCopyPath')),
+                /* 打开文件夹（2026-11-24 大王要求：从顶栏挪进右键菜单） */
+                h('button', {
+                  type: 'button',
+                  className: 'vp-ctxmenu-item',
+                  onClick: () => {
+                    setCtxMenu(null)
+                    void openFolderAt(node.path)
+                  },
+                }, t('vaultOpenFolder')),
                 groupNode
                   ? null
                   : h('i', { className: 'vp-ctxmenu-sep' }),
@@ -5509,10 +5519,6 @@ function useScrollMemo(bucket, selector, ready) {
           'M3 3v5h5',
           'M12 7v5l4 2',
         ],
-        // Lucide folder-open —— 打开文件夹
-        folderOpen: [
-          'm6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.93a2 2 0 0 1 1.66.9l.82 1.2a2 2 0 0 0 1.66.9H18a2 2 0 0 1 2 2v2',
-        ],
         // Lucide rotate-cw —— 刷新
         refresh: [
           'M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8',
@@ -5609,91 +5615,6 @@ function useScrollMemo(bucket, selector, ready) {
         ],
       };
 
-      /**
-       * 板块 → 它在库里对应的那层目录（相对库根，空串 = 库根本身）。
-       *
-       * 大王说「对应资源管理器中的文件位置」，所以这个按钮要跟着当前板块走：
-       *   素材库 → 库根（原料仓就是整个库）
-       *   文案台 → 文案\
-       *   写作台 → 写作\
-       *   回收站 → .trash\（删掉的东西都在这儿）
-       *
-       * 「打开文件夹」以前固定开库根（提到顶栏时当整库级操作处理）。
-       * 但文案台点开只落到库根，还得自己再点进「文案」，跟直觉不符，所以改成跟随。
-       */
-      const BOARD_FOLDER = {
-        /*
-         * 素材区原来写空串（= 库根），2026-11-19 大王指出不对：
-         * 素材区左栏显示的就是 素材\ 里面的东西（顶层「素材」节点已摊平），
-         * 打开文件夹却开到它的上一层 工作台\，用户看不到刚建的东西。
-         * 三个板块现在统一：各自开到自己那一层库目录。
-         */
-        vault: '素材',
-        copy: '文案',
-        write: '写作',
-        trash: '.trash',
-      }
-
-      /**
-       * 在系统资源管理器里打开「当前选中项所在的目录」。
-       *
-       * 优先级（大王要求「根据我目前选择的文件来」）：
-       *   ① 有选中的文件 → 打开它所在的目录（在资源管理器里正好选中它旁边）
-       *   ② 选中的是文件夹 → 直接打开那个文件夹
-       *   ③ 什么都没选 → 退到当前板块对应的库目录（BOARD_FOLDER）
-       *   ④ 连库目录都没有（老库还没建） → 退到库根
-       *
-       * Host 侧 /open 收到的是「库内相对路径」，它是文件还是目录都行 ——
-       * openInExplorer 内部会 stat，文件就开它所在目录。所以这里可以原样传。
-       */
-      /** 路径的父目录（素材/报告/a.md → 素材/报告）。没有斜杠就返回空串。 */
-      const parentDirOf = (path) => {
-        const normalized = String(path || '').replaceAll('\\', '/').replace(/^\/+|\/+$/g, '')
-        if (normalized === '') return ''
-        return normalized.includes('/') ? normalized.slice(0, normalized.lastIndexOf('/')) : normalized
-      }
-
-      /**
-       * 「打开文件夹」按钮的悬停提示：显示它实际会打开哪个目录。
-       *
-       * 选了文件 → 显示该文件所在目录；选了目录 → 显示该目录；没选 → 显示板块目录。
-       * 用户能一眼看出「点下去会去哪」，不用猜。
-       */
-      /*
-       * 注意：这几个函数在**模块作用域**，不是 WorkbenchPage 内部。
-       * 所以不能用 t() —— t 是各组件从 props 拿的，这里没有。
-       * 需要文案时由调用方传进来（下面 translate 参数就是这么用的）。
-       * 2026-11-18：漏了这一点导致工作台白屏，已修。
-       */
-      const openFolderHint = (board, focusPath, translate) => {
-        const picked = typeof focusPath === 'string' ? focusPath.trim().replaceAll('\\', '/') : ''
-        const boardDir = typeof BOARD_FOLDER[board] === 'string' ? BOARD_FOLDER[board] : ''
-        if (picked !== '') {
-          /* 有选中：显示它的父目录（文件）或它自己（目录）—— 这里分不清类型，
-             但两种情况下 Host 打开的目录都是父目录或它本身，提示用父目录最稳 */
-          const parent = parentDirOf(picked)
-          return parent !== '' ? parent + '\\' : picked
-        }
-        if (boardDir !== '') return boardDir + '\\'
-        /* 兜底文案由调用方给（模块作用域没有 t） */
-        return typeof translate === 'function' ? translate('vaultOpenFolderRoot') : 'root'
-      }
-
-      const vaultOpenBoardFolder = async (board, focusPath) => {
-        const picked = typeof focusPath === 'string' ? focusPath.trim().replaceAll('\\', '/') : ''
-        const rel = typeof BOARD_FOLDER[board] === 'string' ? BOARD_FOLDER[board] : ''
-        /* ① ② 有选中就开选中项（可能是文件也可能是目录，Host 会自己判断） */
-        const candidates = picked !== '' ? [picked, rel, ''] : [rel, '']
-        for (const candidate of candidates) {
-          if (typeof candidate !== 'string') continue
-          try {
-            await vaultApiPost("/open", { path: candidate })
-            return
-          } catch {
-            /* 这一级不存在，试下一级 */
-          }
-        }
-      }
 
       // 工作台区域选择器：四个板块共用同一个工作区，切换板块不换区域
       /**
@@ -6155,6 +6076,16 @@ function useScrollMemo(bucket, selector, ready) {
                   if (typeof props.onCopyPath === 'function') props.onCopyPath(node)
                 },
               }, t('vaultCopyPath')),
+              /* 打开文件夹（2026-11-24 大王要求：从顶栏挪进右键菜单） */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const node = ctxMenu.node
+                  setCtxMenu(null)
+                  void openFolderAt(node.path)
+                },
+              }, t('vaultOpenFolder')),
               h('i', { className: 'vp-ctxmenu-sep' }),
               h('button', {
                 type: 'button',
@@ -6456,29 +6387,6 @@ function useScrollMemo(bucket, selector, ready) {
           BOARD_MEMO.workbench.tab = tab
         }, [tab])
         /*
-         * 当前板块里用户选中的那个路径（文件或目录）。
-         *
-         * 为什么提到这里：顶栏「打开文件夹」要根据「我目前选择的文件」决定开哪个目录，
-         * 而选中状态在各板块内部（素材库 selected / 文案台 activePath / 写作台 activeFile）。
-         * 三个板块通过 onFocusPath 回调把选中路径报上来，这里收着。
-         * 切换板块时清空，避免拿上一板块的路径去开。
-         */
-        const [focusPaths, setFocusPaths] = useState({})
-        /*
-         * 每个板块各自记「我当前选中的路径」，不再切板块清空（2026-11-19）。
-         * 常驻挂载后板块不会重新上报，清空会让「打开文件夹」丢目标。
-         * 三个 setter 用 useMemo 固定身份：板块里 useEffect 依赖它，
-         * 每次渲染换新函数会触发「effect → setState → 渲染」死循环。
-         * setFocusPaths 内部再判等，同一个路径不重复 set。
-         */
-        const focusSetter = (board) => (path) => {
-          setFocusPaths((prev) => (prev[board] === path ? prev : { ...prev, [board]: path }))
-        }
-        const onFocusVault = useMemo(() => focusSetter('vault'), [])
-        const onFocusCopy = useMemo(() => focusSetter('copy'), [])
-        const onFocusWrite = useMemo(() => focusSetter('write'), [])
-        const boardFocusPath = typeof focusPaths[tab] === 'string' ? focusPaths[tab] : ''
-        /*
          * 已访问过的板块：访问过一次就常驻挂载，切走再切回来组件状态还在。
          * 2026-11-19：这个集合也要进内存 —— 切到会话页时整个工作台被卸载，
          * 重挂时若退回 { vault: true }，之前打开的文案区/写作区会被卸载，
@@ -6608,33 +6516,22 @@ function useScrollMemo(bucket, selector, ready) {
             /*
              * 顶栏排法（2026-11-18 重排，按 shadcn 的分组 + 统一高度）：
              *
-             *   〔素材库 文案台 写作台〕 │ [📂] [⟳]  [工作区选择器] │ [🗑]
+             *   〔素材库 文案台 写作台〕 │ [⟳]  [工作区选择器] │ [🗑]
              *       板块切换（主）        次要动作 + 上下文        去处
              *
              * 为什么这么分：
              *   · 板块切换是「主操作」，用 40px 圆形 + 下方文字，视觉最重
-             *   · 打开文件夹/刷新是「次要动作」，用 32px 紧凑图标（与选择器同高），
+             *   · 刷新是「次要动作」，用 32px 紧凑图标（与选择器同高），
              *     不再带文字占一整行高；提示走 title
+             *   · 打开文件夹挪进了左栏右键菜单（2026-11-24 大王要求）
              *   · 工作区选择器是「当前上下文」，和次要动作同组
              *   · 回收站是「去处」不是板块，单独靠右，和前面用竖线隔开
              */
             h('i', { className: 'wb-hsep' }),
-            /* 次要动作组：打开文件夹 / 刷新（32px 紧凑图标，与选择器同高） */
+            /* 次要动作组：刷新（32px 紧凑图标，与选择器同高）。打开文件夹已挪进左栏右键菜单（2026-11-24） */
             h(
               'div',
               { className: 'wb-actions' },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'wb-iconbtn',
-                  /* 提示里显示真实落点：选了文件就显示它所在目录，没选显示板块目录 */
-                  title: t('vaultOpenFolder') + '：' + openFolderHint(tab, boardFocusPath, t),
-                  'aria-label': t('vaultOpenFolder'),
-                  onClick: () => { void vaultOpenBoardFolder(tab, boardFocusPath) },
-                },
-                h(BoardIcon, { name: 'folderOpen', className: 'wb-ic-lg' }),
-              ),
               h(
                 'button',
                 {
@@ -6688,7 +6585,7 @@ function useScrollMemo(bucket, selector, ready) {
             h(
               'div',
               { className: 'wb-pane', hidden: tab !== 'vault' },
-              h(VaultPage, { t, ctx, embedded: true, root, refreshTick, onOpenTrash: () => setTab('trash'), onFocusPath: onFocusVault }),
+              h(VaultPage, { t, ctx, embedded: true, root, refreshTick, onOpenTrash: () => setTab('trash') }),
             ),
             tab === 'trash' ? h(TrashBoard, { t, root, refreshTick }) : null,
             /*
@@ -6697,8 +6594,8 @@ function useScrollMemo(bucket, selector, ready) {
              * 打开的稿件、草稿、阅读/编辑模式、写作项目与章节全丢，只剩一个路径空壳。
              * 现在首次访问后不再卸载，只用 hidden 切显隐（素材区一直这么做）。
              */
-            mounted.copy ? h(CopyBoard, { t, ctx, root, hidden: tab !== 'copy', onFocusPath: onFocusCopy }) : null,
-            mounted.write ? h(WritingBoard, { t, ctx, root, hidden: tab !== 'write', onFocusPath: onFocusWrite }) : null,
+            mounted.copy ? h(CopyBoard, { t, ctx, root, hidden: tab !== 'copy' }) : null,
+            mounted.write ? h(WritingBoard, { t, ctx, root, hidden: tab !== 'write' }) : null,
           ),
         )
       }
@@ -8647,12 +8544,6 @@ function useScrollMemo(bucket, selector, ready) {
           if (ok) flash(t('vaultPathCopied'))
         }
 
-        /** 把当前打开的稿件路径报给顶栏（「打开文件夹」用）。 */
-        useEffect(() => {
-          if (typeof props.onFocusPath !== 'function') return
-          props.onFocusPath(activePath)
-        }, [activePath, props.onFocusPath])
-
         // 拉清单：换库根、改过稿、发给助手之后都要重拉（字数与状态会变）
         const reload = async () => {
           if (root === '') {
@@ -9860,6 +9751,16 @@ function useScrollMemo(bucket, selector, ready) {
                   if (typeof props.onCopyPath === 'function') props.onCopyPath(item.path)
                 },
               }, t('vaultCopyPath')),
+              /* 打开文件夹（2026-11-24 大王要求）：项目右键开它所在的 写作\ 目录 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const item = projMenu.item
+                  setProjMenu(null)
+                  void openFolderAt(item.path)
+                },
+              }, t('vaultOpenFolder')),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -9914,6 +9815,18 @@ function useScrollMemo(bucket, selector, ready) {
                   if (typeof props.onCopyPath === 'function' && typeof menu.path === 'string' && menu.path !== '') props.onCopyPath(menu.path)
                 },
               }, t('vaultCopyPath')),
+              /* 打开文件夹（2026-11-24 大王要求）：卷 / 章 / 设定 / 人物都支持 */
+              h('button', {
+                type: 'button',
+                className: 'vp-ctxmenu-item',
+                onClick: () => {
+                  const menu = nodeMenu
+                  setNodeMenu(null)
+                  /* 还没正文文件的章 path 是空串，退回项目根，别开成库根 */
+                  const dir = typeof menu.path === 'string' && menu.path !== '' ? menu.path : (project ? project.path : '')
+                  void openFolderAt(dir)
+                },
+              }, t('vaultOpenFolder')),
               h('button', {
                 type: 'button',
                 className: 'vp-ctxmenu-item vp-ctxmenu-danger',
@@ -10673,17 +10586,6 @@ function useScrollMemo(bucket, selector, ready) {
           const ok = await writeClipboard(absolutePathOf(root, relPath))
           if (ok) flash(t('vaultPathCopied'))
         }
-
-        /**
-         * 把当前打开的正文/设定路径报给顶栏（「打开文件夹」用）。
-         *
-         * 用 file.path 而不是 project.path：大王要看的是「我选中的那个文件」在哪，
-         * 而一篇正文的路径比整个项目的路径更精确（能直接落到 正文\ 目录）。
-         */
-        useEffect(() => {
-          if (typeof props.onFocusPath !== 'function') return
-          props.onFocusPath(file && typeof file.path === 'string' ? file.path : '')
-        }, [file, props.onFocusPath])
 
         // 项目清单
         const reloadProjects = async () => {
