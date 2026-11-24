@@ -114,7 +114,7 @@ window.__ModuleLoader__.load({
         readerSettingsFailed: '阅读偏好没能保存，下次打开会回到默认',
         // ── [t5 划线标注] ──
         // ── [t8 章节导航] ──
-        tocPanel: '章节',
+        tocPanel: '目录',
         tocParseFailed: '这本电子书的章节解析失败',
         tocJumpTo: '点击跳到这一章',
         // ── [t4 阅读排版] ──
@@ -498,7 +498,7 @@ window.__ModuleLoader__.load({
         readerSettingsFailed: 'Reading preferences could not be saved; defaults return next time',
         // ── [t5 划线标注] ──
         // ── [t8 章节导航] ──
-        tocPanel: 'Chapters',
+        tocPanel: 'Contents',
         tocParseFailed: 'Failed to parse chapters from this e-book',
         tocJumpTo: 'Click to jump to this chapter',
         // ── [t4 阅读排版] ──
@@ -7143,13 +7143,13 @@ function useScrollMemo(bucket, selector, ready) {
       const count = items.filter((item) => item.kind !== 'vol').length
       return h('div', { className: 'cb-outline' },
         h('div', { className: 'cb-outline-h' },
-          h('span', null, t(props.titleKey)),
-          count > 0 ? h('span', { className: 'cb-outline-n' }, String(count)) : null,
           /*
-           * 收起侧边栏按钮（2026-11-24 大王 m17329：搬到「章节」这一行来）。
+           * 收起侧边栏按钮放在这一行最左（2026-11-25 大王要求：靠近阅读区那一侧）。
            * 由 BoardAssistant 造好传进来 —— 板块自己拿不到 setCollapsed。
            */
           props.fold !== undefined && props.fold !== null ? props.fold : null,
+          h('span', { className: 'cb-outline-k' }, t(props.titleKey)),
+          count > 0 ? h('span', { className: 'cb-outline-n' }, String(count)) : null,
         ),
         count === 0
           ? h('div', { className: 'cb-outline-empty' }, t(props.emptyKey))
@@ -7874,7 +7874,12 @@ function useScrollMemo(bucket, selector, ready) {
           ? null
           : (typeof props.outline === 'function' ? props.outline(foldButton('cb-outline-fold')) : props.outline);
 
-        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', style: props.style },
+        /*
+         * data-split：这条右栏是不是「上目录 + 下助手」两段的形态。
+         * 只有它才画左边缘的品牌色条（2026-11-25 大王要的色条）；
+         * 素材区是纯助手栏，不打标记、保持原样。
+         */
+        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', 'data-split': props.outline !== undefined && props.outline !== null ? 'true' : 'false', style: props.style },
           /*
            * 标题行：没有章节目录的板块（素材区）在这里显示；
            * 有目录的板块（文案区 / 写作区）标题行挪到隔离线下面去了，这块留空。
@@ -10674,6 +10679,8 @@ function useScrollMemo(bucket, selector, ready) {
           BOARD_MEMO.write.activeProject = activeProject
         }, [activeProject])
         const [file, setFile] = useState(null)
+        /* 目录里当前高亮的那一条（2026-11-25：与文案区同构，点目录时点亮） */
+        const [outlineActive, setOutlineActive] = useState('')
         const [draft, setDraft] = useState('')
         /* 图片缓存戳（2026-11-24 粘贴图片）：重传同名图片时靠它刷掉浏览器缓存。 */
         const [imageTick, setImageTick] = useState(0)
@@ -11762,27 +11769,18 @@ function useScrollMemo(bucket, selector, ready) {
         const dirty = !!file && file.text !== draft
 
         /*
-         * 章节目录（2026-11-24 大王定案方案 B）：右栏上半区显示项目的卷章结构，
-         * 点一章直接打开它（跟左栏点章是同一个入口 openChapter）。
-         * 卷是分组标题（不可点），章才是条目 —— 写作区的目录天然是两层的。
+         * 目录（2026-11-25 大王改定）：右栏上半区**不是**项目的卷章列表，
+         * 而是「当前这篇正文里有哪些 # 标题」——和文案区、素材区用同一套
+         * buildDocOutline。理由：目录是给长文本 / 电子书那种文档用的，
+         * 正文里写了标题格式才该出现在目录里；卷章结构在左栏已经看得见。
          */
-        const outlineItems = []
-        if (project && Array.isArray(project.volumes)) {
-          project.volumes.forEach((vol, vi) => {
-            outlineItems.push({ kind: 'vol', label: vol.title !== '' ? vol.title : t('writeUntitledVolume') })
-            ;(vol.chapters || []).forEach((ch, ci) => {
-              outlineItems.push({
-                id: ch.file,
-                label: ch.title !== '' ? ch.title : t('writeUntitledChapter'),
-                level: 1,
-                meta: ch.file ? String(ch.words || 0) : '—',
-                chapter: ch,
-                volumeIndex: vi,
-                chapterIndex: ci,
-              })
-            })
-          })
-        }
+        const outlineItems = buildDocOutline(null, file, mode).map((node) => ({
+          id: node.id,
+          label: node.title,
+          level: node.level,
+          meta: '',
+          line: node.line,
+        }))
 
         return h(
           'div',
@@ -11972,15 +11970,21 @@ function useScrollMemo(bucket, selector, ready) {
             titleKey: 'writeAssistant',
             placeholderKey: 'writeInput',
             tasks: [],
-            /* 右栏上半区：项目卷章目录（点章打开，跟左栏同一个入口） */
+            /* 右栏上半区：当前正文的标题目录（点一条滚到那一行） */
             outline: (fold) => h(BoardOutline, {
               t,
               titleKey: 'tocPanel',
-              emptyKey: 'writeNoStructure',
+              emptyKey: file === null ? 'tocEmptyNoDoc' : 'tocEmpty',
               items: outlineItems,
-              activeId: activeFile,
+              activeId: outlineActive,
               fold,
-              onPick: (item) => void openChapter(item.chapter, item.volumeIndex, item.chapterIndex),
+              onPick: (item) => {
+                setOutlineActive(item.id)
+                const surface = editorRef.current
+                if (!surface) return
+                const target = surface.querySelector('.md-line[data-line="' + item.line + '"]')
+                if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' })
+              },
             }),
             style: { width: asideW + 'px' },
           }),
@@ -13465,7 +13469,8 @@ mark.df-hit[data-active="true"] {
  */
 .cb-aside-fold { margin-left: auto; }
 /* 章节那一行的收起按钮（2026-11-24 大王 m17329）：紧跟在计数后面、行尾。 */
-.cb-outline-fold { flex: none; margin-left: 2px; }
+/* 收起按钮在目录行最左（2026-11-25 大王要求：靠近阅读区那一侧）。 */
+.cb-outline-fold { flex: none; margin-right: 1px; }
 .cb-outline-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 .cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .cb-aside-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
@@ -14133,17 +14138,27 @@ mark.df-hit[data-active="true"] {
  * 章节目录（2026-11-24 大王定案方案 B：右栏上下分区，上面目录、下面助手）。
  * 和助手同宽、同一栏内上下排；两块都 flex:1 各占一半，各自滚动。
  */
-.cb-outline { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); overflow: hidden; }
+/*
+ * 目录块（2026-11-25 大王定案方案 C「加色条」）：
+ * 不再画描边卡片，改成「白底 + 左侧 3px 琥珀色条」的一条色带；
+ * 下面助手区是平台灰底 + 左边缘 3px 品牌色条（见 .cb-aside[data-split="true"]）。
+ * 两块靠底色交替 + 各自的色条分开，不再靠圆角卡片。
+ */
+.cb-outline { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; box-shadow: inset 3px 0 0 0 var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); overflow: hidden; }
 /* 上下内边距收到 5px：行尾那颗 20×20 的收起按钮不能把标题行撑高（2026-11-24）。 */
-.cb-outline-h { flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
-.cb-outline-n { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/* 目录标题行：小号粗体的「栏目名」，左边先是收起按钮（靠阅读区那一侧）。 */
+.cb-outline-h { flex: none; display: flex; align-items: center; gap: 4px; padding: 5px 10px 5px 9px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--dsw-alias-label-secondary); }
+.cb-outline-k { flex: none; }
+/* 条目数：小圆徽章（方案 C） */
+.cb-outline-n { margin-left: 2px; min-width: 16px; padding: 1px 5px; border-radius: 50%; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 700; text-align: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
 .cb-outline-body::-webkit-scrollbar { width: 6px; }
 .cb-outline-body::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 .cb-outline-vol { padding: 6px 6px 3px; font-size: 10px; font-weight: 600; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-outline-item { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
 .cb-outline-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
-.cb-outline-item[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); font-weight: 600; }
+/* 选中项（方案 C）：不铺底色，只换品牌色 + 加粗，跟色条一起读。 */
+.cb-outline-item[data-active="true"] { background: transparent; color: var(--dsw-alias-brand-primary); font-weight: 700; }
 .cb-outline-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-outline-m { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .cb-outline-empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; font-size: 11px; line-height: 1.6; text-align: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -14152,7 +14167,13 @@ mark.df-hit[data-active="true"] {
  * aside 有 gap:12px 和 padding:12px，这里用负边距把线拉满整栏宽度，
  * 让它读起来是「两块」而不是「一堆卡片」。
  */
-.cb-aside-sep { flex: none; height: 1px; margin: 0 -12px; background: var(--dsw-alias-border-l1); }
+/*
+ * 有目录的右栏（data-split=true）：左边缘一条 3px 品牌色条，
+ * 目录块自己的琥珀色条盖在它上面 —— 于是上半区琥珀、下半区蓝，各归各的。
+ */
+.cb-aside[data-split="true"] { box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
+/* 两块之间的细线：色条 + 底色交替已经分得开，这条留着当极淡的分界。 */
+.cb-aside-sep { flex: none; height: 1px; margin: 0 -12px; background: var(--dsw-alias-border-l1); opacity: .6; }
 /*
  * 会话区（2026-11-18 美化）：
  * 原来一整块 bg-layer-2 深色方块显得很重，改成细边框 + 透明底的轻卡片。
