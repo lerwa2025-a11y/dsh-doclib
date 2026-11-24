@@ -142,13 +142,13 @@ window.__ModuleLoader__.load({
         assistRunning: '运行中',
         assistOpen: '打开会话',
         /* 助手栏收起（2026-11-18 大王要求：写作助手能收起到侧边） */
-        assistCollapse: '收起助手',
+        assistCollapse: '收起侧边栏',
         assistYou: '我',
         assistAi: '助手',
         assistHistoryLoading: '读取对话中…',
         assistHistoryEmpty: '还没有对话。问一句试试，或点上面的「打开会话」。',
         assistHistoryMore: '只显示最近 80 条，更早的请点「打开会话」查看。',
-        assistExpand: '展开助手',
+        assistExpand: '展开侧边栏',
         assistNew: '新会话',
         assistConfirmNew: '确认新会话？',
         assistConfirmArchive: '确认归档？',
@@ -525,13 +525,13 @@ window.__ModuleLoader__.load({
         assistIdle: 'Idle',
         assistRunning: 'Running',
         assistOpen: 'Open session',
-        assistCollapse: 'Collapse assistant',
+        assistCollapse: 'Collapse sidebar',
         assistYou: 'You',
         assistAi: 'Assistant',
         assistHistoryLoading: 'Loading conversation…',
         assistHistoryEmpty: 'No messages yet. Ask something, or open the session.',
         assistHistoryMore: 'Showing the latest 80 messages. Open the session for older ones.',
-        assistExpand: 'Expand assistant',
+        assistExpand: 'Expand sidebar',
         assistNew: 'New session',
         assistConfirmNew: 'New session?',
         assistConfirmArchive: 'Archive?',
@@ -7821,30 +7821,44 @@ function useScrollMemo(bucket, selector, ready) {
               'aria-label': t('assistExpand'),
               onClick: () => setCollapsed(false),
             },
-            h(CbIcon, { name: 'sparkle', small: true }),
+            /* 2026-11-24 大王要求：收起后的窄条也照素材区左栏那颗（panelLeft 图标） */
+            h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }),
             h('span', { className: 'cb-aside-rail-t' }, t(props.titleKey)),
           )
         }
 
+        /*
+         * 助手标题行（2026-11-24 大王要求「把写作助手和文案助手的标题也移下去」）：
+         * 抽成变量，因为它现在挂在两处之一 ——
+         *   有章节目录（文案区 / 写作区）→ 挪到隔离线下面，当「下半区」的标题；
+         *   没有目录（素材区）→ 仍在最上面，行为与以前完全一致。
+         * 「空闲 / 运行中」那颗状态胶囊、收起按钮都在这行里，跟着一起走。
+         */
+        const asideHead = h('div', { className: 'cb-aside-h' },
+          h('span', { className: 'cb-aside-ic' }, h(CbIcon, { name: 'sparkle', small: true })),
+          h('span', null, t(props.titleKey)),
+          h('span', { className: 'cb-status' },
+            h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
+            statusText),
+          /*
+           * 收起侧边栏（2026-11-24 大王要求：照素材区左栏那颗做）。
+           * 素材区用的是 .cb-fold：20×20 透明底 + panelLeft 图标，贴在行尾；
+           * 这里照抄，换成 CbIcon 里没有的 panelLeft 就借 BoardIcon。
+           */
+          h('button', {
+            type: 'button',
+            className: 'cb-fold cb-aside-fold',
+            title: t('assistCollapse'),
+            'aria-label': t('assistCollapse'),
+            onClick: () => setCollapsed(true),
+          }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' })));
+
         return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', style: props.style },
-          h('div', { className: 'cb-aside-h' },
-            h('span', { className: 'cb-aside-ic' }, h(CbIcon, { name: 'sparkle', small: true })),
-            h('span', null, t(props.titleKey)),
-            /* 收起到侧边（2026-11-18） */
-            h(
-              'button',
-              {
-                type: 'button',
-                className: 'cb-aside-fold',
-                title: t('assistCollapse'),
-                'aria-label': t('assistCollapse'),
-                onClick: () => setCollapsed(true),
-              },
-              h(CbIcon, { name: 'chevronRight', small: true }),
-            ),
-            h('span', { className: 'cb-status' },
-              h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
-              statusText)),
+          /*
+           * 标题行：没有章节目录的板块（素材区）在这里显示；
+           * 有目录的板块（文案区 / 写作区）标题行挪到隔离线下面去了，这块留空。
+           */
+          props.outline !== undefined && props.outline !== null ? null : asideHead,
           tasks.length > 0
             ? h('div', { className: 'cb-task-card' },
               tasks.map((task, index) =>
@@ -7863,6 +7877,12 @@ function useScrollMemo(bucket, selector, ready) {
            * 只在自己带了目录的板块出现；素材区是纯助手栏，不画。
            */
           props.outline !== undefined && props.outline !== null ? h('div', { className: 'cb-aside-sep' }) : null,
+          /*
+           * 下半区（助手）标题行：有目录时落在隔离线下面，
+           * 于是右栏读起来是「上面一块章节、下面一块助手」，每块都有自己的标题；
+           * 「空闲 / 运行中」胶囊也跟着标题下来（大王 2026-11-24 要求）。
+           */
+          props.outline !== undefined && props.outline !== null ? asideHead : null,
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
           /*
            * 聊天记录区（2026-11-18 大王要求）：
@@ -13415,17 +13435,12 @@ mark.df-hit[data-active="true"] {
  * 收起按钮 / 收起后的窄条（2026-11-18 大王要求：写作助手能收起到侧边）。
  * 收起后正文区拿回 268px，「已保存」也不会再被压到。
  */
-.cb-aside-fold {
-  /* 独占 margin-left: auto 定位到最右（2026-11-18）；
-     原来 .cb-status 也写了 auto，两者抢位把按钮挤没了 */
-  margin-left: auto; flex: none; width: 22px; height: 22px;
-  display: inline-flex; align-items: center; justify-content: center;
-  /* 加边框 + 微底色（2026-11-18）：原来全透明，图标再缺失就彻底看不见 */
-  border: 1px solid var(--dsw-alias-border-l1); border-radius: 4px;
-  background: var(--dsw-alias-bg-layer-2);
-  color: var(--dsw-alias-label-secondary); cursor: pointer;
-  transition: background .12s, color .12s, border-color .12s;
-}
+/*
+ * 收起侧边栏按钮（2026-11-24 大王要求：照素材区左栏那颗做）。
+ * 外观全部来自 .cb-fold（20×20、透明底、panelLeft 图标、贴行尾），
+ * 这里只补一条「推到行最右侧」——标题字后面可能还跟着状态胶囊。
+ */
+.cb-aside-fold { margin-left: auto; }
 .cb-aside-fold:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); border-color: var(--dsw-alias-border-l2); }
 .cb-aside-fold:focus-visible { outline: 2px solid var(--dsw-alias-brand-primary); outline-offset: -1px; }
 
