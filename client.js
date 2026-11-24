@@ -44,6 +44,7 @@ window.__ModuleLoader__.load({
         tocEmpty: '这个文件没有标题',
         tocEmptyNoDoc: '选一个文件后，这里会显示它的章节结构。',
         tocCollapse: '收起大纲',
+        tocExpand: '展开大纲',
         vaultRecent: '最近打开',
         vaultPickTitle: '选择笔记库文件夹',
         vaultPickHint: '粘贴一个文件夹的完整路径作为笔记库根目录，例如 S:\\笔记库。之后这个文件夹（含子文件夹）里的 md 和图片都能在这里读写。',
@@ -143,6 +144,8 @@ window.__ModuleLoader__.load({
         assistOpen: '打开会话',
         /* 助手栏收起（2026-11-18 大王要求：写作助手能收起到侧边） */
         assistCollapse: '收起侧边栏',
+        assistFold: '往下收助手',
+        assistUnfold: '展开助手',
         assistYou: '我',
         assistAi: '助手',
         assistHistoryLoading: '读取对话中…',
@@ -428,6 +431,7 @@ window.__ModuleLoader__.load({
         tocEmpty: 'No headings in this file',
         tocEmptyNoDoc: 'Pick a file and its outline shows up here.',
         tocCollapse: 'Collapse outline',
+        tocExpand: 'Expand outline',
         vaultRecent: 'Recently opened',
         vaultPickTitle: 'Pick your vault folder',
         vaultPickHint: 'Paste the full path of a folder to use as the vault root, e.g. S:\\Notes. Files inside become readable and editable here.',
@@ -526,6 +530,8 @@ window.__ModuleLoader__.load({
         assistRunning: 'Running',
         assistOpen: 'Open session',
         assistCollapse: 'Collapse sidebar',
+        assistFold: 'Fold assistant',
+        assistUnfold: 'Unfold assistant',
         assistYou: 'You',
         assistAi: 'Assistant',
         assistHistoryLoading: 'Loading conversation…',
@@ -5229,7 +5235,6 @@ function useScrollMemo(bucket, selector, ready) {
               h('span', null, h('b', null, String(doc && doc.text ? doc.text.length : 0)), ' ' + t('vaultFootWords')),
               h('span', null, t('vaultFootPara') + ' ', h('b', null, String(doc && doc.text ? doc.text.split(/\n\s*\n/).filter((part) => part.trim() !== '').length : 0))),
               h('span', null, t('copyMinutesPrefix'), h('b', null, String(Math.max(1, Math.round(((doc && doc.text ? doc.text.length : 0)) / 320)))), t('copyMinutesUnit')),
-              doc && doc.path ? h('span', { className: 'vp-docfoot-path', title: doc.path }, doc.path) : null,
               h('span', { className: 'dn-spacer' }),
               saveState === 'saving'
                 ? h('span', { className: 'vp-savestate', 'data-state': 'saving' }, t('vaultSaving'))
@@ -5701,6 +5706,13 @@ function useScrollMemo(bucket, selector, ready) {
         panelLeft: [
           'M20.25 2.25H3.75C2.92158 2.25 2.25 2.92158 2.25 3.75V20.25C2.25 21.0784 2.92158 21.75 3.75 21.75H20.25C21.0784 21.75 21.75 21.0784 21.75 20.25V3.75C21.75 2.92158 21.0784 2.25 20.25 2.25Z',
           'M8.25 2.25V21.75',
+        ],
+        // Lucide chevron-up / chevron-down —— 单段「往上收 / 往下收」（2026-11-25 大王要求）
+        chevronUp: [
+          'm18 15-6-6-6 6',
+        ],
+        chevronDown: [
+          'm6 9 6 6 6-6',
         ],
         // Lucide book-open —— 写作库（库级图标）
         bookOpen: [
@@ -7141,7 +7153,13 @@ function useScrollMemo(bucket, selector, ready) {
       const t = props.t
       const items = Array.isArray(props.items) ? props.items : []
       const count = items.filter((item) => item.kind !== 'vol').length
-      return h('div', { className: 'cb-outline' },
+      /*
+       * 单段收起（2026-11-25 大王要求）：目录这一块可以自己往上收掉，
+       * 只留标题行；助手那块不动、自动占满剩下的高度。
+       * folded 由 BoardAssistant 保存（它才拿得到 flex 排布）。
+       */
+      const folded = props.folded === true
+      return h('div', { className: 'cb-outline', 'data-collapsed': folded ? 'true' : 'false' },
         h('div', { className: 'cb-outline-h' },
           /*
            * 收起侧边栏按钮放在这一行最左（2026-11-25 大王要求：靠近阅读区那一侧）。
@@ -7150,8 +7168,19 @@ function useScrollMemo(bucket, selector, ready) {
           props.fold !== undefined && props.fold !== null ? props.fold : null,
           h('span', { className: 'cb-outline-k' }, t(props.titleKey)),
           count > 0 ? h('span', { className: 'cb-outline-n' }, String(count)) : null,
+          /* 单段收起按钮：靠行尾，和标题行内的另外一颗（侧边栏）分开 */
+          h('button', {
+            type: 'button',
+            className: 'cb-fold cb-outline-toggle',
+            title: folded ? t('tocExpand') : t('tocCollapse'),
+            'aria-label': folded ? t('tocExpand') : t('tocCollapse'),
+            'aria-expanded': folded ? 'false' : 'true',
+            onClick: () => props.onToggle(),
+          }, h(BoardIcon, { name: folded ? 'chevronDown' : 'chevronUp', className: 'wb-ic' })),
         ),
-        count === 0
+        folded
+          ? null
+          : count === 0
           ? h('div', { className: 'cb-outline-empty' }, t(props.emptyKey))
           : h('div', { className: 'cb-outline-body' },
             items.map((item, index) => item.kind === 'vol'
@@ -7247,6 +7276,13 @@ function useScrollMemo(bucket, selector, ready) {
          * 收起时只剩一条竖直窄条，点它或按钮展开 —— 正文区拿回 268px 宽度。
          */
         const [collapsed, setCollapsed] = useState(false)
+        /*
+         * 右栏上下两段各自收起（2026-11-25 大王要求：目录和助手要能单独收，
+         * 往上收 / 往下收，互不影响）。和上面那个 collapsed 不是一回事 ——
+         * collapsed 是整条侧边栏收成 30px 窄条。
+         */
+        const [outlineFolded, setOutlineFolded] = useState(false)
+        const [chatFolded, setChatFolded] = useState(false)
 
         /*
          * 读绑定恢复会话（2026-11-18 重写，修 R10）。
@@ -7855,14 +7891,32 @@ function useScrollMemo(bucket, selector, ready) {
           onClick: () => setCollapsed(true),
         }, h(BoardIcon, { name: 'panelLeft', className: 'wb-ic' }));
 
+        /* 这条右栏是不是「上目录 + 下助手」两段形态（2026-11-25） */
+        const split = props.outline !== undefined && props.outline !== null
+
         const asideHead = h('div', { className: 'cb-aside-h' },
           h('span', { className: 'cb-aside-ic' }, h(CbIcon, { name: 'sparkle', small: true })),
           h('span', null, t(props.titleKey)),
           h('span', { className: 'cb-status' },
             h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
             statusText),
-          /* 有目录时收起按钮在「章节」那一行（大王 m17329），这里就不重复放了。 */
-          props.outline !== undefined && props.outline !== null ? null : foldButton('cb-aside-fold'));
+          /*
+           * 助手这一段的单段收起（2026-11-25 大王要求「往下收」）：
+           * 点一下把聊天区 / 输入框 / 会话按钮全部收掉，只留这一行标题；
+           * 目录那段自动占满整栏。再点一下恢复。
+           */
+          split
+            ? h('button', {
+              type: 'button',
+              className: 'cb-fold cb-aside-toggle',
+              title: chatFolded ? t('assistUnfold') : t('assistFold'),
+              'aria-label': chatFolded ? t('assistUnfold') : t('assistFold'),
+              'aria-expanded': chatFolded ? 'false' : 'true',
+              onClick: () => setChatFolded((folded) => !folded),
+            }, h(BoardIcon, { name: chatFolded ? 'chevronUp' : 'chevronDown', className: 'wb-ic' }))
+            : null,
+          /* 有目录时「收起侧边栏」在目录那一行（大王 m17329），这里就不重复放了。 */
+          split ? null : foldButton('cb-aside-fold'));
 
         /*
          * 章节目录节点（2026-11-24 大王定案方案 B：右栏上下分区，上目录、下助手）。
@@ -7872,14 +7926,20 @@ function useScrollMemo(bucket, selector, ready) {
          */
         const outlineNode = props.outline === undefined || props.outline === null
           ? null
-          : (typeof props.outline === 'function' ? props.outline(foldButton('cb-outline-fold')) : props.outline);
+          : (typeof props.outline === 'function'
+            ? props.outline({
+              fold: foldButton('cb-outline-fold'),
+              folded: outlineFolded,
+              onToggle: () => setOutlineFolded((folded) => !folded),
+            })
+            : props.outline);
 
         /*
          * data-split：这条右栏是不是「上目录 + 下助手」两段的形态。
          * 只有它才画左边缘的品牌色条（2026-11-25 大王要的色条）；
          * 素材区是纯助手栏，不打标记、保持原样。
          */
-        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', 'data-split': props.outline !== undefined && props.outline !== null ? 'true' : 'false', style: props.style },
+        return h('aside', { className: 'cb-aside', 'data-collapsed': 'false', 'data-split': split ? 'true' : 'false', 'data-chat-folded': chatFolded ? 'true' : 'false', style: props.style },
           /*
            * 标题行：没有章节目录的板块（素材区）在这里显示；
            * 有目录的板块（文案区 / 写作区）标题行挪到隔离线下面去了，这块留空。
@@ -7909,13 +7969,14 @@ function useScrollMemo(bucket, selector, ready) {
            * 「空闲 / 运行中」胶囊也跟着标题下来（大王 2026-11-24 要求）。
            */
           props.outline !== undefined && props.outline !== null ? asideHead : null,
-          error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
+          /* 助手这段被单独收起时，聊天区 / 输入框 / 会话按钮全部不渲染 */
+          chatFolded ? null : (error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null),
           /*
            * 聊天记录区（2026-11-18 大王要求）：
            * 原来右栏只有「会话 / 输入框」两块，看不到聊了什么。
            * 现在把 user / assistant 消息按时间铺出来，可滚动。
            */
-          h('div', { className: 'cb-chat', ref: msgListRef },
+          chatFolded ? null : h('div', { className: 'cb-chat', ref: msgListRef },
             historyLoading && messages.length === 0
               ? h('div', { className: 'cb-chat-hint' }, t('assistHistoryLoading'))
               : null,
@@ -7937,7 +7998,7 @@ function useScrollMemo(bucket, selector, ready) {
               ),
             ),
           ),
-          h('div', { className: 'cb-input' },
+          chatFolded ? null : h('div', { className: 'cb-input' },
             h(
               'div',
               { className: 'cb-model', ref: modelBoxRef },
@@ -8105,7 +8166,7 @@ function useScrollMemo(bucket, selector, ready) {
            * 原来贴在标题行下面占掉一截，现在沉到右栏最底部、输入框之后。
            * 只留「打开会话」+「新会话」两颗；会话状态看标题行右侧那颗 ●。
            */
-          h('div', { className: 'cb-sess' },
+          chatFolded ? null : h('div', { className: 'cb-sess' },
             sessionId !== ''
               ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
               : null,
@@ -9539,13 +9600,15 @@ function useScrollMemo(bucket, selector, ready) {
             placeholderKey: 'copyAssistantInput',
             tasks: [],
             /* 右栏上半区：当前稿件的标题大纲（点条目滚到那一段） */
-            outline: (fold) => h(BoardOutline, {
+            outline: (ctx) => h(BoardOutline, {
               t,
               titleKey: 'tocPanel',
               emptyKey: doc === null ? 'tocEmptyNoDoc' : 'tocEmpty',
               items: outlineItems,
               activeId: outlineActive,
-              fold,
+              fold: ctx.fold,
+              folded: ctx.folded,
+              onToggle: ctx.onToggle,
               onPick: (item) => {
                 setOutlineActive(item.id)
                 const surface = editorRef.current
@@ -11971,13 +12034,15 @@ function useScrollMemo(bucket, selector, ready) {
             placeholderKey: 'writeInput',
             tasks: [],
             /* 右栏上半区：当前正文的标题目录（点一条滚到那一行） */
-            outline: (fold) => h(BoardOutline, {
+            outline: (ctx) => h(BoardOutline, {
               t,
               titleKey: 'tocPanel',
               emptyKey: file === null ? 'tocEmptyNoDoc' : 'tocEmpty',
               items: outlineItems,
               activeId: outlineActive,
-              fold,
+              fold: ctx.fold,
+              folded: ctx.folded,
+              onToggle: ctx.onToggle,
               onPick: (item) => {
                 setOutlineActive(item.id)
                 const surface = editorRef.current
@@ -13598,8 +13663,13 @@ mark.df-hit[data-active="true"] {
 .vp-docbar { min-height: 0; height: auto; padding: 0; margin: 0 0 2px; border-bottom: 0; }
 .vp-docfoot { flex: none; height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 40px; border-top: 1px solid var(--dsw-alias-border-l1); font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 .vp-docfoot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
-.vp-docfoot-path { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: Consolas, monospace; font-size: 10px; opacity: .8; }
-.vp-toc { flex: 0 0 268px; width: 268px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+/*
+ * 2026-11-25 大王要求「素材库的目录最底下和阅读区的最底下这条线做齐平」。
+ * 文档列底部有一条 38px 的 .vp-docfoot（字数 / 段落 / 分钟 / 状态），
+ * 阅读纸面的底边其实在它上面 —— 所以大纲列要空出同样的 38px 才对得齐。
+ */
+.vp-toc { flex: 0 0 268px; width: 268px; margin-bottom: 38px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.vp-tocrail { margin-bottom: 38px; }
 .vp-toc-head { padding: 12px 12px 8px; margin-bottom: 4px; }
 .vp-toc-title { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--dsw-alias-label-primary); }
 .vp-toc-item { font-size: 12px; }
@@ -14147,11 +14217,17 @@ mark.df-hit[data-active="true"] {
 .cb-outline { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; box-shadow: inset 3px 0 0 0 var(--dsw-alias-state-warn-primary); background: var(--dsw-alias-bg-layer-1); overflow: hidden; }
 /* 上下内边距收到 5px：行尾那颗 20×20 的收起按钮不能把标题行撑高（2026-11-24）。 */
 /* 目录标题行：小号粗体的「栏目名」，左边先是收起按钮（靠阅读区那一侧）。 */
-.cb-outline-h { flex: none; display: flex; align-items: center; gap: 4px; padding: 5px 10px 5px 9px; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--dsw-alias-label-secondary); }
+/* 标题行改成固定 30px，和下面助手段的标题行同高（方案 C 的 .hh） */
+.cb-outline-h { flex: none; display: flex; align-items: center; gap: 4px; height: 30px; padding: 0 10px 0 11px; box-sizing: border-box; font-size: 10.5px; font-weight: 700; letter-spacing: .06em; color: var(--dsw-alias-label-secondary); }
+/* 单段收起按钮：靠行尾（标题字 + 计数之后） */
+.cb-outline-toggle { margin-left: auto; }
+.cb-aside-toggle { margin-left: auto; }
+/* 自己收起来之后只占标题行的高度，把空间让给另一段 */
+.cb-outline[data-collapsed="true"] { flex: 0 0 auto; }
 .cb-outline-k { flex: none; }
 /* 条目数：小圆徽章（方案 C） */
 .cb-outline-n { margin-left: 2px; min-width: 16px; padding: 1px 5px; border-radius: 50%; background: var(--dsw-alias-bg-layer-2); font-size: 10px; font-weight: 700; text-align: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
+.cb-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 8px 6px; scrollbar-width: thin; }
 .cb-outline-body::-webkit-scrollbar { width: 6px; }
 .cb-outline-body::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 .cb-outline-vol { padding: 6px 6px 3px; font-size: 10px; font-weight: 600; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
@@ -14171,7 +14247,25 @@ mark.df-hit[data-active="true"] {
  * 有目录的右栏（data-split=true）：左边缘一条 3px 品牌色条，
  * 目录块自己的琥珀色条盖在它上面 —— 于是上半区琥珀、下半区蓝，各归各的。
  */
-.cb-aside[data-split="true"] { box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
+/*
+ * 两段铺满整栏（2026-11-25 大王要求「目录板块可以铺满，和写作助手是一样的结构」）：
+ * 右栏不再用统一内边距包住两块，而是让上（目录）下（助手）各自成为
+ * 一条贴边的整栏色带 —— 上段 bg-layer-1 + 琥珀色条，下段平台灰 + 品牌色条，
+ * 两块共用一条通栏细线分界。这就是当初方案 C 预览图的结构：
+ *   .band { flex: 1 1 0 } + .rail { position:absolute; left:0; width:3px }
+ * 这里用 aside 的 inset box-shadow 当「下段的色条」，目录自己的 inset 当上段色条，
+ * 因为 padding 归零之后两者都正好压在 x=0。
+ */
+.cb-aside[data-split="true"] { padding: 0; gap: 0; box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
+/* 段内留白改成逐个子项处理（整栏不再有统一 padding） */
+.cb-aside[data-split="true"] > .cb-aside-h { flex: none; height: 30px; padding: 0 10px 0 11px; box-sizing: border-box; }
+.cb-aside[data-split="true"] > .cb-aside-err,
+.cb-aside[data-split="true"] > .cb-chat,
+.cb-aside[data-split="true"] > .cb-input,
+.cb-aside[data-split="true"] > .cb-sess { margin-left: 11px; margin-right: 11px; }
+.cb-aside[data-split="true"] > .cb-sess { margin-bottom: 11px; }
+.cb-aside[data-split="true"] > .cb-input { margin-top: 8px; }
+.cb-aside[data-split="true"] > .cb-aside-sep { margin: 0; opacity: 1; }
 /* 两块之间的细线：色条 + 底色交替已经分得开，这条留着当极淡的分界。 */
 .cb-aside-sep { flex: none; height: 1px; margin: 0 -12px; background: var(--dsw-alias-border-l1); opacity: .6; }
 /*
