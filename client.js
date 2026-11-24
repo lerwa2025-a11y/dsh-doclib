@@ -13225,14 +13225,21 @@ mark.df-hit[data-active="true"] {
   padding: 12px 8px; font-size: 11px; line-height: 1.7;
   color: var(--dsw-alias-label-tertiary); opacity: .75;
 }
+/*
+ * 目录脚注 = 「N / M + 进度条」。
+ * 高度必须和阅读区的 .vp-docfoot 一致（38px），且同样用 border-top 当分隔线 ——
+ * 这样两栏的横线落在同一 y，大王要的「最底下这条线做齐平」才成立。
+ * 用 flex 居中而不是上下 padding，是为了在 38px 里把两行内容摆正。
+ */
 .vp-toc-foot {
-  flex: 0 0 auto; padding: 8px 8px 12px;
+  flex: 0 0 auto; height: 38px; box-sizing: border-box; padding: 0 12px;
+  display: flex; flex-direction: column; justify-content: center;
   border-top: 1px solid var(--dsw-alias-border-l1);
   font-size: 10px; color: var(--dsw-alias-label-tertiary);
   font-variant-numeric: tabular-nums;
 }
 .vp-toc-progress {
-  height: 3px; border-radius: 4px; margin-top: 6px;
+  height: 3px; border-radius: 4px; margin-top: 4px;
   background: var(--dsw-alias-bg-layer-2); overflow: hidden;
 }
 .vp-toc-progress i {
@@ -13665,11 +13672,15 @@ mark.df-hit[data-active="true"] {
 .vp-docfoot b { font-weight: 600; color: var(--dsw-alias-label-secondary); }
 /*
  * 2026-11-25 大王要求「素材库的目录最底下和阅读区的最底下这条线做齐平」。
- * 文档列底部有一条 38px 的 .vp-docfoot（字数 / 段落 / 分钟 / 状态），
- * 阅读纸面的底边其实在它上面 —— 所以大纲列要空出同样的 38px 才对得齐。
+ *
+ * 第一版给目录栏加了 margin-bottom: 38px，以为「让开文档底栏的高度」就齐了；
+ * 实际效果是目录栏整体缩短 38px，它的脚注横线反而比阅读区底栏横线高了 43px。
+ *
+ * 正确的做法：两栏都占满到栏底（不缩），把**目录脚注做得和文档底栏一样高**
+ * （都是 38px、都有 1px 上边框），于是「N / M + 进度条」那条线自然和
+ * 「字数 / 段落 / 分钟 / 已保存」那条线落在同一个 y 上，两栏底边也齐。
  */
-.vp-toc { flex: 0 0 268px; width: 268px; margin-bottom: 38px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
-.vp-tocrail { margin-bottom: 38px; }
+.vp-toc { flex: 0 0 268px; width: 268px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
 .vp-toc-head { padding: 12px 12px 8px; margin-bottom: 4px; }
 .vp-toc-title { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--dsw-alias-label-primary); }
 .vp-toc-item { font-size: 12px; }
