@@ -56,6 +56,8 @@ import {
   moveEntry,
   newFile,
   openInExplorer,
+  openWithSystem,
+  isPlayableName,
   readBinary,
   readSnapshot,
   readText,
@@ -863,6 +865,21 @@ export function apply(ctx) {
               if (route === '/open' && req.method === 'POST') {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, { ok: true, ...openInExplorer(root, body.path || '') })
+                return
+              }
+
+              /*
+               * 用系统默认程序打开一个文件（2026-11-24 大王要求）。
+               *
+               * 为什么需要单开一条：/open 走的是 explorer.exe <dir>，只会开目录；
+               * 视频/音频要交给系统关联的播放器，得用 shell 的 open 语义（见 vault.js 的 openWithSystem）。
+               * 这里再挡一道类型判定：只放视频 / 音频过去，别让前端一个手滑把 .md 也甩进播放器。
+               */
+              if (route === '/open-file' && req.method === 'POST') {
+                const body = JSON.parse(await readBody(req, BODY_LIMIT))
+                const target = assertInLibrary(body && body.path, '打开路径')
+                if (!isPlayableName(target)) throw new Error('这个类型不支持用系统播放器打开')
+                sendJson(res, 200, { ok: true, ...openWithSystem(root, target) })
                 return
               }
 

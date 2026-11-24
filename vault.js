@@ -38,6 +38,22 @@ const BINARY_MAX_BYTES = 20 * 1024 * 1024
 
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg', '.ico', '.avif'])
 
+/*
+ * 视频 / 音频（2026-11-24 大王要求：不在页面里播，直接调系统播放器）。
+ *
+ * 为什么不复用上面的 MEDIA_EXTS：那张表是「不存历史版本」用的，
+ * 把 .psd / .zip / .iso 也算在内。用它判播放会把压缩包也画成一张播放卡片。
+ * 所以这里单独列一张，只放真正能用播放器打开的容器格式。
+ */
+const PLAYABLE_EXTS = new Set([
+  '.mp4', '.m4v', '.mkv', '.mov', '.avi', '.wmv', '.flv', '.webm', '.mpg', '.mpeg', '.ts', '.3gp',
+  '.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.opus', '.wma', '.aiff', '.ape',
+])
+
+const AUDIO_EXTS = new Set([
+  '.mp3', '.wav', '.flac', '.aac', '.m4a', '.ogg', '.opus', '.wma', '.aiff', '.ape',
+])
+
 const MIME = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -65,6 +81,18 @@ export function isImageName(name) {
 /** 音视频等大二进制：这类文件不存历史版本。 */
 export function isMediaName(name) {
   return MEDIA_EXTS.has(extOf(name))
+}
+
+/** 能否交给系统播放器打开（视频 / 音频）。前端据此画「用系统播放器打开」卡片。 */
+export function isPlayableName(name) {
+  if (typeof name !== 'string' || name === '') return false
+  return PLAYABLE_EXTS.has(extOf(name))
+}
+
+/** 纯音频（画卡片时换个图标、文案也分「播放」/「打开」）。 */
+export function isAudioName(name) {
+  if (typeof name !== 'string' || name === '') return false
+  return AUDIO_EXTS.has(extOf(name))
 }
 
 export function extOf(name) {
@@ -540,6 +568,33 @@ export async function restoreSnapshot(root, rel, name) {
 }
 
 // ── 在系统资源管理器里打开目录 ─────────────────────────────────────────────
+
+/**
+ * 用系统默认程序打开某个库内**文件**（2026-11-24 大王要求）。
+ *
+ * 与下面的 openInExplorer 的区别：那个总是开目录（文件就开它爹），
+ * 这个要的是「文件本身交给关联程序」—— 视频就进播放器，音频就进音乐播放器。
+ * 所以不能走 explorer.exe <file>（那只是选中它），必须用系统 shell 的 open 语义：
+ *   · Windows: `cmd /c start "" "<绝对路径>"` —— start 的第一个引号参数是窗口标题，
+ *     必须留一个空串占位，否则带空格的路径会被当成标题、后面那个才是程序名；
+ *   · macOS: open
+ *   · Linux: xdg-open
+ * 路径里的双引号会破坏 shell 引号，这里先拒掉（Windows 文件名本来也不允许它）。
+ */
+export function openWithSystem(root, rel) {
+  const target = safeResolve(root, typeof rel === 'string' ? rel : '')
+  const info = statSync(target)
+  if (info.isDirectory()) throw new Error('这是文件夹，不能用系统播放器打开')
+  if (target.includes('"')) throw new Error('路径里含有引号，无法交给系统打开')
+  if (process.platform === 'win32') {
+    spawn('cmd', ['/c', 'start', '', target], { detached: true, stdio: 'ignore', windowsVerbatimArguments: false }).unref()
+  } else if (process.platform === 'darwin') {
+    spawn('open', [target], { detached: true, stdio: 'ignore' }).unref()
+  } else {
+    spawn('xdg-open', [target], { detached: true, stdio: 'ignore' }).unref()
+  }
+  return { opened: target }
+}
 
 /** 用系统文件管理器打开某个库内目录（默认库根）。 */
 export function openInExplorer(root, rel) {

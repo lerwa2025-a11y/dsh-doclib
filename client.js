@@ -182,6 +182,12 @@ window.__ModuleLoader__.load({
         wsPickManual: '选择文件夹…',
         vaultConflict: '文件已被外部程序修改，已重读最新内容',
         vaultUnsupported: '这个文件不支持在页面里编辑',
+        vaultMediaVideo: '视频',
+        vaultMediaAudio: '音频',
+        vaultMediaHint: '视频和音频不在页面里播放，点下面的按钮用系统播放器打开。',
+        vaultMediaOpen: '用系统播放器打开',
+        vaultMediaOpened: '已交给系统播放器',
+        vaultMediaFailed: '打开失败：',
         vaultEmptyDir: '这个文件夹是空的',
         vaultSelectFirst: '在左边选一个文件',
         ok: '确定',
@@ -555,6 +561,12 @@ window.__ModuleLoader__.load({
         wsPickManual: 'Choose folder…',
         vaultConflict: 'File changed outside; reloaded latest',
         vaultUnsupported: 'This file type is not editable here',
+        vaultMediaVideo: 'Video',
+        vaultMediaAudio: 'Audio',
+        vaultMediaHint: 'Video and audio do not play in the page. Use the button below to open them in your system player.',
+        vaultMediaOpen: 'Open in system player',
+        vaultMediaOpened: 'Handed to the system player',
+        vaultMediaFailed: 'Could not open: ',
         vaultEmptyDir: 'This folder is empty',
         vaultSelectFirst: 'Pick a file on the left',
         ok: 'OK',
@@ -1039,6 +1051,30 @@ function useScrollMemo(bucket, selector, ready) {
       const name = path.includes('/') ? path.slice(path.lastIndexOf('/') + 1) : path
       const dot = name.lastIndexOf('.')
       return dot > 0 ? name.slice(0, dot) : name
+    }
+
+    /*
+     * 视频 / 音频（2026-11-24 大王要求：不在页面里播，交给系统播放器）。
+     *
+     * 后缀表必须与 Host 侧 vault.js 的 PLAYABLE_EXTS 一致：
+     * 前端用它决定「点开时压根不去请求 /file」—— 那边会按文本读、撞上二进制判定，
+     * 报一句「暂不支持在页面里编辑」，而这类文件本来就没有可读的正文。
+     * 注意别复用 isMediaName（Host 那张表还含 psd/zip，判播放会把压缩包也画成播放卡片）。
+     */
+    const PLAYABLE_FILE_PATTERN = /\.(mp4|m4v|mkv|mov|avi|wmv|flv|webm|mpg|mpeg|ts|3gp|mp3|wav|flac|aac|m4a|ogg|opus|wma|aiff|ape)$/i
+    const AUDIO_FILE_PATTERN = /\.(mp3|wav|flac|aac|m4a|ogg|opus|wma|aiff|ape)$/i
+    const isPlayablePath = (path) => typeof path === 'string' && PLAYABLE_FILE_PATTERN.test(path)
+    const isAudioPath = (path) => typeof path === 'string' && AUDIO_FILE_PATTERN.test(path)
+
+    /** 字节数 → 人话（播放卡片上标一句「12.4 MB」）。拿不到就返回空串，不显示。 */
+    function vaultSizeLabel(bytes) {
+      if (typeof bytes !== 'number' || !Number.isFinite(bytes) || bytes < 0) return ''
+      if (bytes < 1024) return bytes + ' B'
+      const kb = bytes / 1024
+      if (kb < 1024) return (kb < 10 ? kb.toFixed(1) : String(Math.round(kb))) + ' KB'
+      const mb = kb / 1024
+      if (mb < 1024) return (mb < 10 ? mb.toFixed(1) : String(Math.round(mb))) + ' MB'
+      return (mb / 1024).toFixed(2) + ' GB'
     }
     /** 把目录树摊平成「路径集合」，用于校验最近打开里的条目是否还存在。 */
     function collectPaths(nodes, out) {
@@ -3223,6 +3259,16 @@ function useScrollMemo(bucket, selector, ready) {
           setDraft('')
           return
         }
+        /*
+         * 视频 / 音频（2026-11-24 大王要求：不在页面里播）。
+         * doc 置空，中栏按路径画一张播放卡片；绝不请求 /file —— 那边按文本读，
+         * 二进制会被拒成「暂不支持在页面里编辑」，报出来只会让人以为文件坏了。
+         */
+        if (isPlayablePath(entry.path)) {
+          setDoc(null)
+          setDraft('')
+          return
+        }
         try {
           const data = await vaultApiGet(`/file?path=${encodeURIComponent(entry.path)}`)
           setDoc({
@@ -3309,6 +3355,22 @@ function useScrollMemo(bucket, selector, ready) {
       }, [draft])
 
       const buildImage = (path) => `${VAULT_API}/raw?path=${encodeURIComponent(path)}&tick=${imageTick}`
+
+      /*
+       * 把视频 / 音频交给系统播放器（2026-11-24 大王要求）。
+       * 走 Host 的 /open-file：那边用 shell 的 open 语义（Windows 是 cmd /c start），
+       * 关联到哪个播放器由系统决定，插件本身不依赖任何播放器。
+       */
+      const openMediaExternally = async (entry) => {
+        if (!entry || typeof entry.path !== 'string' || entry.path === '') return
+        setError('')
+        try {
+          await vaultApiPost('/open-file', { path: entry.path })
+          flashMessage(t('vaultMediaOpened'))
+        } catch (err) {
+          setError(t('vaultMediaFailed') + messageOf(err))
+        }
+      }
 
       const resolveImage = (src) => {
         if (!selected) return null
@@ -4230,7 +4292,7 @@ function useScrollMemo(bucket, selector, ready) {
             onContextMenu: (event) => openCtxMenu(event, node),
             title: node.path,
           },
-          h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: node.image ? 'image' : isMarkdown ? 'fileText' : 'file', className: 'wb-ic' })),
+          h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: node.image ? 'image' : isMarkdown ? 'fileText' : isPlayablePath(node.path) ? (isAudioPath(node.path) ? 'music' : 'video') : 'file', className: 'wb-ic' })),
           h('span', { className: 'vp-tree-name' }, node.name),
         )
       }
@@ -4262,6 +4324,8 @@ function useScrollMemo(bucket, selector, ready) {
       }
 
       const isImage = selected !== null && selected.image === true
+      /* 视频 / 音频：中栏画播放卡片，不在页面里播（2026-11-24 大王要求） */
+      const isPlayable = selected !== null && selected.type !== 'dir' && isPlayablePath(selected.path)
       // 电子书（mobi/azw3）是二进制只读格式：能看、能划线，但不能编辑写回。
       const isReadOnlyDoc = doc !== null && doc.readOnly === true
       const canEdit = selected !== null && !isImage && doc !== null && !isReadOnlyDoc
@@ -4575,6 +4639,44 @@ function useScrollMemo(bucket, selector, ready) {
             ),
             docBar,
             h('div', { className: 'vp-pad vp-hint' }, t('vaultFolderHint')),
+          )
+        }
+        /*
+         * 视频 / 音频（2026-11-24 大王要求）：页面里不播，只给一张卡片 + 一个按钮。
+         * 为什么不做 <video> / <audio> 内嵌播放：
+         *   ① 素材区里这些文件动辄几百 MB，浏览器要整份拉进内存；
+         *   ② 大王的用法是在剪辑/播放软件里看，页面里播完还得再开一次；
+         *   ③ 宿主机的关联播放器本来就是他惯用的那个，交给系统最省事。
+         */
+        if (isPlayable) {
+          const sizeText = vaultSizeLabel(selected.size)
+          const audio = isAudioPath(selected.path)
+          return h(
+            'div',
+            { className: 'vp-media' },
+            h(
+              'div',
+              { className: 'vp-media-ic' },
+              h(BoardIcon, { name: audio ? 'music' : 'video', className: 'wb-ic-lg' }),
+            ),
+            h('div', { className: 'vp-media-name' }, selected.name),
+            h(
+              'div',
+              { className: 'vp-media-meta' },
+              audio ? t('vaultMediaAudio') : t('vaultMediaVideo'),
+              sizeText === '' ? '' : ' · ' + sizeText,
+            ),
+            h('div', { className: 'vp-media-hint' }, t('vaultMediaHint')),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'vp-media-go',
+                onClick: () => void openMediaExternally(selected),
+              },
+              h(BoardIcon, { name: audio ? 'music' : 'video', className: 'wb-ic-xs' }),
+              h('span', null, t('vaultMediaOpen')),
+            ),
           )
         }
         if (isImage) return h('div', { className: 'vp-imgwrap' }, h('img', { className: 'vp-img', src: buildImage(selected.path) }))
@@ -12210,6 +12312,18 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-read .v-hr { border: 0; border-top: 1px solid var(--dsw-alias-border-l1); margin: 16px 0; }
 .vp-read .v-imgwrap { margin: 12px 0; }
 .vp-read .v-img { max-width: 100%; max-height: 480px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l1); }
+/*
+ * 视频 / 音频卡片（2026-11-24 大王要求：不在页面里播，交给系统播放器）。
+ * 布局照 .vp-imgwrap：整块撑满中栏、内容垂直水平居中，视觉上跟图片预览是一族。
+ * 圆角只用 8px（var(--dsw-radius-sm, 8px)）与 56px 方底，颜色只用 --dsw-alias-*。
+ */
+.vp-media { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; box-sizing: border-box; }
+.vp-media-ic { width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
+.vp-media-name { max-width: 420px; font-size: 15px; font-weight: 650; line-height: 1.5; color: var(--dsw-alias-label-primary); text-align: center; word-break: break-all; }
+.vp-media-meta { font-size: 12px; color: var(--dsw-alias-label-secondary); }
+.vp-media-hint { max-width: 380px; font-size: 12px; line-height: 1.7; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); text-align: center; }
+.vp-media-go { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border: 0; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-inverted, #fff); font: inherit; font-size: 13px; line-height: 1; white-space: nowrap; cursor: pointer; transition: opacity .12s ease; }
+.vp-media-go:hover { opacity: .88; }
 .vp-imgwrap { flex: 1; display: flex; align-items: center; justify-content: center; padding: 16px; }
 .vp-img { max-width: 100%; max-height: 100%; border-radius: 8px; }
 .vp-error { font-size: 12px; color: var(--dsw-alias-state-error-primary); }
