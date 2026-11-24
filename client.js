@@ -3501,7 +3501,8 @@ function useScrollMemo(bucket, selector, ready) {
         setMoveOpen(false)
         setCtxMenu(null)
         setRenaming(false)
-        setCreatePending({ kind, dir: nameDir, value: '' })
+        /* 2026-11-24 大王要求：命名框预填默认名，但要用户点「确定」或回车才落盘。 */
+        setCreatePending({ kind, dir: nameDir, value: isDir ? t('vaultNewDir') : t('vaultNewFile') })
       }
 
       /** 取消新建：命名框收掉，磁盘上什么都没发生。 */
@@ -3516,7 +3517,7 @@ function useScrollMemo(bucket, selector, ready) {
         if (pending === null) return
         const typed = String(pending.value || '').replace(/[\\/:*?"<>|]/g, '').trim()
         if (typed === '') { setCreatePending(null); return }
-        setCreatePending(null)
+        /* 先把命名框留着：建失败时用户还能改个名字重试（成功那一路才收掉） */
         const isDir = pending.kind === 'dir'
         const ext = isDir ? '' : '.md'
         /* 同名就往后加序号，绝不覆盖已有条目 */
@@ -3542,12 +3543,18 @@ function useScrollMemo(bucket, selector, ready) {
           } else {
             await openFile(entry)
           }
+          setCreatePending(null)
         } catch (err) {
           setError(messageOf(err))
         }
       }
 
-      /** 新建命名行（2026-11-24）：输入框 + 右侧小字提示，写名字回车才建。 */
+      /**
+       * 新建命名行（2026-11-24 大王要求：所有新建都要「确认 / 取消」）。
+       *
+       * 输入框预填默认名，但只有点「确定」或按回车才真的建；点「取消」、按 Esc
+       * 或者留空就什么都不发生 —— 磁盘上一个字节都不写。
+       */
       const createRow = (depth) => {
         if (createPending === null) return null
         const isDir = createPending.kind === 'dir'
@@ -3567,9 +3574,17 @@ function useScrollMemo(bucket, selector, ready) {
               if (event.key === 'Enter') { event.preventDefault(); void commitCreate() }
               else if (event.key === 'Escape') { event.preventDefault(); cancelCreate() }
             },
-            onBlur: () => { void commitCreate() },
           }),
-          h('span', { className: 'vp-newrow-hint' }, t('vaultNamePromptHint')),
+          h('button', {
+            type: 'button',
+            className: 'vp-newrow-go',
+            onClick: (event) => { event.preventDefault(); event.stopPropagation(); void commitCreate() },
+          }, t('ok')),
+          h('button', {
+            type: 'button',
+            className: 'vp-newrow-x',
+            onClick: (event) => { event.preventDefault(); event.stopPropagation(); cancelCreate() },
+          }, t('cancel')),
         )
       }
 
@@ -4934,7 +4949,8 @@ function useScrollMemo(bucket, selector, ready) {
               h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
             /*
              * 顶部加号（2026-11-22）：新建文件夹改由各分类行右侧的 ＋ 建，
-             * 这里只剩「新建文件」一件事，所以直接建，不再弹一层只有一项的下拉。
+             * 这里只剩「新建文件」一件事，所以不再弹一层只有一项的下拉；
+ * 2026-11-24 起点了只是摆一行输入框，确认才落盘。
              */
             h(
               'div',
@@ -6060,6 +6076,10 @@ function useScrollMemo(bucket, selector, ready) {
          * 新建命名行（2026-11-24 大王要求）：树顶第一行是一个空输入框，
          * 写名字回车才真的建；留空 / Esc / 点到别处就收掉，磁盘上什么都不发生。
          */
+        /*
+         * 新建命名行（2026-11-24 大王要求：所有新建都要「确认 / 取消」）。
+         * 输入框预填默认名，点「确定」或回车才真的建；取消 / Esc / 留空都不写盘。
+         */
         const pendingRow = props.pending
           ? h(
             'div',
@@ -6077,9 +6097,17 @@ function useScrollMemo(bucket, selector, ready) {
                 if (event.key === 'Enter') { event.preventDefault(); props.pending.commit() }
                 else if (event.key === 'Escape') { event.preventDefault(); props.pending.cancel() }
               },
-              onBlur: () => props.pending.commit(),
             }),
-            h('span', { className: 'vp-newrow-hint' }, t('vaultNamePromptHint')),
+            h('button', {
+              type: 'button',
+              className: 'vp-newrow-go',
+              onClick: (event) => { event.preventDefault(); event.stopPropagation(); props.pending.commit() },
+            }, t('ok')),
+            h('button', {
+              type: 'button',
+              className: 'vp-newrow-x',
+              onClick: (event) => { event.preventDefault(); event.stopPropagation(); props.pending.cancel() },
+            }, t('cancel')),
           )
           : null
 
@@ -9188,12 +9216,14 @@ function useScrollMemo(bucket, selector, ready) {
         }
 
         /*
-         * 新建分组（2026-11-19 大王要求）：不再弹输入条，
-         * 直接用默认名建出来，然后跳到树上那一行原地命名。
+         * 新建分组 / 新建稿件（2026-11-24 大王要求：确认才落盘）。
+         * 点按钮只在树顶摆一行输入框（预填默认名），点确定 / 回车才建；
+         * 取消 / Esc / 留空都不写盘。
          */
         const createGroup = () => {
           if (root === '') { flash(t('assistNeedWorkspace')); return }
-          setCreatePending({ kind: 'dir', value: '' })
+          /* 2026-11-24 大王要求：预填默认名，点「确定」或回车才落盘 */
+          setCreatePending({ kind: 'dir', value: t('vaultNewDir') })
         }
 
         const createDraft = () => {
@@ -9201,7 +9231,7 @@ function useScrollMemo(bucket, selector, ready) {
             flash(t('assistNeedWorkspace'))
             return
           }
-          setCreatePending({ kind: 'file', value: '' })
+          setCreatePending({ kind: 'file', value: t('copyNewDraftName') })
         }
 
         /** 取消新建：收掉命名框，什么都没建。 */
@@ -9213,7 +9243,7 @@ function useScrollMemo(bucket, selector, ready) {
           if (pending === null) return
           const typed = String(pending.value || '').replace(/[\\/:*?"<>|]/g, '').trim()
           if (typed === '') { setCreatePending(null); return }
-          setCreatePending(null)
+          /* 命名框先留着：建失败时能改名重试，成功那一路才收掉 */
           const isDir = pending.kind === 'dir'
           const suffix = isDir ? '' : '.md'
           const taken = topNames()
@@ -9231,6 +9261,7 @@ function useScrollMemo(bucket, selector, ready) {
               await reload()
               await pick(path)
             }
+            setCreatePending(null)
           } catch (err) {
             setError(t('copySaveFailed') + messageOf(err))
           }
@@ -9589,6 +9620,44 @@ function useScrollMemo(bucket, selector, ready) {
          * 磁盘上是 人物\<人名>.md，与 正文\ / 设定\ 平级；阵营在 front-matter 里。
          */
         const characters = project && Array.isArray(project.characters) ? project.characters : []
+        /*
+         * 新建输入行（2026-11-24 大王要求：确认才落盘）。
+         * 点 ＋ 不建东西，先在这里摆一行「预填默认名的输入框 + 确定 / 取消」。
+         * 故意没有 onBlur 提交 —— 点别处不会偷偷建出来，只有「确定」或回车才算数。
+         */
+        const createRowFor = (kind, vi, visible) => {
+          const item = props.createItem
+          if (!visible || !item || item.kind !== kind || item.vi !== vi) return null
+          return h(
+            'div',
+            { className: 'wbg-newitem', key: '__new__' + kind },
+            h('input', {
+              className: 'wbg-nameinput wbg-newitem-input',
+              autoFocus: true,
+              value: item.value,
+              placeholder: item.placeholder,
+              'aria-label': item.placeholder,
+              onClick: (event) => event.stopPropagation(),
+              onChange: (event) => item.onValue(event.target.value),
+              onKeyDown: (event) => {
+                event.stopPropagation()
+                if (event.key === 'Enter') { event.preventDefault(); item.commit() }
+                else if (event.key === 'Escape') { event.preventDefault(); item.cancel() }
+              },
+            }),
+            h('button', {
+              type: 'button',
+              className: 'wbg-newproj-go',
+              onClick: (event) => { event.preventDefault(); event.stopPropagation(); item.commit() },
+            }, t('ok')),
+            h('button', {
+              type: 'button',
+              className: 'wbg-newproj-x',
+              onClick: (event) => { event.preventDefault(); event.stopPropagation(); item.cancel() },
+            }, t('cancel')),
+            item.tip !== '' ? h('span', { className: 'wbg-newitem-tip' }, item.tip) : null,
+          )
+        }
         const characterTotal = characters.length
 
         /*
@@ -9930,6 +9999,8 @@ function useScrollMemo(bucket, selector, ready) {
                 }, '＋'),
               )
               : null,
+            /* 新建卷：输入行接在「正文」标题行下面 */
+            createRowFor('volume', -1, true),
             bodyOpen ? volumes.map((vol, vi) => {
               const open = openVolumes[vi] !== false
               /* 原地改卷名（2026-11-19）：正在改的这一卷把标题换成输入框 */
@@ -10064,6 +10135,8 @@ function useScrollMemo(bucket, selector, ready) {
                       )
                     })
                   : null,
+                /* 新建章：输入行接在这一卷的最后一行下面 */
+                createRowFor('chapter', vi, open),
               )
             }) : null,
             project
@@ -10098,8 +10171,8 @@ function useScrollMemo(bucket, selector, ready) {
                   h('span', { className: 'wbg-vol-t' }, t('writeSettings')),
                   h('span', { className: 'wbg-vol-n' }, String(settingTotal)),
                   /*
-                   * 新建设定分类（2026-11-22）：一键建目录，不弹输入条 ——
-                   * 与「新建卷/章」一致（2026-11-18 大王要求点一下就有）。
+                   * 新建设定分类（2026-11-24 大王要求：确认才落盘）。
+                   * 点 ＋ 只在下面摆一行输入框（预填「新分类」），点确定 / 回车才建文件。
                    * stopPropagation 否则点 ＋ 会把整个设定区折叠起来。
                    */
                   h(
@@ -10184,6 +10257,8 @@ function useScrollMemo(bucket, selector, ready) {
                 })
                 : null)
               : null,
+            /* 新建设定分类：输入行接在设定列表最后一行下面 */
+            createRowFor('setting', -1, settingOpen),
             project
               ? h('div', { className: 'wbg-sep' })
               : null,
@@ -10291,6 +10366,8 @@ function useScrollMemo(bucket, selector, ready) {
                 ),
               )
             }) : null,
+            /* 新建人物：输入行接在人物列表最后一行下面 */
+            createRowFor('character', -1, charactersOpen),
           ),
         )
       }
@@ -10555,12 +10632,19 @@ function useScrollMemo(bucket, selector, ready) {
         const [newProjectOpen, setNewProjectOpen] = useState(false)
         const [projectDraft, setProjectDraft] = useState('')
         /*
+         * 新建输入行（2026-11-24 大王要求：确认才落盘）。
+         * 形如 { kind, vi, value, placeholder, tip }：kind 取 'volume' | 'chapter'
+         * | 'setting' | 'character'（项目走上面那套 newProjectOpen）；vi 用来把
+         * 「给哪一卷加章」的输入行挂到那一卷下面。
+         */
+        const [createItem, setCreateItem] = useState(null)
+        /*
          * 结构编辑输入条（2026-11-18 大王需求：项目/卷/章 都要能改名，卷章要能加）。
          *
          * 复用「新建项目」那套输入条形态：editPrompt 描述要做什么，editDraft 存正在打的字。
          * kind 取值：
          *   'rename-project' | 'rename-volume' | 'rename-chapter'
-         *   （新建卷 / 新建章不走这里 —— 点 ＋ 直接建）
+         *   （新建卷 / 新建章 / 设定分类 / 人物都不走这里 —— 它们走 createItem 那套确认制）
          * 同一时刻只会有一个输入条，所以共用一个 state 就够。
          */
         const [editPrompt, setEditPrompt] = useState(null)
@@ -10676,38 +10760,96 @@ function useScrollMemo(bucket, selector, ready) {
         }
 
         /*
-         * 一键新建（2026-11-18 大王要求）：
-         * 点 ＋ 就是建，不弹输入条、不问名字 —— 名字由 Host 自动起
-         * （第一卷 / 第N章，章还会顺带建好 0001-第一章.md 空正文）。
-         * 想改名再右键「重命名」就行了，比每次都敲一遍快得多。
+         * 新建（2026-11-24 大王重做：每一次新建都要确认和取消，确认才落盘）。
+         *
+         * 大王原话：「你在每一次新建这里做个确认和取消吧，所有新建项目、文件夹、
+         * 文件都要确认才落盘。设计所有板块和区」
+         *
+         * 所以点 ＋ 不再直接建东西 —— 先在左栏原地摆一行输入框（预填默认名），
+         * 用户点「确定」或按回车才发请求；点「取消」、按 Esc、或者把名字清空，
+         * 磁盘上一个字节都不写。原来「一键建完再进改名态」那套全部撤掉：
+         * 建完再改名等于先落盘一个错名字，正是大王要避免的。
          */
-        const addVolumeNow = async () => {
+        const openCreate = (kind, vi, value) => {
           if (!project) {
             setError(t('writePickProject'))
             return
           }
+          const placeholderOf = {
+            volume: t('writeVolumeNamePrompt'),
+            chapter: t('writeChapterNamePrompt'),
+            setting: t('writeSettingKindDefault'),
+            character: t('writeCharacterDefault'),
+          }
+          setError('')
+          setCreateItem({ kind, vi, value, placeholder: placeholderOf[kind] || '', tip: '' })
+        }
+
+        const closeCreate = () => setCreateItem(null)
+
+        const commitCreateItem = async () => {
+          if (createItem === null || !project) return
+          const kind = createItem.kind
+          const typed = String(createItem.value || '').trim()
+          /* 名字为空 = 什么都不建（与素材区 / 文案区同一个防呆口径） */
+          if (typed === '') { setCreateItem(null); return }
           try {
-            await vaultApiPost('/write-add-volume', { path: project.path, afterIndex: -1 })
+            if (kind === 'volume') {
+              await vaultApiPost('/write-add-volume', {
+                path: project.path,
+                afterIndex: -1,
+                title: typed,
+              })
+              flash(t('writeVolumeAdded'))
+            } else if (kind === 'chapter') {
+              await vaultApiPost('/write-add-chapter', {
+                path: project.path,
+                volumeIndex: createItem.vi,
+                title: typed,
+              })
+              flash(t('writeChapterAdded'))
+            } else if (kind === 'setting') {
+              await vaultApiPost('/write-add-setting-kind', { path: project.path, kind: typed })
+              flash(t('writeSettingKindAdded'))
+            } else if (kind === 'character') {
+              await vaultApiPost('/write-add-character', { path: project.path, title: typed })
+              flash(t('writeCharacterAdded'))
+            }
+            setCreateItem(null)
             await loadProject(project.path)
-            flash(t('writeVolumeAdded'))
+            await reloadProjects()
           } catch (err) {
-            setError(t('writeSaveFailed') + messageOf(err))
+            /* 失败就把输入框留着（附一行原因），用户改个名字就能重试 */
+            setCreateItem({ ...createItem, tip: messageOf(err) })
           }
         }
 
-        const addChapterNow = async (vi) => {
-          if (!project) {
-            setError(t('writePickProject'))
-            return
-          }
-          try {
-            await vaultApiPost('/write-add-chapter', { path: project.path, volumeIndex: vi })
-            await loadProject(project.path)
-            flash(t('writeChapterAdded'))
-          } catch (err) {
-            setError(t('writeSaveFailed') + messageOf(err))
-          }
+        /* 中文数字（1~99）：只用来预填「第一卷」「第一章」这种默认名 */
+        const cnNumOf = (n) => {
+          const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九']
+          if (!Number.isInteger(n) || n <= 0) return String(n)
+          if (n < 10) return digits[n]
+          if (n < 20) return '十' + (n % 10 === 0 ? '' : digits[n % 10])
+          const tens = Math.floor(n / 10)
+          return digits[tens] + '十' + (n % 10 === 0 ? '' : digits[n % 10])
         }
+
+        const namedVolumes = () => (project && Array.isArray(project.volumes) ? project.volumes : [])
+
+        const openCreateVolume = () => {
+          const n = namedVolumes().filter((row) => row.dir !== '').length + 1
+          openCreate('volume', -1, '第' + cnNumOf(n) + '卷')
+        }
+
+        const openCreateChapter = (vi) => {
+          const vol = namedVolumes()[vi]
+          const n = (vol && Array.isArray(vol.chapters) ? vol.chapters.length : 0) + 1
+          openCreate('chapter', vi, '第' + cnNumOf(n) + '章')
+        }
+
+        const openCreateSetting = () => openCreate('setting', -1, t('writeSettingKindDefault'))
+
+        const openCreateCharacter = () => openCreate('character', -1, t('writeCharacterDefault'))
 
         const deleteChapter = async (vi, ci, title) => {
           if (!project || !Number.isInteger(vi) || !Number.isInteger(ci)) return
@@ -10736,75 +10878,6 @@ function useScrollMemo(bucket, selector, ready) {
             flash(t('writeChapterDeleted'))
           } catch (err) {
             flash(t('writeDeleteFailed') + messageOf(err))
-          }
-        }
-
-        /*
-         * ── 设定：分类与条目（2026-11-22 新结构）──────────────
-         *
-         * 与卷章一致：新建一键建（不弹输入条），改名/删除走右键菜单。
-         * 八个固定分类在新建项目时就建好，这里只是追加自建分类。
-         */
-        const addSettingKindNow = async () => {
-          if (!project) {
-            setError(t('writePickProject'))
-            return
-          }
-          try {
-            /* 名字自动避重：已有「新分类」就叫「新分类 2」，绝不覆盖已有分类 */
-            const base = t('writeSettingKindDefault')
-            const taken = project && Array.isArray(project.settingKinds) ? project.settingKinds : []
-            let kindName = base
-            let seq = 2
-            while (taken.includes(kindName)) {
-              kindName = base + ' ' + seq
-              seq += 1
-            }
-            const made = await vaultApiPost('/write-add-setting-kind', {
-              path: project.path,
-              kind: kindName,
-            })
-            await loadProject(project.path)
-            flash(t('writeSettingKindAdded'))
-            /* 建完直接进改名态：新分类默认叫「新分类N」，让用户立刻命名 */
-            if (made && typeof made.kind === 'string' && made.kind !== '') {
-              openEdit('rename-setting-kind', { settingKind: made.kind }, made.kind)
-            }
-          } catch (err) {
-            setError(t('writeSaveFailed') + messageOf(err))
-          }
-        }
-
-
-        /*
-         * 一键新建人物（2026-11-24）：与卷章一致，点 ＋ 直接建，
-         * 名字由 Host 自动起（新人物 / 新人物 2 …），建完立刻进原地改名态。
-         */
-        const addCharacterNow = async () => {
-          if (!project) {
-            setError(t('writePickProject'))
-            return
-          }
-          try {
-            const base = t('writeCharacterDefault')
-            const taken = (project.characters || []).map((row) => row.title)
-            let title = base
-            let seq = 2
-            while (taken.includes(title)) {
-              title = base + ' ' + seq
-              seq += 1
-            }
-            const made = await vaultApiPost('/write-add-character', {
-              path: project.path,
-              title,
-            })
-            await loadProject(project.path)
-            flash(t('writeCharacterAdded'))
-            if (made && typeof made.name === 'string' && made.name !== '') {
-              openEdit('rename-character', { characterName: made.name }, made.title || title)
-            }
-          } catch (err) {
-            setError(t('writeSaveFailed') + messageOf(err))
           }
         }
 
@@ -11454,7 +11527,9 @@ function useScrollMemo(bucket, selector, ready) {
          * ⚠️ 这里**不能**用 window.prompt —— DSH 是 Electron，渲染进程没有 prompt，
          * 调用会直接返回 null 且不弹窗，表现就是「点了没反应」（2026-11-17 实际踩到）。
          * 所以改成自绘输入条：先点按钮把 newProjectOpen 打开，用户填名字回车再提交。
-         * 素材库的「新建文件/文件夹」2026-11-19 起改成直接建 + 原地命名，不再弹任何输入条。
+         * 素材库的「新建文件/文件夹」2026-11-24 起改成「预填默认名 + 确定 / 取消」的原地输入行：
+ * 点 ＋ 只摆一行输入框，点确定（或回车）才真的落盘，取消 / Esc / 留空都不写盘。
+ * （2026-11-19 那版是「建完再进改名态」，等于先落盘一个错名字，已被大王否掉。）
          */
         const openNewProject = () => {
           if (root === '') {
@@ -11482,7 +11557,7 @@ function useScrollMemo(bucket, selector, ready) {
         /*
          * ── 结构编辑动作（2026-11-18 大王需求）─────────────────────
          *
-         * 只剩三种「改名」了（2026-11-18 大王要求新建直接建，不弹输入条）：
+         * 只剩三种「改名」了（新建走 createItem 那套确认制，不经过 commitEdit）：
          *   rename-project / rename-volume / rename-chapter
          * 都只做一件事：把「要改什么」放进 editPrompt，让左栏画出输入条。
          * 真正落盘在 commitEdit —— 一处写盘，三处复用。
@@ -11642,15 +11717,15 @@ function useScrollMemo(bucket, selector, ready) {
             onOpenChapter: (ch, vi, ci) => void openChapter(ch, vi, ci),
             /*
              * 设定（2026-11-24 重做）：平铺单文件，一行一篇，点开就写。
-             * 一键建分类、改名删除走右键 —— 与卷章保持一致手感。
+             * 新建分类 / 新建人物也是「先摆输入行、确认才落盘」—— 与卷章保持一致手感。
              */
             onOpenSetting: (row) => void openSetting(row),
-            onAddSettingKind: () => void addSettingKindNow(),
+            onAddSettingKind: () => openCreateSetting(),
             onRenameSettingKind: (kind) => openEdit('rename-setting-kind', { settingKind: kind }, kind),
             onDeleteSettingKind: (kind) => void deleteSettingKind(kind),
             /* 人物板块（2026-11-24 新增）：一人一篇，点开就写，右键改名/删除 */
             onOpenCharacter: (row) => void openCharacter(row),
-            onAddCharacter: () => void addCharacterNow(),
+            onAddCharacter: () => openCreateCharacter(),
             onRenameCharacter: (row) => openEdit(
               'rename-character',
               { characterName: row.name },
@@ -11665,9 +11740,9 @@ function useScrollMemo(bucket, selector, ready) {
             onCopyPath: (relPath) => void copyRelPath(relPath),
             /* 结构编辑（2026-11-18）：项目改名 / 加卷 / 改卷名 / 加章 / 改章名 */
             onRenameProject: (item) => openEdit('rename-project', { path: item.path, item }, item.name),
-            onAddVolume: () => void addVolumeNow(),
+            onAddVolume: () => openCreateVolume(),
             onRenameVolume: (index, title) => openEdit('rename-volume', { index }, title),
-            onAddChapter: (volumeIndex) => void addChapterNow(volumeIndex),
+            onAddChapter: (volumeIndex) => openCreateChapter(volumeIndex),
             onRenameChapter: (volumeIndex, chapterIndex, title) =>
               openEdit('rename-chapter', { volumeIndex, chapterIndex }, title),
             /* 删卷 / 删章（2026-11-18）：入口只在右键菜单里 */
@@ -11700,6 +11775,22 @@ function useScrollMemo(bucket, selector, ready) {
               }
               : null,
             /* 新建项目输入条（2026-11-18）：状态仍在 Board 里，传下去让左栏贴着标题行画 */
+            /*
+             * 新建输入行（2026-11-24）：状态在 Board，左栏只负责画。
+             * 与 newProj 一样走文档流、贴着点 ＋ 的地方。
+             */
+            createItem: createItem
+              ? {
+                kind: createItem.kind,
+                vi: createItem.vi,
+                value: createItem.value,
+                placeholder: createItem.placeholder || '',
+                tip: createItem.tip || '',
+                onValue: (next) => setCreateItem({ ...createItem, value: next }),
+                commit: () => void commitCreateItem(),
+                cancel: closeCreate,
+              }
+              : null,
             newProj: newProjectOpen
               ? {
                 draft: projectDraft,
@@ -12130,6 +12221,29 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
 /* 三个固定库：用库别图标，名字再加一点分量，和普通文件夹区分开 */
 .vp-tree-icon-lib { font-size: 13px; line-height: 1; }
+/*
+ * 新建命名行的「确定 / 取消」（2026-11-24 大王要求：所有新建都要确认才落盘）。
+ * 素材区、文案区共用这两个类。原来只有渲染没有样式，会退化成浏览器默认按钮。
+ * 尺寸与写作区 .wbg-newproj-go / -x 对齐：26px 高、6px 圆角、11px 字、1px 描边。
+ */
+.vp-newrow-go, .vp-newrow-x {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.vp-newrow-go { border-color: var(--dsw-alias-brand-primary); color: var(--dsw-alias-brand-primary); }
+.vp-newrow-go:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.vp-newrow-x:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 /* 新建命名行右侧的小字提示（2026-11-24）：告诉用户「不写名字就不会建」 */
 .vp-newrow-hint { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 /* 固定库的改名按钮置灰（点了也没用，但保留位置不跳动） */
@@ -13499,6 +13613,10 @@ mark.df-hit[data-active="true"] {
 .wbg-nameinput-vol { font-size: 11px; font-weight: 600; }
 .wbg-nameinput-ch { font-size: 12px; }
 /* 改名失败的提示：跟在标题行下面的小红字，不再是个带输入框的浮条 */
+/* 新建输入行（2026-11-24）：预填默认名的输入框 + 确定 / 取消，确认才落盘 */
+.wbg-newitem { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 3px 8px 3px 14px; box-sizing: border-box; }
+.wbg-newitem-input { flex: 1 1 auto; min-width: 0; }
+.wbg-newitem-tip { flex: 1 1 100%; font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
 .wbg-inline-tip { flex: none; margin: 0 12px 6px; padding: 4px 8px; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); font-size: 11px; line-height: 1.5; color: var(--dsw-alias-state-error-primary); }
 /* 选中态统一按素材库（2026-11-19 大王要求）：底色同档 + 名字品牌色加粗 */
 .wbg-proj[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-label-primary); font-weight: 600; }

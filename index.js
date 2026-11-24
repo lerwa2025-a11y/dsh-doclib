@@ -423,7 +423,7 @@ export function apply(ctx) {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, {
                   ok: true,
-                  ...(await addWriteVolume(root, body && body.path, body && body.afterIndex)),
+                  ...(await addWriteVolume(root, body && body.path, body && body.afterIndex, body && body.title)),
                 })
                 return
               }
@@ -439,7 +439,7 @@ export function apply(ctx) {
                 const body = JSON.parse(await readBody(req, BODY_LIMIT))
                 sendJson(res, 200, {
                   ok: true,
-                  ...(await addWriteChapter(root, body && body.path, body && body.volumeIndex)),
+                  ...(await addWriteChapter(root, body && body.path, body && body.volumeIndex, body && body.title)),
                 })
                 return
               }

@@ -1066,13 +1066,37 @@ async function nextVolumeDirName(base) {
   return '第' + cnNum(existing.length + 1) + '卷'
 }
 
-/** 新增卷：在 正文\ 下建文件夹。afterIndex 保留兼容（-1 = 追加到最后）。 */
-export async function addWriteVolume(root, projectRel, afterIndex) {
+/**
+ * 新增卷：在 正文\ 下建文件夹。afterIndex 保留兼容（-1 = 追加到最后）。
+ *
+ * title（2026-11-24 大王要求「所有新建都要确认才落盘」）：前端先摆一个
+ * 预填名字的输入框，用户点「确定」才带着名字进来建。给了就用它，没给就
+ * 退回自动起名（第一版「一键新建」的调用点还这么走）。
+ */
+export async function addWriteVolume(root, projectRel, afterIndex, title) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const bodyRoot = join(base, BODY_DIR)
   await mkdir(bodyRoot, { recursive: true })
-  const dirName = await nextVolumeDirName(base)
+  const wanted = typeof title === 'string' ? safeTitle(title, '') : ''
+  let dirName = wanted !== '' ? wanted : await nextVolumeDirName(base)
+  /* 同名卷就往后加序号，绝不覆盖已有目录 */
+  if (wanted !== '') {
+    let seq = 2
+    let candidate = dirName
+    for (let guard = 0; guard < 1000; guard += 1) {
+      let exists = true
+      try {
+        await stat(join(bodyRoot, candidate))
+      } catch {
+        exists = false
+      }
+      if (!exists) break
+      candidate = wanted + ' ' + seq
+      seq += 1
+    }
+    dirName = candidate
+  }
   await mkdir(join(bodyRoot, dirName), { recursive: false })
   return { ok: true, title: dirName, dir: dirName, afterIndex: Number.isInteger(afterIndex) ? afterIndex : -1 }
 }
@@ -1136,8 +1160,13 @@ async function makeChapterFileName(volumeDir, title) {
   return String(next).padStart(4, '0') + '-' + safeTitle(title, '未命名章') + '.md'
 }
 
-/** 新增章：在指定卷文件夹里建一个空 .md，标题「第N章」（N 是本卷已有章数 + 1）。 */
-export async function addWriteChapter(root, projectRel, volumeIndex) {
+/**
+ * 新增章：在指定卷文件夹里建一个空 .md。
+ *
+ * title（2026-11-24 大王要求「确认才落盘」）：给了就用它当章名，没给就自动
+ * 起成「第N章」（N 是本卷已有章数 + 1）。
+ */
+export async function addWriteChapter(root, projectRel, volumeIndex, title) {
   const base = await projectDir(root, projectRel)
   await migrateIfNeeded(base)
   const dirs = await listDirs(join(base, BODY_DIR))
@@ -1145,8 +1174,15 @@ export async function addWriteChapter(root, projectRel, volumeIndex) {
   if (volumeName === undefined) throw new Error('找不到这一卷')
   const volumeDir = join(base, BODY_DIR, volumeName)
   const rows = await listMd(volumeDir)
-  const chapterTitle = '第' + cnNum(rows.length + 1) + '章'
+  const wanted = typeof title === 'string' ? safeTitle(title, '') : ''
+  const chapterTitle = wanted !== '' ? wanted : '第' + cnNum(rows.length + 1) + '章'
   const fileName = await makeChapterFileName(volumeDir, chapterTitle)
+  try {
+    await stat(join(volumeDir, fileName))
+    throw new Error('同名章已存在')
+  } catch (err) {
+    if (err && err.message === '同名章已存在') throw err
+  }
   // 'wx' = 已存在就报错，绝不覆盖别人的正文
   await writeFile(join(volumeDir, fileName), '', { encoding: 'utf8', flag: 'wx' })
   return { ok: true, title: chapterTitle, file: `${volumeName}/${fileName}`, volumeDir: volumeName }
