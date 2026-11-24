@@ -137,7 +137,6 @@ window.__ModuleLoader__.load({
         vaultSaveFailed: '保存失败',
         vaultSaved: '已保存',
         // ── [工作台 ↔ 会话] ──
-        assistStatus: '会话',
         assistUnbound: '未绑定',
         assistIdle: '空闲',
         assistRunning: '运行中',
@@ -158,12 +157,10 @@ window.__ModuleLoader__.load({
         assistCreateSession: 'New session',
         assistDeleteSession: 'Archive',
         assistDeleting: 'Archiving…',
-        assistNoSessionYet: 'No session yet',
         /* 会话区常驻（2026-11-18） */
         assistCreateSession: '新建会话',
         assistDeleteSession: '归档',
         assistDeleting: '归档中…',
-        assistNoSessionYet: '还没建会话',
         assistSendFailed: '发送失败：',
         assistNeedWorkspace: '先点顶栏的「工作台区域」选一个文件夹，这个工作台才会有会话',
         assistModel: '模型',
@@ -178,7 +175,6 @@ window.__ModuleLoader__.load({
         assistModelLoading: '模型加载中…',
         assistModelEmpty: '没有可用模型',
         assistModelFailed: '模型切换失败：',
-        assistBlankHint: '这是这个工作台的会话，发第一条消息后就能在会话页看到完整对话',
         wsPickManual: '选择文件夹…',
         vaultConflict: '文件已被外部程序修改，已重读最新内容',
         vaultUnsupported: '这个文件不支持在页面里编辑',
@@ -389,7 +385,6 @@ window.__ModuleLoader__.load({
         writeTbContinue: '续写',
         writeTbDialog: '对白润色',
         writeTbOutline: '大纲表',
-        writeTbTimeline: '时间线',
         writeP1: '雨是从傍晚开始下的。林砚站在旧码头的棚子底下，看着水面被砸出一层细密的白点。',
         writeP2: '他把手插进外套口袋，指尖碰到那封信的边角——已经被他摸得起了毛。',
         writeP3: '「你还是来了。」',
@@ -526,7 +521,6 @@ window.__ModuleLoader__.load({
         vaultSaveFailed: 'Save failed',
         vaultSaved: 'Saved',
         // ── [Workbench ↔ Session] ──
-        assistStatus: 'Session',
         assistUnbound: 'Not bound',
         assistIdle: 'Idle',
         assistRunning: 'Running',
@@ -557,7 +551,6 @@ window.__ModuleLoader__.load({
         assistModelLoading: 'Loading models…',
         assistModelEmpty: 'No models available',
         assistModelFailed: 'Model switch failed: ',
-        assistBlankHint: 'This is the workbench session; after the first message the full conversation shows in the session page',
         wsPickManual: 'Choose folder…',
         vaultConflict: 'File changed outside; reloaded latest',
         vaultUnsupported: 'This file type is not editable here',
@@ -763,7 +756,6 @@ window.__ModuleLoader__.load({
         writeTbContinue: 'Continue',
         writeTbDialog: 'Polish dialogue',
         writeTbOutline: 'Outline grid',
-        writeTbTimeline: 'Timeline',
         writeP1: 'The rain had started at dusk. Lin Yan stood under the shed on the old pier, watching the water break into a fine skin of white points.',
         writeP2: 'He pushed his hands into his coat pockets; his fingertips found the corner of the letter — worn soft from being touched.',
         writeP3: '“So you came.”',
@@ -7132,7 +7124,50 @@ function useScrollMemo(bucket, selector, ready) {
        *
        * 文案台与写作台共用这一个组件 —— 两个板块本来就只差文案和任务数据。
        */
-      function BoardAssistant(props) {
+      /*
+     * 章节目录（2026-11-24 大王定案方案 B）：右栏上下分区 —— 上面目录、下面助手。
+     *
+     * 文案区和写作区原来右侧整条都是助手，没法放目录；方案 B 的做法是不再新增
+     * 一条竖栏，而是把助手这一栏切成上下两块：上半区放目录（本组件），下半区
+     * 还是原来的会话区 + 聊天记录 + 输入框。两块都用 flex:1 各占一半高度、
+     * 各自滚动，窄栏里也不会互相挤死。
+     *
+     * 数据由板块自己算好传进来，这里只管画：
+     *   items     [{ id, label, level, meta }] 或分组标题 { kind: 'vol', label }
+     *   activeId  当前高亮项（文案区=大纲 id，写作区=ch.file）
+     *   onPick    点某项要干什么（文案区滚动、写作区打开那一章）
+     */
+    function BoardOutline(props) {
+      const t = props.t
+      const items = Array.isArray(props.items) ? props.items : []
+      const count = items.filter((item) => item.kind !== 'vol').length
+      return h('div', { className: 'cb-outline' },
+        h('div', { className: 'cb-outline-h' },
+          h('span', null, t(props.titleKey)),
+          count > 0 ? h('span', { className: 'cb-outline-n' }, String(count)) : null,
+        ),
+        count === 0
+          ? h('div', { className: 'cb-outline-empty' }, t(props.emptyKey))
+          : h('div', { className: 'cb-outline-body' },
+            items.map((item, index) => item.kind === 'vol'
+              ? h('div', { key: 'v' + index, className: 'cb-outline-vol' }, item.label)
+              : h('button', {
+                key: 'i' + index,
+                type: 'button',
+                className: 'cb-outline-item',
+                'data-level': String(item.level || 1),
+                'data-active': props.activeId !== '' && item.id === props.activeId ? 'true' : 'false',
+                style: { paddingLeft: (8 + (((item.level || 1) - 1) * 11)) + 'px' },
+                title: item.label,
+                onClick: () => props.onPick(item),
+              },
+              h('span', { className: 'cb-outline-t' }, item.label),
+              item.meta ? h('span', { className: 'cb-outline-m' }, item.meta) : null)),
+          ),
+      )
+    }
+
+    function BoardAssistant(props) {
         const t = props.t
         const ctx = props.ctx
         const root = typeof props.root === 'string' ? props.root : ''
@@ -7284,7 +7319,6 @@ function useScrollMemo(bucket, selector, ready) {
             const snapshot = service.list.getSnapshot()
             const row = snapshot && snapshot.byId ? snapshot.byId[sessionId] : undefined
             setRunning(row ? row.running === true : false)
-            setBlank(row ? row.blank === true : false)
             setTitle(row && typeof row.displayTitle === 'string' ? row.displayTitle : '')
           }
           read()
@@ -7774,8 +7808,6 @@ function useScrollMemo(bucket, selector, ready) {
         }
 
         const statusText = sessionId === '' ? t('assistUnbound') : busy || running ? t('assistRunning') : t('assistIdle')
-        /** 空白会话：DSH 打开它会显示新手页，所以先提示一句，别让人以为坏了。 */
-        const [blank, setBlank] = useState(false)
         const tasks = Array.isArray(props.tasks) ? props.tasks : []
 
         /* 收起时：只剩一条窄边，点它展开（2026-11-18） */
@@ -7821,40 +7853,32 @@ function useScrollMemo(bucket, selector, ready) {
                   h('span', null, t(task.key)))))
             : null,
           /*
-           * 会话区常驻（2026-11-18 大王要求）：
-           * 原来整块被 sessionId !== '' 包着，没会话就不显示，
-           * 必须先点模型才会建会话、才出现「打开会话」。
-           * 现在两种状态都显示，没会话时给「新建会话」。
+           * 章节目录插槽（2026-11-24 大王定案方案 B：右栏上下分区，上目录、下助手）。
+           * 板块自己拼好节点传进来；不给就是纯助手栏（素材区不受影响）。
+           */
+          props.outline !== undefined && props.outline !== null ? props.outline : null,
+          /*
+           * 会话区（2026-11-24 大王要求「做小，只留两个按钮」）：
+           * 原来还有「会话」小标题、会话名 / 占位文字、空白会话提示，三层堆下来
+           * 占掉右栏一大截。现在只留「打开会话」与「新会话」两颗按钮，
+           * 会话状态看标题行右侧那颗 ●（statusText）。
            */
           h('div', { className: 'cb-sess' },
-            h('span', { className: 'cb-sess-k' }, t('assistStatus')),
             sessionId !== ''
-              ? h('span', { className: 'cb-sess-t', title: sessionId }, title !== '' ? title : sessionId)
-              : h('span', { className: 'cb-sess-t cb-sess-none' }, t('assistNoSessionYet')),
-            blank ? h('span', { className: 'cb-sess-hint' }, t('assistBlankHint')) : null,
-            h('div', { className: 'cb-sess-btns' },
-              sessionId !== ''
-                ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
-                : null,
-              h('button', {
-                type: 'button',
-                className: 'cb-sess-btn',
-                disabled: sessionBusy,
-                onClick: () => {
-                  if (confirmSess !== 'new') { askConfirm('new'); return }
-                  setConfirmSess('')
-                  void ensureSessionNow()
-                },
-              }, confirmSess === 'new'
-                ? t('assistConfirmNew')
-                : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
-              /*
-               * 归档按钮已移除（2026-11-18 大王决定）：
-               * 「我把文案区的会话归档了也没同步归档，算了不要归档功能了，
-               *   我自己去会话里管理。」
-               * 会话的归档/删除统一去 DSH 会话面板操作，助手这里只管打开和新建。
-               */
-            ),
+              ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
+              : null,
+            h('button', {
+              type: 'button',
+              className: 'cb-sess-btn',
+              disabled: sessionBusy,
+              onClick: () => {
+                if (confirmSess !== 'new') { askConfirm('new'); return }
+                setConfirmSess('')
+                void ensureSessionNow()
+              },
+            }, confirmSess === 'new'
+              ? t('assistConfirmNew')
+              : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
           ),
           error !== '' ? h('div', { className: 'cb-aside-err' }, error) : null,
           /*
@@ -8625,6 +8649,8 @@ function useScrollMemo(bucket, selector, ready) {
         const [asideW, setAsideW] = useState(268)
         /* 左栏收起（2026-11-24 大王要求）：整条缩成 30px 窄栏，只留一个展开按钮 */
         const [panelHidden, setPanelHidden] = useState(false)
+        /* 章节目录里当前点亮的那一条（2026-11-24 方案 B）：点了才亮，跟着指针走 */
+        const [outlineActive, setOutlineActive] = useState('')
 
         const editorRef = useRef(null)
         const noticeTimer = useRef(null)
@@ -9273,6 +9299,19 @@ function useScrollMemo(bucket, selector, ready) {
 
         const dirty = !!doc && doc.text !== draft
 
+        /*
+         * 章节目录（2026-11-24 大王定案方案 B）：右栏上半区显示当前稿件的标题大纲。
+         * 复用素材区那套 buildDocOutline —— 它只认 `#` 开头的标题行，并且会跳过
+         * 代码块里的内容，跟阅读态渲染是同一套判定，不会出现「目录里有、正文里没有」。
+         */
+        const outlineItems = buildDocOutline(null, doc, mode).map((node) => ({
+          id: node.id,
+          label: node.title,
+          level: node.level,
+          meta: '',
+          line: node.line,
+        }))
+
         return h(
           'div',
           { className: 'wb-pane cb-root', hidden: props.hidden === true },
@@ -9447,6 +9486,25 @@ function useScrollMemo(bucket, selector, ready) {
             titleKey: 'copyAssistant',
             placeholderKey: 'copyAssistantInput',
             tasks: [],
+            /* 右栏上半区：当前稿件的标题大纲（点条目滚到那一段） */
+            outline: h(BoardOutline, {
+              t,
+              titleKey: 'tocPanel',
+              emptyKey: doc === null ? 'tocEmptyNoDoc' : 'tocEmpty',
+              items: outlineItems,
+              activeId: outlineActive,
+              onPick: (item) => {
+                setOutlineActive(item.id)
+                const surface = editorRef.current
+                if (!surface) return
+                /*
+                 * 跳转靠 .md-line 上的 data-line（实时预览每一行都带行号）。
+                 * 不用 .vp-read .v-h：单模式化之后普通稿件没有阅读态了。
+                 */
+                const target = surface.querySelector('.md-line[data-line="' + item.line + '"]')
+                if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' })
+              },
+            }),
             style: { width: asideW + 'px' },
           }),
         )
@@ -10548,51 +10606,6 @@ function useScrollMemo(bucket, selector, ready) {
         )
       }
 
-      // 时间线 / 大纲面板：只读展示 项目.md 的卷章结构
-      function WritingOutline(props) {
-        const t = props.t
-        const project = props.project
-        if (!project) return null
-        return h(
-          'div',
-          { className: 'wbg-outline' },
-          h(
-            'div',
-            { className: 'wbg-outline-h' },
-            h(WbgIcon, { name: 'grid', small: true }),
-            h('span', null, t('writeTbTimeline')),
-            h('span', { className: 'wbg-dn-spacer' }),
-            h(
-              'button',
-              { type: 'button', className: 'wbg-outline-x', title: t('writeClose'), onClick: props.onClose },
-              h(BoardIcon, { name: 'x', className: 'wb-ic' }),
-            ),
-          ),
-          h(
-            'div',
-            { className: 'wbg-outline-body' },
-            (project.volumes || []).length === 0
-              ? h('div', { className: 'wbg-hint' }, t('writeNoStructure'))
-              : (project.volumes || []).map((vol, vi) =>
-                  h(
-                    'div',
-                    { key: vi, className: 'wbg-outline-vol' },
-                    h('div', { className: 'wbg-outline-vt' }, vol.title !== '' ? vol.title : t('writeUntitledVolume')),
-                    (vol.chapters || []).map((ch, ci) =>
-                      h(
-                        'div',
-                        { key: ci, className: 'wbg-outline-ch' },
-                        h('span', { className: 'wbg-outline-cn' }, ('0' + (ci + 1)).slice(-2)),
-                        h('span', { className: 'wbg-outline-ct' }, ch.title !== '' ? ch.title : t('writeUntitledChapter')),
-                        h('span', { className: 'wbg-outline-cw' }, ch.file ? String(ch.words || 0) : '—'),
-                      ),
-                    ),
-                  ),
-                ),
-          ),
-        )
-      }
-
 // 右栏：写作助手（只此一块）
       function WritingBoard(props) {
         const t = props.t
@@ -10625,7 +10638,6 @@ function useScrollMemo(bucket, selector, ready) {
         const [saveState, setSaveState] = useState('idle')
         const [error, setError] = useState('')
         const [notice, setNotice] = useState('')
-        const [outlineOpen, setOutlineOpen] = useState(false)
         const [openVolumes, setOpenVolumes] = useState({})
         /*
          * 设定（2026-11-24 重做）已改成平铺单文件，不再需要「分类展开态」。
@@ -11701,6 +11713,29 @@ function useScrollMemo(bucket, selector, ready) {
 
         const dirty = !!file && file.text !== draft
 
+        /*
+         * 章节目录（2026-11-24 大王定案方案 B）：右栏上半区显示项目的卷章结构，
+         * 点一章直接打开它（跟左栏点章是同一个入口 openChapter）。
+         * 卷是分组标题（不可点），章才是条目 —— 写作区的目录天然是两层的。
+         */
+        const outlineItems = []
+        if (project && Array.isArray(project.volumes)) {
+          project.volumes.forEach((vol, vi) => {
+            outlineItems.push({ kind: 'vol', label: vol.title !== '' ? vol.title : t('writeUntitledVolume') })
+            ;(vol.chapters || []).forEach((ch, ci) => {
+              outlineItems.push({
+                id: ch.file,
+                label: ch.title !== '' ? ch.title : t('writeUntitledChapter'),
+                level: 1,
+                meta: ch.file ? String(ch.words || 0) : '—',
+                chapter: ch,
+                volumeIndex: vi,
+                chapterIndex: ci,
+              })
+            })
+          })
+        }
+
         return h(
           'div',
           { className: 'wb-pane wbg-root', hidden: props.hidden === true },
@@ -11830,7 +11865,6 @@ function useScrollMemo(bucket, selector, ready) {
             aiBusy,
             onFormat: applyFormat,
             onAssist: (how) => void sendToAssist(how),
-            onTimeline: () => setOutlineOpen((open) => !open),
             /* ReaderBar 的三个回调（2026-11-18） */
             onCopyAll: () => void copyAll(),
             onFind: openFind,
@@ -11878,9 +11912,6 @@ function useScrollMemo(bucket, selector, ready) {
             max: 640,
             dir: 'left',
           }),
-          outlineOpen
-            ? h(WritingOutline, { t, project, onClose: () => setOutlineOpen(false) })
-            : null,
           /* 浮动加号已移除：挪进上面的「项目」标题行 */
           /* 新建项目输入条已挪进左栏 WritingList（贴着「项目 ＋」显示，2026-11-18） */
           notice !== '' ? h('div', { className: 'wbg-toast' }, notice) : null,
@@ -11893,6 +11924,15 @@ function useScrollMemo(bucket, selector, ready) {
             titleKey: 'writeAssistant',
             placeholderKey: 'writeInput',
             tasks: [],
+            /* 右栏上半区：项目卷章目录（点章打开，跟左栏同一个入口） */
+            outline: h(BoardOutline, {
+              t,
+              titleKey: 'tocPanel',
+              emptyKey: 'writeNoStructure',
+              items: outlineItems,
+              activeId: activeFile,
+              onPick: (item) => void openChapter(item.chapter, item.volumeIndex, item.chapterIndex),
+            }),
             style: { width: asideW + 'px' },
           }),
         )
@@ -14043,6 +14083,23 @@ mark.df-hit[data-active="true"] {
 .cb-status-dot { width: 5px; height: 5px; border-radius: 50%; flex: none; background: var(--dsw-alias-label-dimmed, var(--dsw-alias-border-l2)); }
 .cb-status-dot[data-running="true"] { background: var(--dsw-alias-state-success-primary); }
 /*
+ * 章节目录（2026-11-24 大王定案方案 B：右栏上下分区，上面目录、下面助手）。
+ * 和助手同宽、同一栏内上下排；两块都 flex:1 各占一半，各自滚动。
+ */
+.cb-outline { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--dsw-alias-border-l1); border-radius: var(--dsw-radius-sm, 8px); overflow: hidden; }
+.cb-outline-h { flex: none; display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 11px; font-weight: 600; color: var(--dsw-alias-label-secondary); border-bottom: 1px solid var(--dsw-alias-border-l1); }
+.cb-outline-n { margin-left: auto; font-size: 10px; font-weight: 400; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-outline-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px; scrollbar-width: thin; }
+.cb-outline-body::-webkit-scrollbar { width: 6px; }
+.cb-outline-body::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
+.cb-outline-vol { padding: 6px 6px 3px; font-size: 10px; font-weight: 600; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-outline-item { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 4px 6px; border: 0; border-radius: 4px; background: transparent; color: var(--dsw-alias-label-primary); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.cb-outline-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
+.cb-outline-item[data-active="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); font-weight: 600; }
+.cb-outline-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cb-outline-m { flex: none; font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+.cb-outline-empty { flex: 1; display: flex; align-items: center; justify-content: center; padding: 12px; font-size: 11px; line-height: 1.6; text-align: center; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
+/*
  * 会话区（2026-11-18 美化）：
  * 原来一整块 bg-layer-2 深色方块显得很重，改成细边框 + 透明底的轻卡片。
  */
@@ -14056,33 +14113,11 @@ mark.df-hit[data-active="true"] {
   border: 1px solid var(--dsw-alias-border-l1);
   background: transparent;
 }
-.cb-sess-k { font-size: 10px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-sess-t { font-size: 12px; font-weight: 600; color: var(--dsw-alias-label-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.cb-sess-btns { display: flex; gap: 6px; flex-wrap: wrap; }
-/* 没会话时的占位文字（2026-11-18 会话区常驻） */
-.cb-sess-none { color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); font-style: italic; }
-/* 删除会话按钮（2026-11-18）：危险操作用错误色，避免误点 */
-.cb-sess-btn-danger {
-  color: var(--dsw-alias-state-error-primary);
-  border-color: color-mix(in srgb, var(--dsw-alias-state-error-primary) 35%, transparent);
-}
-.cb-sess-btn-danger:hover {
-  color: var(--dsw-alias-state-error-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
-  border-color: var(--dsw-alias-state-error-primary);
-}
-.cb-sess-btn-danger:hover {
-  color: var(--dsw-alias-state-error-primary);
-  border-color: var(--dsw-alias-state-error-primary);
-  background: color-mix(in srgb, var(--dsw-alias-state-error-primary) 10%, transparent);
-}
-.cb-sess-btn-danger:disabled { opacity: .5; cursor: default; }
 
 /*
- * 会话区按钮（2026-11-18 配色）：三层级
+ * 会话区按钮（2026-11-18 配色；2026-11-24 只剩两颗，危险层已删）：两层
  *   默认（换一个新会话）  透明底 + 细边框
  *   主操作（打开会话）    实心深灰，见下面的 data-primary
- *   危险（删除会话）      红字红框，见 .cb-sess-btn-danger
  */
 .cb-sess-btn {
   display: inline-flex;
@@ -14319,7 +14354,6 @@ mark.df-hit[data-active="true"] {
 .cb-model-item { display: block; width: 100%; box-sizing: border-box; text-align: left; padding: 8px 8px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; line-height: 1.5; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cb-model-item:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-model-empty { padding: 12px 8px; font-size: 11px; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
-.cb-sess-hint { font-size: 10px; line-height: 1.55; color: var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary)); }
 `
 
     const appliedContexts = typeof WeakSet === 'function' ? new WeakSet() : null
