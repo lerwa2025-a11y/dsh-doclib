@@ -7901,6 +7901,23 @@ function useScrollMemo(bucket, selector, ready) {
             h('i', { className: 'cb-status-dot', 'data-running': busy || running ? 'true' : 'false' }),
             statusText),
           /*
+           * 新会话（2026-11-25 大王要求：从底部会话区挪进标题行，做小适配 30px 行高）：
+           * 二次确认仍在（confirmSess），建会话期间禁用（sessionBusy）。
+           */
+          h('button', {
+            type: 'button',
+            className: 'cb-sess-btn cb-sess-hd',
+            disabled: sessionBusy,
+            title: sessionId !== '' ? t('assistNew') : t('assistCreateSession'),
+            onClick: () => {
+              if (confirmSess !== 'new') { askConfirm('new'); return }
+              setConfirmSess('')
+              void ensureSessionNow()
+            },
+          }, confirmSess === 'new'
+            ? t('assistConfirmNew')
+            : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
+          /*
            * 助手这一段的单段收起（2026-11-25 大王要求「往下收」）：
            * 点一下把聊天区 / 输入框 / 会话按钮全部收掉，只留这一行标题；
            * 目录那段自动占满整栏。再点一下恢复。
@@ -8137,6 +8154,19 @@ function useScrollMemo(bucket, selector, ready) {
                 )
                 : null,
             ),
+            /*
+             * 打开会话（2026-11-25 大王要求：从底部会话区挪进这里，紧挨技能星标，做小）：
+             * 已经建过会话才出现；点它把这段对话在 DSH 会话面板里打开。
+             */
+            sessionId !== ''
+              ? h('button', {
+                type: 'button',
+                className: 'cb-sess-btn cb-sess-in',
+                'data-primary': 'true',
+                title: t('assistOpen'),
+                onClick: () => api.openSession(sessionId),
+              }, t('assistOpen'))
+              : null,
             /* 输入行：图标 + 输入框 + 发送键（2026-11-18 从单行改成独立一行） */
             h('div', { className: 'cb-input-row' },
               h(CbIcon, { name: 'sparkle', small: true }),
@@ -8161,28 +8191,6 @@ function useScrollMemo(bucket, selector, ready) {
                 disabled: busy || draft.trim() === '',
                 onClick: () => void send(),
               }, h(CbIcon, { name: 'arrowUp', small: true })))),
-          /*
-           * 会话按钮（2026-11-24 大王要求：挪到最底下）：
-           * 原来贴在标题行下面占掉一截，现在沉到右栏最底部、输入框之后。
-           * 只留「打开会话」+「新会话」两颗；会话状态看标题行右侧那颗 ●。
-           */
-          chatFolded ? null : h('div', { className: 'cb-sess' },
-            sessionId !== ''
-              ? h('button', { type: 'button', className: 'cb-sess-btn', 'data-primary': 'true', onClick: () => api.openSession(sessionId) }, t('assistOpen'))
-              : null,
-            h('button', {
-              type: 'button',
-              className: 'cb-sess-btn',
-              disabled: sessionBusy,
-              onClick: () => {
-                if (confirmSess !== 'new') { askConfirm('new'); return }
-                setConfirmSess('')
-                void ensureSessionNow()
-              },
-            }, confirmSess === 'new'
-              ? t('assistConfirmNew')
-              : (sessionId !== '' ? t('assistNew') : t('assistCreateSession'))),
-          ),
       )
       }
 
@@ -14272,10 +14280,13 @@ mark.df-hit[data-active="true"] {
 .cb-aside[data-split="true"] > .cb-aside-h { flex: none; height: 30px; padding: 0 10px 0 11px; box-sizing: border-box; }
 .cb-aside[data-split="true"] > .cb-aside-err,
 .cb-aside[data-split="true"] > .cb-chat,
-.cb-aside[data-split="true"] > .cb-input,
-.cb-aside[data-split="true"] > .cb-sess { margin-left: 11px; margin-right: 11px; }
-.cb-aside[data-split="true"] > .cb-sess { margin-bottom: 11px; }
-.cb-aside[data-split="true"] > .cb-input { margin-top: 8px; }
+.cb-aside[data-split="true"] > .cb-input { margin-left: 11px; margin-right: 11px; }
+/*
+ * 输入框沉底后要留出下边距（2026-11-25 大王：底边线被裁掉看不见）：
+ * 上面 .cb-input 自带 margin-top: auto 会把它压到栏底，而 split 形态的 .cb-aside 是 padding: 0，
+ * 于是 border 底边正好压在栏底线上被裁 1px。这里补 11px，与左右内缩 11px 对齐。
+ */
+.cb-aside[data-split="true"] > .cb-input { margin-top: 8px; margin-bottom: 11px; }
 .cb-aside[data-split="true"] > .cb-aside-sep { margin: 0; opacity: 1; }
 /* 两块之间的细线：色条 + 底色交替已经分得开，这条留着当极淡的分界。 */
 .cb-aside-sep { flex: none; height: 1px; margin: 0 -12px; background: var(--dsw-alias-border-l1); opacity: .6; }
@@ -14287,14 +14298,6 @@ mark.df-hit[data-active="true"] {
  * 会话按钮组（2026-11-24 大王要求：挪到最底下）：
  * 沉到右栏底部后不再需要卡片外框，直接两颗按钮并排贴底。
  */
-.cb-sess {
-  flex: none;
-  display: flex;
-  flex-direction: row;
-  gap: 6px;
-  padding: 0;
-}
-
 /*
  * 会话区按钮（2026-11-18 配色；2026-11-24 只剩两颗，危险层已删）：两层
  *   默认（换一个新会话）  透明底 + 细边框
@@ -14333,6 +14336,16 @@ mark.df-hit[data-active="true"] {
 .cb-sess-btn[data-primary="true"]:hover {
   background: var(--dsw-alias-interactive-bg-hover-solid, var(--dsw-alias-bg-layer-3, var(--dsw-alias-bg-layer-2)));
 }
+
+/*
+ * 会话两颗小按钮（2026-11-25 大王要求：新会话进助手标题行、打开会话进输入框工具行，
+ * 都做小以适配那两行的高度）。颜色 / 描边 / hover / data-primary 全部继承上面的
+ * .cb-sess-btn，这里只改尺寸与「不拉伸」——原按钮是 flex: 1 1 auto 用来占满整行的。
+ */
+.cb-sess-btn.cb-sess-hd { flex: none; height: 20px; padding: 0 7px; border-radius: 4px; font-size: 10.5px; }
+.cb-sess-btn.cb-sess-in { flex: none; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 10.5px; }
+
+
 .cb-sess-btn:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-label-primary); }
 .cb-aside-err { flex: none; font-size: 11px; line-height: 1.6; color: var(--dsw-alias-state-error-primary); }
 /*
