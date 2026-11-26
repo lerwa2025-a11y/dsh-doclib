@@ -2735,6 +2735,17 @@ function useScrollMemo(bucket, selector, ready) {
           return 260
         }
       })
+      /* 右栏目录（大纲）宽度（2026-11-26 大王要求「目录栏也做成可以拖动宽度的」）：
+         和左栏 treeWidth 一样存 localStorage，不动服务端 settings。 */
+      const [tocW, setTocW] = useState(() => {
+        try {
+          const saved = window.localStorage.getItem('dsh-notes:tocWidth')
+          const value = saved === null ? NaN : Number(saved)
+          return Number.isFinite(value) ? Math.min(520, Math.max(200, value)) : 268
+        } catch {
+          return 268
+        }
+      })
       /* 左栏收起（2026-11-24 大王要求）：整条缩成 30px 窄栏，只留一个展开按钮 */
       const [treeHidden, setTreeHidden] = useState(false)
       const [moveOpen, setMoveOpen] = useState(false)
@@ -2930,6 +2941,15 @@ function useScrollMemo(bucket, selector, ready) {
           /* 存不了就算了 */
         }
       }, [treeWidth])
+
+      // 目录栏宽度变化后记住
+      useEffect(() => {
+        try {
+          window.localStorage.setItem('dsh-notes:tocWidth', String(tocW))
+        } catch {
+          /* 存不了就算了 */
+        }
+      }, [tocW])
 
       /**
        * 大纲收起状态回写。
@@ -5387,6 +5407,17 @@ function useScrollMemo(bucket, selector, ready) {
            *   · Markdown → 扫描标题行（buildDocOutline）
            * 位置挪到最右侧独立一栏，可收起成窄条。
            */
+          /* 右栏目录拖动条（2026-11-26）：收起成窄条时没有可拖的东西，不渲染。 */
+          outlineCollapsed
+            ? null
+            : h(Splitter, {
+              className: 'vp-toc-split',
+              width: tocW,
+              applyWidth: setTocW,
+              min: 200,
+              max: 520,
+              dir: 'left',
+            }),
           outlineCollapsed
             ? h(
               'button',
@@ -5396,7 +5427,9 @@ function useScrollMemo(bucket, selector, ready) {
             )
             : h(
               'div',
-              { className: 'vp-toc' },
+              /* 宽度走 tocW（2026-11-26 可拖）——flex-basis 也要一起写，
+                 否则 CSS 里 flex: 0 0 268px 会盖掉 inline 的 width。 */
+              { className: 'vp-toc', style: { width: tocW + 'px', flex: '0 0 ' + tocW + 'px' } },
               h(
                 'div',
                 { className: 'vp-toc-head' },
@@ -13897,7 +13930,7 @@ mark.df-hit[data-active="true"] {
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
 .vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; /* 2026-11-18：原来 overflow:hidden 会把「新建」下拉裁掉（大王截图：被阅读栏遮住）。
-     树面板 radius 是 0 不需要裁剪，所以放开；树内容的滚动由 .vp-treelist 自己管。 */ overflow: visible; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; position: relative; box-shadow: inset -3px 0 0 0 var(--dsw-alias-brand-primary); }
+     树面板 radius 是 0 不需要裁剪，所以放开；树内容的滚动由 .vp-treelist 自己管。 */ overflow: visible; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; position: relative; }
 /* .vp-libhead / .vp-libmark / .vp-libname 已删：
    左栏那条「库 / 工作台」标题行已移除，现在搜索框直接打头，
    与文案台 .cb-search、写作台 .wbg-search 一致。 */
@@ -13918,6 +13951,11 @@ mark.df-hit[data-active="true"] {
 .vp-splitter { flex: 0 0 6px; position: relative; background: transparent; }
 .vp-splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; transform: translateX(-50%); background: var(--dsw-alias-border-l1); }
 .vp-splitter:hover::before { width: 2px; background: var(--dsw-alias-brand-primary); }
+/* 右栏目录拖动条（2026-11-26）：6px 透明热区，hover 出一条品牌色竖线。
+   目录栏自己有 border-left，静息态再画线会和边框叠成两道，所以只在 hover 时出现。 */
+.vp-toc-split { flex: 0 0 6px; cursor: col-resize; background: transparent; position: relative; z-index: 2; }
+.vp-toc-split::after { content: ''; position: absolute; top: 0; bottom: 0; left: 2px; right: 2px; background: transparent; transition: background .12s ease; }
+.vp-toc-split:hover::after { background: var(--dsw-alias-brand-primary); opacity: .45; }
 /*
  * 素材库文档列 = 纸面宿主（2026-11-18 与文案台统一）：
  * 背景透明（纸面由 .dn-reader::before 画），无圆角。
@@ -13943,11 +13981,14 @@ mark.df-hit[data-active="true"] {
  * （都是 38px、都有 1px 上边框），于是「N / M + 进度条」那条线自然和
  * 「字数 / 段落 / 分钟 / 已保存」那条线落在同一个 y 上，两栏底边也齐。
  */
-.vp-toc { flex: 0 0 268px; width: 268px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+/* 目录栏色条（2026-11-26 大王纠偏：色条属于右栏目录栏，不属于左栏文件树）。
+   画在栏的左边缘（与阅读区交界处），和文案台 .cb-aside[data-split="true"] 同一套做法。
+   宽度已由 inline style 的 tocW 决定，这里的 268px 只是首帧兜底。 */
+.vp-toc { flex: 0 0 268px; width: 268px; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
 .vp-toc-head { padding: 12px 12px 8px; margin-bottom: 4px; }
 .vp-toc-title { font-size: 12px; font-weight: 600; letter-spacing: 0; color: var(--dsw-alias-label-primary); }
 .vp-toc-item { font-size: 12px; }
-.vp-tocrail { background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); }
+.vp-tocrail { background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); box-shadow: inset 3px 0 0 0 var(--dsw-alias-brand-primary); }
 /* ── 写作台（三栏占位排版）─────────────────────────────────────────────── */
 .wbg-root { flex-direction: row; }
 .wbg-ic { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
