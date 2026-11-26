@@ -2715,6 +2715,11 @@ function useScrollMemo(bucket, selector, ready) {
        * 点了 ＋ 只把这个摆出来，回车才真的创建；空名字等于取消。
        */
       const [createPending, setCreatePending] = useState(null)
+      /*
+       * 固定分组 ＋ 的下拉（2026-11-26 大王要求）：{ path, left, top } | null。
+       * 点 ＋ 弹两项「新建文件 / 新建文件夹」，落点跟随当前选中项（见 createDirInGroup）。
+       */
+      const [createMenu, setCreateMenu] = useState(null)
       const [history, setHistory] = useState([])
       const [historyError, setHistoryError] = useState('')
       const [query, setQuery] = useState('')
@@ -3560,9 +3565,12 @@ function useScrollMemo(bucket, selector, ready) {
               ? selected.path.slice(0, selected.path.lastIndexOf('/'))
               : MATERIAL_ROOT
           : MATERIAL_ROOT
+        /* 2026-11-26：file 分支也认 targetDir —— 固定分组 ＋ 的「新建文件」按选中项传落点。
+         * 没传才回落到 pickedDir（老行为：跟着选中走）。 */
+        const wanted = typeof targetDir === 'string' && targetDir !== '' ? targetDir : ''
         const dir = isDir
-          ? (typeof targetDir === 'string' && targetDir !== '' ? targetDir : `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`)
-          : pickedDir
+          ? (wanted !== '' ? wanted : `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}`)
+          : (wanted !== '' ? wanted : pickedDir)
         const nameDir = !isDir && dir === MATERIAL_ROOT ? `${MATERIAL_ROOT}/${MATERIAL_NOTE_GROUP}` : dir
         /* 落点目录展开，否则那行命名框在收起的目录里看不见 */
         if (nameDir !== '') setExpanded((prev) => ({ ...prev, [nameDir]: true }))
@@ -4114,6 +4122,45 @@ function useScrollMemo(bucket, selector, ready) {
       }
 
       /**
+       * 分组 ＋ 的落点（2026-11-26 大王要求）：
+       * 选中了本分组内的文件夹 → 就建在它里面；选中了本分组内的文件 → 建在它的父目录；
+       * 什么都没选、或选的是别的分组 → 建在本分组根目录。
+       */
+      const createDirInGroup = (groupPath) => {
+        const base = typeof groupPath === 'string' ? groupPath : ''
+        if (selected === null || typeof selected.path !== 'string' || selected.path === '') return base
+        const path = selected.path
+        if (path !== base && !path.startsWith(base + '/')) return base
+        if (selected.type === 'dir') return path
+        const parent = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : ''
+        return parent === '' ? base : parent
+      }
+
+      /**
+       * 点树里的空白处（2026-11-26 大王要求）：取消选中，回到根目录新建。
+       * 有没保存的改动先落盘再清选中 —— 否则自动保存的定时器会拿着旧 doc 写回。
+       */
+      const clearVaultPick = () => {
+        const finish = () => {
+          setSelected(null)
+          setDoc(null)
+          setDraft('')
+          setError('')
+          setMessage('')
+          setSaveState('idle')
+          setHistory([])
+          setHistoryError('')
+          setConfirmDelete(false)
+          setRenaming(false)
+          setMoveOpen(false)
+          setCtxMenu(null)
+          setCreateMenu(null)
+          setCreatePending(null)
+        }
+        if (doc && doc.text !== draft) { void saveDoc().then(finish, finish) } else finish()
+      }
+
+      /**
        * 右键打开节点菜单。
        *
        * 顺带把该节点设为选中 —— 菜单里的「重命名」「删除」都靠 selected 定位，
@@ -4150,6 +4197,27 @@ function useScrollMemo(bucket, selector, ready) {
           document.removeEventListener('scroll', close, true)
         }
       }, [ctxMenu])
+
+      /* 点别处 / 按 Esc / 滚动 → 关掉分组 ＋ 的下拉 */
+      useEffect(() => {
+        if (createMenu === null) return undefined
+        const onDown = (event) => {
+          const node = event.target
+          if (node && typeof node.closest === 'function'
+            && (node.closest('.vp-group-add') !== null || node.closest('.vp-newdrop') !== null)) return
+          setCreateMenu(null)
+        }
+        const onKey = (event) => { if (event && event.key === 'Escape') setCreateMenu(null) }
+        const onScroll = () => setCreateMenu(null)
+        document.addEventListener('mousedown', onDown)
+        document.addEventListener('keydown', onKey)
+        document.addEventListener('scroll', onScroll, true)
+        return () => {
+          document.removeEventListener('mousedown', onDown)
+          document.removeEventListener('keydown', onKey)
+          document.removeEventListener('scroll', onScroll, true)
+        }
+      }, [createMenu])
 
       /**
        * 素材库固定分类行（2026-11-22 大王要求）。
@@ -4200,12 +4268,17 @@ function useScrollMemo(bucket, selector, ready) {
               {
                 type: 'button',
                 className: 'vp-group-add',
-                title: t('vaultNewDir'),
-                'aria-label': t('vaultNewDir'),
+                title: t('vaultNew'),
+                'aria-label': t('vaultNew'),
+                'data-open': createMenu !== null && createMenu.path === node.path ? 'true' : 'false',
                 onClick: (event) => {
                   event.preventDefault()
                   event.stopPropagation()
-                  askCreate('dir', node.path)
+                  /* 再点一次同一个 ＋ 就收起（2026-11-26） */
+                  if (createMenu !== null && createMenu.path === node.path) { setCreateMenu(null); return }
+                  const pos = dropPositionOf(event.currentTarget, DROP_W)
+                  if (pos === null) return
+                  setCreateMenu({ path: node.path, left: pos.left, top: pos.top })
                 },
               },
               '＋',
@@ -5058,25 +5131,9 @@ function useScrollMemo(bucket, selector, ready) {
               { className: 'vp-treehead' },
               h('span', { className: 'vp-treehead-title' }, searching ? t('vaultSearch') : t('vaultTreeTitle')),
             /*
-             * 顶部加号（2026-11-22）：新建文件夹改由各分类行右侧的 ＋ 建，
-             * 这里只剩「新建文件」一件事，所以不再弹一层只有一项的下拉；
- * 2026-11-24 起点了只是摆一行输入框，确认才落盘。
+             * 顶部那个 ＋ 已删除（2026-11-26 大王要求：只保留五个固定分组行上的 ＋，
+             * 否则「新建文件」的落点会因为「当前有没有选中」而变得猜不透）。
              */
-            h(
-              'div',
-              { className: 'vp-newinline' },
-              h(
-                'button',
-                {
-                  type: 'button',
-                  className: 'vp-newbtn-round',
-                  onClick: () => { askCreate('file') },
-                  title: t('vaultNewMd'),
-                  'aria-label': t('vaultNewMd'),
-                },
-                '＋',
-              ),
-            ),
               h(
                 'button',
                 {
@@ -5144,7 +5201,7 @@ function useScrollMemo(bucket, selector, ready) {
             ),
             h(
               'div',
-              { className: 'vp-treelist' },
+              { className: 'vp-treelist', onClick: (event) => { if (event.target === event.currentTarget) clearVaultPick() } },
               searching
                 ? h(
                     'div',
@@ -5173,6 +5230,49 @@ function useScrollMemo(bucket, selector, ready) {
                   ? h('div', { className: 'vp-tree-empty vp-pad' }, t('vaultEmptyDir'))
                   : flatTree.map((node) => treeNode(node, 0)),
             ),
+            /*
+             * 分组 ＋ 的下拉（2026-11-26 大王要求）：fixed 浮层，坐标按 ＋ 的 rect 算。
+             * 两项都按「当前选中」定落点：选中文件夹 → 建在它里面；
+             * 选中文件 → 建在它所在目录；什么都没选 → 建在这个分组根目录。
+             */
+            createMenu !== null
+              ? h(
+                'div',
+                {
+                  className: 'vp-newdrop',
+                  style: { left: `${createMenu.left}px`, top: `${createMenu.top}px`, width: `${DROP_W}px` },
+                  onMouseDown: (event) => event.stopPropagation(),
+                },
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-newdrop-item',
+                    onClick: () => {
+                      const target = createDirInGroup(createMenu.path)
+                      setCreateMenu(null)
+                      askCreate('file', target)
+                    },
+                  },
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'fileText', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewFile')),
+                ),
+                h(
+                  'button',
+                  {
+                    type: 'button',
+                    className: 'vp-newdrop-item',
+                    onClick: () => {
+                      const target = createDirInGroup(createMenu.path)
+                      setCreateMenu(null)
+                      askCreate('dir', target)
+                    },
+                  },
+                  h('span', { className: 'vp-newdrop-ic' }, h(BoardIcon, { name: 'folder', className: 'wb-ic' })),
+                  h('span', { className: 'vp-newdrop-t' }, t('vaultNewDir')),
+                ),
+              )
+              : null,
               ),
           ),
 
@@ -5979,6 +6079,17 @@ function useScrollMemo(bucket, selector, ready) {
           }
           setExpanded(next)
         }, [nodes.length, expandSignal.n, expandSignal.mode])
+        /*
+         * 新建命名行的落点目录（2026-11-26 大王要求）：
+         * 以前那一行永远画在树顶、不管选中了哪个文件夹；现在按落点插进对应目录里。
+         * 落点目录要是收起的，还得替用户展开 —— 否则输入框藏在看不见的地方。
+         */
+        const pendingDir = props.pending && typeof props.pending.dir === 'string' ? props.pending.dir : ''
+        const treeRootPath = typeof props.rootPath === 'string' ? props.rootPath : ''
+        useEffect(() => {
+          if (pendingDir === '') return
+          setExpanded((prev) => (prev[pendingDir] === true ? prev : { ...prev, [pendingDir]: true }))
+        }, [pendingDir])
         const [ctxMenu, setCtxMenu] = useState(null)
 
         /* 点外面 / 按 Esc 关右键菜单 */
@@ -6087,31 +6198,37 @@ function useScrollMemo(bucket, selector, ready) {
               iconEl,
               h('span', { className: 'vp-tree-name' }, isDir ? name : name.replace(/\.(md|markdown)$/i, '')),
             )
+          const kids = isDir && Array.isArray(node.children) ? node.children : []
+          const pendingHere = isDir && pendingDir === node.path ? pendingRowFor(depth + 1) : null
           return h(
             'div',
             { key: node.path, className: isDir ? 'vp-tree-dir' : undefined },
             rowEl,
             isDir && isOpen
-              ? (Array.isArray(node.children) && node.children.length > 0
-                ? node.children.map((child) => row(child, depth + 1))
-                : h('div', { className: 'vp-tree-empty', style: { paddingLeft: (30 + depth * 14) + 'px' } }, t('vaultEmptyDir')))
+              ? [
+                pendingHere,
+                kids.length > 0
+                  ? kids.map((child) => row(child, depth + 1))
+                  : (pendingHere === null
+                    ? h('div', { className: 'vp-tree-empty', style: { paddingLeft: (30 + depth * 14) + 'px' } }, t('vaultEmptyDir'))
+                    : null),
+              ]
               : null,
           )
         }
 
         /*
-         * 新建命名行（2026-11-24 大王要求）：树顶第一行是一个空输入框，
-         * 写名字回车才真的建；留空 / Esc / 点到别处就收掉，磁盘上什么都不发生。
-         */
-        /*
          * 新建命名行（2026-11-24 大王要求：所有新建都要「确认 / 取消」）。
          * 输入框预填默认名，点「确定」或回车才真的建；取消 / Esc / 留空都不写盘。
+         * 2026-11-26：改成按落点目录取缩进 —— 建在哪个文件夹里，就缩进到那一层的子行位置。
          */
-        const pendingRow = props.pending
-          ? h(
+        const pendingRowFor = (depth) => {
+          if (!props.pending) return null
+          const isDir = props.pending.kind === 'dir'
+          return h(
             'div',
-            { key: '__create__', className: 'vp-tree-row vp-tree-row-edit', style: { paddingLeft: '6px' } },
-            h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: props.pending.kind === 'dir' ? 'folder' : 'fileText', className: 'wb-ic' })),
+            { key: '__create__', className: 'vp-tree-row vp-tree-row-edit', style: { paddingLeft: ((isDir ? 6 : 22) + depth * 14) + 'px' } },
+            h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: isDir ? 'folder' : 'fileText', className: 'wb-ic' })),
             h('input', {
               className: 'vp-tree-input',
               autoFocus: true,
@@ -6136,14 +6253,24 @@ function useScrollMemo(bucket, selector, ready) {
               onClick: (event) => { event.preventDefault(); event.stopPropagation(); props.pending.cancel() },
             }, t('cancel')),
           )
-          : null
+        }
 
+        /* 落点就是根目录时，命名行画在最上面（跟以前一样） */
+        const rootPendingRow = props.pending && pendingDir === treeRootPath ? pendingRowFor(0) : null
         return h(
           'div',
-          { className: 'vp-treelist', style: { padding: '2px 4px 10px' } },
-          nodes.length === 0 && pendingRow === null
+          {
+            className: 'vp-treelist',
+            style: { padding: '2px 4px 10px' },
+            /* 点树里的空白处 = 取消选中（2026-11-26 大王要求） */
+            onClick: (event) => {
+              if (event.target !== event.currentTarget) return
+              if (typeof props.onClearPick === 'function') props.onClearPick()
+            },
+          },
+          nodes.length === 0 && rootPendingRow === null
             ? h('div', { className: 'vp-tree-empty' }, t('vaultEmptyDir'))
-            : [pendingRow, ...nodes.map((node) => row(node, 0))],
+            : [rootPendingRow, ...nodes.map((node) => row(node, 0))],
           ctxMenu
             ? h(
               'div',
@@ -8500,6 +8627,9 @@ function useScrollMemo(bucket, selector, ready) {
             rename: props.rename || null,
             /* 新建命名框（2026-11-24）：树负责在最上面画那一行空输入框 */
             pending: props.pending || null,
+            /* 命名行落点所在的根目录名 + 空白处取消选中（2026-11-26） */
+            rootPath: typeof props.rootPath === 'string' ? props.rootPath : '',
+            onClearPick: props.onClearPick || null,
           }),
         )
       }
@@ -9355,6 +9485,60 @@ function useScrollMemo(bucket, selector, ready) {
           return new Set(flat.map((node) => node.name))
         }
 
+        /** 文案树摊平（剥掉「文案」库壳），与 topNames 的判法保持一致。 */
+        const copyFlatten = () => {
+          const raw = copyTree
+          return raw.length === 1 && raw[0].type === 'dir' && raw[0].library === raw[0].name
+            ? (Array.isArray(raw[0].children) ? raw[0].children : [])
+            : raw
+        }
+
+        /** 按路径在文案树里找节点。 */
+        const findCopyNode = (nodes, path) => {
+          for (const node of nodes || []) {
+            if (!node) continue
+            if (node.path === path) return node
+            if (node.type === 'dir') {
+              const hit = findCopyNode(node.children, path)
+              if (hit) return hit
+            }
+          }
+          return null
+        }
+
+        /**
+         * 某个目录下已用的名字（给新建项取名不撞车）。dirPath 为 文案\ 时取顶层。
+         */
+        const copyNamesIn = (dirPath) => {
+          const out = new Set()
+          const walk = (nodes) => {
+            for (const node of nodes || []) {
+              if (dirPath === '文案') { out.add(node.name); continue }
+              if (node.path === dirPath) {
+                for (const child of node.children || []) out.add(child.name)
+                return
+              }
+              if (node.type === 'dir') walk(node.children)
+            }
+          }
+          walk(copyFlatten())
+          return out
+        }
+
+        /**
+         * 文案区新建落点（2026-11-26 大王要求）：
+         * 选中文件夹 → 里面；选中稿件 → 它所在目录；什么都没选 → 文案\ 根。
+         */
+        const copyCreateDir = () => {
+          const path = typeof activePath === 'string' ? activePath : ''
+          if (path === '' || path === '文案') return '文案'
+          if (!path.startsWith('文案/')) return '文案'
+          const node = findCopyNode(copyFlatten(), path)
+          if (node && node.type === 'dir') return path
+          const parent = dirOf(path)
+          return parent === '' ? '文案' : parent
+        }
+
         /*
          * 新建分组 / 新建稿件（2026-11-24 大王要求：确认才落盘）。
          * 点按钮只在树顶摆一行输入框（预填默认名），点确定 / 回车才建；
@@ -9363,7 +9547,8 @@ function useScrollMemo(bucket, selector, ready) {
         const createGroup = () => {
           if (root === '') { flash(t('assistNeedWorkspace')); return }
           /* 2026-11-24 大王要求：预填默认名，点「确定」或回车才落盘 */
-          setCreatePending({ kind: 'dir', value: t('vaultNewDir') })
+          /* 2026-11-26：落点跟随选中（选中文件夹 → 里面；选中稿件 → 它所在目录） */
+          setCreatePending({ kind: 'dir', dir: copyCreateDir(), value: t('vaultNewDir') })
         }
 
         const createDraft = () => {
@@ -9371,11 +9556,25 @@ function useScrollMemo(bucket, selector, ready) {
             flash(t('assistNeedWorkspace'))
             return
           }
-          setCreatePending({ kind: 'file', value: t('copyNewDraftName') })
+          setCreatePending({ kind: 'file', dir: copyCreateDir(), value: t('copyNewDraftName') })
         }
 
         /** 取消新建：收掉命名框，什么都没建。 */
         const cancelCreate = () => { setCreatePending(null) }
+
+        /**
+         * 点左树空白处（2026-11-26 大王要求）：取消选中，回到 文案\ 根新建。
+         * 有没落盘的改动先存一次，再清空 —— 否则自动保存的定时器会拿旧 doc 写回。
+         */
+        const clearPick = () => {
+          const finish = () => {
+            setActivePath('')
+            setDoc(null)
+            setDraft('')
+            setError('')
+          }
+          if (doc && doc.text !== draft) { void save(true).then(finish, finish) } else finish()
+        }
 
         /** 提交新建：写名字才建；空名字直接收掉。 */
         const commitCreate = async () => {
@@ -9386,11 +9585,14 @@ function useScrollMemo(bucket, selector, ready) {
           /* 命名框先留着：建失败时能改名重试，成功那一路才收掉 */
           const isDir = pending.kind === 'dir'
           const suffix = isDir ? '' : '.md'
-          const taken = topNames()
+          /* 落点按选中项定（2026-11-26 大王要求），没记录时退回 文案\ 根 */
+          const dir = typeof pending.dir === 'string' && pending.dir !== '' ? pending.dir : '文案'
+          const taken = copyNamesIn(dir)
           let name = typed
           let n = 2
           while (taken.has(name + suffix)) { name = typed + ' ' + n; n += 1 }
-          const path = '文案/' + name + suffix
+          /* 一律带「文案/」前缀：服务端要的是库内相对路径（2026-11-26） */
+          const path = dir + '/' + name + suffix
           try {
             if (isDir) {
               await vaultApiPost('/mkdir', { path })
@@ -9481,12 +9683,16 @@ function useScrollMemo(bucket, selector, ready) {
             pending: createPending
               ? {
                 kind: createPending.kind,
+                dir: createPending.dir,
                 value: createPending.value,
                 onValue: (next) => setCreatePending({ ...createPending, value: next }),
                 commit: () => void commitCreate(),
                 cancel: () => cancelCreate(),
               }
               : null,
+            /* 命名行落点 + 点空白取消选中（2026-11-26） */
+            rootPath: '文案',
+            onClearPick: clearPick,
             style: { width: (panelHidden ? 30 : listW) + 'px' },
             panelHidden,
             onTogglePanel: () => setPanelHidden((hidden) => !hidden),
@@ -12269,8 +12475,9 @@ function useScrollMemo(bucket, selector, ready) {
 /* 2026-11-18：标题不再撑满整行（原来 flex:1 把加号推到行尾）。
    改成「按内容宽度」，加号紧跟其后；超长时才省略。 */
 .vp-treehead-title { flex: 0 1 auto; min-width: 0; font-size: 12px; color: var(--dsw-alias-label-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 紧跟加号之后的那个文字按钮（展开/收起）用 auto 左边距顶到行尾 */
-.vp-treehead-title + .vp-newinline + .vp-treehead-btn { margin-left: auto; }
+/* 标题之后的那个文字按钮（展开/收起）用 auto 左边距顶到行尾 */
+/* 2026-11-26：标题右侧的 ＋ 已删除，选择器不再经过 .vp-newinline */
+.vp-treehead-title + .vp-treehead-btn { margin-left: auto; }
 .vp-treehead-btn { border: 0; background: none; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 11px; padding: 2px 4px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .vp-treehead-btn:hover { color: var(--dsw-alias-brand-primary); background: var(--dsw-alias-bg-layer-2); }
 /* 搜索框：对齐文案台 .cb-search（描边容器 + 图标 + 透明 input） */
@@ -12442,6 +12649,7 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-group-n { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 16px; padding: 0 5px; box-sizing: border-box; border-radius: 4px; background: color-mix(in srgb, var(--vp-group-accent, transparent) 16%, var(--dsw-alias-bg-layer-2)); font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--vp-group-accent, var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))); }
 .vp-group-add { flex: none; margin-left: auto; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--vp-group-accent, var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))); font-size: 13px; line-height: 1; cursor: pointer; opacity: .7; }
 .vp-group-add:hover { opacity: 1; background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-brand-primary); }
+.vp-group-add[data-open="true"] { opacity: 1; background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); color: var(--dsw-alias-brand-primary); }
 
 /* ── 搜索框 + 收起左栏按钮同一行（2026-11-24 大王要求：按钮挪到搜索栏右侧）──────
  * 三个板块结构一致：外层 searchrow 负责外边距与横排，里面的搜索框改成 margin:0 + flex:1。
