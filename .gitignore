@@ -2,3 +2,9 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# 开发机专用，不进公开仓库
+test_*.mjs
+维护说明.md
+同步源码.ps1
+架构说明_文案台与写作台.md
