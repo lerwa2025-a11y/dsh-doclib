@@ -3238,6 +3238,18 @@ function useScrollMemo(bucket, selector, ready) {
         setExpanded(next)
       }
       const collapseAll = () => setExpanded({})
+      /* 收起一个目录时，把它下面所有子文件夹的展开状态一起清掉（2026-11-26 大王要求：
+         收起分组以后里面的文件夹还各自开着，再展开分组就是一摊散开的子目录，看不出归属）。 */
+      const collapseUnder = (node) => {
+        const next = {}
+        const walk = (item) => {
+          if (!item || item.type !== 'dir') return
+          next[item.path] = false
+          if (Array.isArray(item.children)) item.children.forEach(walk)
+        }
+        walk(node)
+        return next
+      }
 
       /** 是否所有文件夹都已展开（决定那个切换按钮显示「全部展开」还是「全部收起」）。 */
       const allExpanded = useMemo(() => {
@@ -4244,7 +4256,12 @@ function useScrollMemo(bucket, selector, ready) {
               tabIndex: 0,
               title: node.path,
               onClick: () => {
-                setExpanded((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                /* 收起分组时把子文件夹一起收掉；展开时只开自己这一层（2026-11-26 大王要求） */
+                if (isOpen) {
+                  setExpanded((prev) => ({ ...prev, ...collapseUnder(node) }))
+                } else {
+                  setExpanded((prev) => ({ ...prev, [node.path]: true }))
+                }
                 setSelected(node)
                 setConfirmDelete(false)
                 setRenaming(false)
@@ -4255,7 +4272,12 @@ function useScrollMemo(bucket, selector, ready) {
               onKeyDown: (event) => {
                 if (event.key === 'Enter' || event.key === ' ') {
                   event.preventDefault()
-                  setExpanded((prev) => ({ ...prev, [node.path]: !prev[node.path] }))
+                  /* 键盘操作也走同一套「收起连子目录一起收」的逻辑 */
+                  if (isOpen) {
+                    setExpanded((prev) => ({ ...prev, ...collapseUnder(node) }))
+                  } else {
+                    setExpanded((prev) => ({ ...prev, [node.path]: true }))
+                  }
                 }
               },
             },
@@ -4333,6 +4355,8 @@ function useScrollMemo(bucket, selector, ready) {
                 onContextMenu: (event) => openCtxMenu(event, node),
                 title: node.path,
               },
+              /* 缩进参考线（2026-11-26 大王要求）：深一层画一根竖线，绝对定位不吃 flex 布局 */
+              depth > 0 ? h('span', { className: 'vp-guides', style: { left: '12px', width: (depth * 14) + 'px' } }, Array.from({ length: depth }, (ignored, guideIndex) => h('i', { key: guideIndex, className: 'vp-guide' }))) : null,
               h('span', { className: 'vp-tree-caret' }, isOpen ? '▾' : '▸'),
               /* 库节点用库别图标，一眼能分清是素材库还是文案库/写作库 */
               h('span', { className: fixedLib ? 'vp-tree-icon vp-tree-icon-lib' : 'vp-tree-icon vp-tree-icon-dir' }, h(BoardIcon, { name: libIconName, className: 'wb-ic' })),
@@ -4363,6 +4387,8 @@ function useScrollMemo(bucket, selector, ready) {
             onContextMenu: (event) => openCtxMenu(event, node),
             title: node.path,
           },
+          /* 缩进参考线：文件行也要画，否则文件夹里的文件看不出属于哪一层（2026-11-26） */
+          depth > 0 ? h('span', { className: 'vp-guides', style: { left: '12px', width: (depth * 14) + 'px' } }, Array.from({ length: depth }, (ignored, guideIndex) => h('i', { key: guideIndex, className: 'vp-guide' }))) : null,
           h('span', { className: 'vp-tree-icon' }, h(BoardIcon, { name: node.image ? 'image' : isMarkdown ? 'fileText' : isPlayablePath(node.path) ? (isAudioPath(node.path) ? 'music' : 'video') : 'file', className: 'wb-ic' })),
           h('span', { className: 'vp-tree-name' }, node.name),
         )
@@ -4429,9 +4455,17 @@ function useScrollMemo(bucket, selector, ready) {
               // 空文本按钮必须靠 aria-label 才读得出来，所以两边都写上 title。
               'aria-label': title,
             },
-            icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
-            h('span', { className: 'vpb-droplabel' }, label),
-            h('span', { className: 'vpb-caret' }, '▾'),
+            // 底色下拉的触发器换成「半黑半白的圆」（2026-11-26 大王要的截图样式）：
+            // 一颗对比度圆点比「背景 ▾」这种文字按钮更直白，菜单项仍是原来那五个底色。
+            key === 'bg'
+              ? h('span', { className: 'vpb-contrast', 'aria-hidden': 'true' })
+              : h(
+                Fragment,
+                null,
+                icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
+                h('span', { className: 'vpb-droplabel' }, label),
+                h('span', { className: 'vpb-caret' }, '▾'),
+              ),
           ),
           openMenu === key
             ? h(
@@ -6455,9 +6489,16 @@ function useScrollMemo(bucket, selector, ready) {
                 onClick: () => setOpenMenu((open) => (open === key ? '' : key)),
                 'aria-label': title,
               },
-              icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
-              h('span', { className: 'vpb-droplabel' }, label),
-              h('span', { className: 'vpb-caret' }, '▾'),
+              // 同上（2026-11-26）：文案台的底色下拉也换成半黑半白的圆
+              key === 'bg'
+                ? h('span', { className: 'vpb-contrast', 'aria-hidden': 'true' })
+                : h(
+                  Fragment,
+                  null,
+                  icon === undefined || icon === '' ? null : h(BoardIcon, { name: icon, className: 'wb-ic-xs' }),
+                  h('span', { className: 'vpb-droplabel' }, label),
+                  h('span', { className: 'vpb-caret' }, '▾'),
+                ),
             ),
             openMenu === key
               ? h(
@@ -12549,7 +12590,8 @@ body.dsh-resizing, body.dsh-resizing * {
 }
 
 .vp-splitter { flex: 0 0 6px; cursor: col-resize; border-radius: 4px; background: transparent; }
-.vp-splitter:hover { background: var(--dsw-alias-brand-primary); opacity: .45; }
+/* hover 反馈挪到素材库那段的 .vp-splitter::before（2026-11-26）：
+   以前 hover 整条填品牌色，和常显细线叠在一起会糊，改由那条细线自己变粗变亮。 */
 .vp-tree-row { display: flex; align-items: center; gap: 6px; width: 100%; box-sizing: border-box; padding: 6px 8px; border: 0; border-radius: 6px; background: none; color: var(--dsw-alias-label-primary); font: inherit; font-size: 13px; text-align: left; cursor: pointer; transition: background-color .12s ease; }
 /* 树节点右键菜单（2026-11-18）：fixed 定位避免被树面板 overflow 裁掉 */
 .vp-ctxmenu { position: fixed; z-index: 200; min-width: 168px; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); box-sizing: border-box; }
@@ -12574,25 +12616,25 @@ body.dsh-resizing, body.dsh-resizing * {
 .vp-tree-caret { flex: 0 0 auto; width: 12px; font-size: 10px; color: var(--dsw-alias-label-secondary); }
 .vp-tree-icon { flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 16px; color: var(--dsw-alias-label-tertiary); }
 .vp-tree-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 缩进参考线（2026-11-26 大王要求）：文件夹套文件夹时分不清层级，
+   所以每深一层画一根 1px 竖线。线用绝对定位的 span 画在行内左侧，
+   不吃 flex 布局、不影响各行现有的 paddingLeft 缩进公式。 */
+.vp-tree-row { position: relative; }
+.vp-guides { position: absolute; top: -2px; bottom: -2px; display: flex; pointer-events: none; }
+.vp-guide { flex: 0 0 14px; border-left: 1px solid var(--dsw-alias-border-l1); opacity: .6; }
 /* 目录与文件同字号（shadcn 原则：靠图标区分，不靠加粗放大）。
    原来目录 700/15px，比文件大一档，看着笨重。 */
 .vp-tree-row[data-kind="dir"] .vp-tree-name { font-weight: 500; }
-/* 左栏分组行做成实心胶囊（2026-11-24 大王改定，取代 2026-11-23 那版描边卡片）：
-   平时是一颗浅胶囊（浅底 + 8px 圆角），选中时整颗填成品牌色、文字与图标一起反白 ——
-   Finder / Notion 侧栏的「实心选中条」，比描边更容易一眼看出当前在哪一组。
-   颜色只用主题令牌：--dsw-alias-brand-primary 亮色是近黑、深色是近白，
-   配 --dsw-alias-label-primary-inverted（亮色白 / 深色灰）两套主题自动翻转，不需要写死色值。
-   不用 border 描边（会占 1px 内宽把目录名右移）；也不用 outline（胶囊不需要边）。
-   横向缩进由行内 style 的 paddingLeft 决定，这里一律不动。 */
+/* 目录行平时仍是一颗浅胶囊（2026-11-24 那版保留：浅底 + 8px 圆角），
+   但「选中」不再整颗填成实心品牌色（2026-11-26 大王改定：文件夹的选中要和文件一模一样，
+   只有名字变亮，不要整个框背景都亮起来）。所以选中态只把底色换成和文件行同一档的
+   --dsw-alias-bg-layer-2，名字走通用的 [data-active="true"] .vp-tree-name 变品牌色加粗，
+   左边 3px 品牌竖条也交给全局那条规则 —— 图标和箭头不再反白。
+   0,2,0 + [data-active] 的特异性要高于上面那条 0,2,0，否则浅底会把选中态盖掉。 */
 .vp-tree-row[data-kind="dir"] { margin: 2px 0; border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); }
 .vp-tree-row[data-kind="dir"]:hover { background: var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2)); }
-/* 选中：整颗实心。同时把全局那条「左边 3px 品牌竖条」关掉 —— 胶囊已经整条是品牌色，
-   再叠一根竖条会变成一条更浅的边。box-shadow: none 靠 0,3,0 的特异性压过 0,2,0 的全局规则。 */
-.vp-tree-row[data-kind="dir"][data-active="true"] { background: var(--dsw-alias-brand-primary); color: var(--dsw-alias-label-primary-inverted); box-shadow: none; }
-.vp-tree-row[data-kind="dir"][data-active="true"]:hover { background: var(--dsw-alias-brand-primary); }
-.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-name { color: var(--dsw-alias-label-primary-inverted); font-weight: 600; }
-.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-caret,
-.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-icon { color: var(--dsw-alias-label-primary-inverted); }
+.vp-tree-row[data-kind="dir"][data-active="true"] { background: var(--dsw-alias-bg-layer-2); }
+.vp-tree-row[data-kind="dir"][data-active="true"] .vp-tree-name { font-weight: 600; }
 /* 原地改名的树行（2026-11-19）：整行换成 div，只剩输入框能动，所以不要 hover 底色 */
 .vp-tree-row-edit { cursor: default; background: transparent; }
 .vp-tree-input { flex: 1 1 auto; min-width: 0; box-sizing: border-box; padding: 0 6px; margin: -1px 0; border: 1px solid var(--dsw-alias-brand-primary); border-radius: var(--dsw-radius-sm, 8px); background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-size: inherit; outline: none; }
@@ -13855,7 +13897,7 @@ mark.df-hit[data-active="true"] {
 /* ── 素材库：三栏外壳（与文案台同一套观感）──────────────────────────────── */
 .vp-body { gap: 0; padding: 0; }
 .vp-tree { flex: 0 0 auto; display: flex; flex-direction: column; /* 2026-11-18：原来 overflow:hidden 会把「新建」下拉裁掉（大王截图：被阅读栏遮住）。
-     树面板 radius 是 0 不需要裁剪，所以放开；树内容的滚动由 .vp-treelist 自己管。 */ overflow: visible; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; position: relative; }
+     树面板 radius 是 0 不需要裁剪，所以放开；树内容的滚动由 .vp-treelist 自己管。 */ overflow: visible; border: 0; border-right: 1px solid var(--dsw-alias-border-l1); border-radius: 0; background: var(--dsw-alias-bg-module-platform, var(--dsw-alias-bg-layer-1)); padding: 0; position: relative; box-shadow: inset -3px 0 0 0 var(--dsw-alias-brand-primary); }
 /* .vp-libhead / .vp-libmark / .vp-libname 已删：
    左栏那条「库 / 工作台」标题行已移除，现在搜索框直接打头，
    与文案台 .cb-search、写作台 .wbg-search 一致。 */
@@ -13870,7 +13912,12 @@ mark.df-hit[data-active="true"] {
 .vp-treelist::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
 /* （原 .vp-libfoot 左栏底部工具条已取消：📂 挪到顶栏，左栏底部不再有工具条） */
 .vp-iconbtn[data-on="true"] { background: var(--dsw-alias-bg-layer-2); color: var(--dsw-alias-brand-primary); }
-.vp-splitter { flex: 0 0 4px; }
+/* 左栏拖动条（2026-11-26 大王说「做成可以拖动宽度的」）：拖动逻辑其实早就有，
+   只是这条 4px 是全透明的，不 hover 根本看不见，看着像不能拖。
+   现在常显一根 1px 细线，hover 时变 2px 品牌色，一眼看得出这里能拖。 */
+.vp-splitter { flex: 0 0 6px; position: relative; background: transparent; }
+.vp-splitter::before { content: ''; position: absolute; top: 0; bottom: 0; left: 50%; width: 1px; transform: translateX(-50%); background: var(--dsw-alias-border-l1); }
+.vp-splitter:hover::before { width: 2px; background: var(--dsw-alias-brand-primary); }
 /*
  * 素材库文档列 = 纸面宿主（2026-11-18 与文案台统一）：
  * 背景透明（纸面由 .dn-reader::before 画），无圆角。
@@ -14386,6 +14433,9 @@ mark.df-hit[data-active="true"] {
 .vpb-caret { flex: none; font-size: 10px; line-height: 1; opacity: .55; }
 /* 字体下拉在「跟随主题」时没有文字，只剩图标；空 span 会把图标和 ▾ 顶开，收掉。 */
 .vpb-droplabel:empty { display: none; }
+/* 底色下拉的触发器：半黑半白的圆（2026-11-26 大王截图样式）。
+   左半边用 --dsw-alias-label-primary 填，右半边留空露出按钮底色，两套主题自动翻转。 */
+.vpb-contrast { flex: none; width: 13px; height: 13px; box-sizing: border-box; border-radius: 50%; border: 1px solid var(--dsw-alias-border-l2); background-image: linear-gradient(90deg, var(--dsw-alias-label-primary) 0 50%, transparent 50% 100%); }
 .vpb-menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 60; min-width: 132px; max-width: 220px; max-height: min(360px, 60vh); overflow-y: auto; padding: 4px; border-radius: 8px; border: 1px solid var(--dsw-alias-border-l2); background: var(--dsw-alias-bg-overlay, var(--dsw-alias-bg-layer-1)); box-shadow: 0 10px 30px rgba(0, 0, 0, .45); box-sizing: border-box; }
 .vpb-menu::-webkit-scrollbar { width: 6px; }
 .vpb-menu::-webkit-scrollbar-thumb { background: var(--dsw-alias-border-l2); border-radius: 4px; }
